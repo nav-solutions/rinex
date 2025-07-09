@@ -1,5 +1,7 @@
 use crate::{
-    navigation::{BdModel, Ephemeris, IonosphereModel, KbModel, NavKey, NgModel},
+    navigation::{
+        ephemeris::EphemerisError, BdModel, Ephemeris, IonosphereModel, KbModel, NavKey, NgModel,
+    },
     prelude::{
         nav::{Almanac, AzElRange, Orbit},
         Epoch, Rinex, SV,
@@ -7,25 +9,39 @@ use crate::{
 };
 
 impl Rinex {
-    /// [SV] orbital state vector determination attempt, that only applies
-    /// to Navigation [Rinex].
+    /// Resolve the [Orbit]al state of this [SV] at desired [Epoch].
+    /// This only applies to NAV RINEX.
+    ///
     /// ## Inputs
     /// - sv: desired [SV]
-    /// - t: desired [Epoch] to express the [Orbit]al state
+    /// - epoch: desired [Epoch]
+    /// - max_iter: maximal number of iterations in the solving process.
+    ///
     /// ## Returns
-    /// - orbital state: expressed as ECEF [Orbit]
-    pub fn sv_orbit(&self, sv: SV, t: Epoch) -> Option<Orbit> {
-        let (toc, _, eph) = self.nav_ephemeris_selection(sv, t)?;
-        eph.kepler2position(sv, t)
+    /// - state as [Orbit] (ECEF)
+    pub fn nav_satellite_orbit(
+        &self,
+        sv: SV,
+        epoch: Epoch,
+        max_iter: usize,
+    ) -> Result<Orbit, EphemerisError> {
+        let (toc, _, eph) = self
+            .nav_ephemeris_selection(sv, epoch)
+            .ok_or(EphemerisError::FrameSelectionError(epoch, sv))?;
+
+        eph.sv_orbit(sv, toc, epoch, max_iter)
     }
 
     /// [SV] (azimuth, elevation, slant range) triplet determination,
     /// that only applies to Navigation [Rinex].
+    ///
     /// ## Inputs
     /// - sv: target [SV]
     /// - t: target [Epoch]
     /// - rx_orbit: RX position expressed as an [Orbit]
     /// - almanac: [Almanac] context
+    /// - max_iter: maximal number of iterations in the solving process
+    ///
     /// ## Returns
     /// - [AzElRange] on calculations success
     pub fn nav_azimuth_elevation_range(
@@ -34,12 +50,13 @@ impl Rinex {
         t: Epoch,
         rx_orbit: Orbit,
         almanac: &Almanac,
-    ) -> Option<AzElRange> {
-        let sv_orbit = self.sv_orbit(sv, t)?;
-        let azelrange = almanac
-            .azimuth_elevation_range_sez(sv_orbit, rx_orbit, None, None)
-            .ok()?;
-        Some(azelrange)
+        max_iter: usize,
+    ) -> Result<AzElRange, EphemerisError> {
+        let sv_orbit = self.nav_satellite_orbit(sv, t, max_iter)?;
+
+        let azelrange = almanac.azimuth_elevation_range_sez(sv_orbit, rx_orbit, None, None)?;
+
+        Ok(azelrange)
     }
 
     /// Ephemeris selection, that only applies to Navigation [Rinex].
@@ -52,8 +69,6 @@ impl Rinex {
     /// Note that `ToE` does not exist for GEO/SBAS [SV], so `ToC` is simply
     /// copied in this case, to maintain the API.
     pub fn nav_ephemeris_selection(&self, sv: SV, t: Epoch) -> Option<(Epoch, Epoch, &Ephemeris)> {
-        let sv_ts = sv.constellation.timescale()?;
-
         if sv.constellation.is_sbas() {
             self.nav_ephemeris_frames_iter()
                 .filter_map(|(k, eph)| {
@@ -68,8 +83,8 @@ impl Rinex {
             self.nav_ephemeris_frames_iter()
                 .filter_map(|(k, eph)| {
                     if k.sv == sv {
-                        if eph.is_valid(sv, t) {
-                            if let Some(toe) = eph.toe(k.sv) {
+                        if eph.is_valid(k.sv, k.epoch, t) {
+                            if let Ok(toe) = eph.toe(k.sv) {
                                 Some((k.epoch, toe, eph))
                             } else {
                                 None

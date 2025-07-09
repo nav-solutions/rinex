@@ -1,8 +1,13 @@
 use crate::{
     navigation::{NavFrameType, NavMessageType},
     prelude::{Constellation, Epoch, Rinex, TimeScale, SV},
-    tests::toolkit::{generic_navigation_test, TimeFrame},
+    tests::{
+        init_logger,
+        toolkit::{generic_navigation_test, TimeFrame},
+    },
 };
+
+use log::error;
 
 use hifitime::Unit;
 
@@ -39,11 +44,14 @@ fn v2_amel0010_21g() {
 
         match k.sv.prn {
             1 => {
-                assert_eq!(eph.sv_clock(), (7.282570004460E-5, 0.0, 7.380000000000E+04));
+                assert_eq!(
+                    eph.sv_clock_bias_drift_change_s(),
+                    (7.282570004460E-5, 0.0, 7.380000000000E+04)
+                );
                 //TODO
                 //assert_eq!(v.sv_position((-1.488799804690E+03, 1.292880712890E+04, 2.193169775390E+04)))
 
-                assert!(eph.get_orbit_f64("ageOp").is_none());
+                assert!(eph.get_orbit_field_f64("ageOp").is_none());
                 assert_eq!(eph.glonass_freq_channel(), Some(1));
 
                 num_tests += 1;
@@ -52,8 +60,8 @@ fn v2_amel0010_21g() {
                 assert_eq!(eph.clock_bias, 4.610531032090E-04);
                 assert_eq!(eph.clock_drift, 1.818989403550E-12);
                 assert_eq!(eph.clock_drift_rate, 4.245000000000E+04);
-                // assert_eq!(eph.get_orbit_f64("channel"), Some(-4.0));
-                assert!(eph.get_orbit_f64("ageOp").is_none());
+                // assert_eq!(eph.get_orbit_field_f64("channel"), Some(-4.0));
+                assert!(eph.get_orbit_field_f64("ageOp").is_none());
 
                 num_tests += 1;
                 //TODO
@@ -66,9 +74,9 @@ fn v2_amel0010_21g() {
                 assert_eq!(eph.clock_bias, 2.838205546140E-05);
                 assert_eq!(eph.clock_drift, 0.0);
                 assert_eq!(eph.clock_drift_rate, 4.680000000000E+04);
-                //assert_eq!(eph.get_orbit_f64("health"), Some(0.0));
-                //assert_eq!(eph.get_orbit_f64("channel"), Some(5.0));
-                //assert_eq!(eph.get_orbit_f64("ageOp"), Some(0.0));
+                //assert_eq!(eph.get_orbit_field_f64("health"), Some(0.0));
+                //assert_eq!(eph.get_orbit_field_f64("channel"), Some(5.0));
+                //assert_eq!(eph.get_orbit_field_f64("ageOp"), Some(0.0));
                 //                 assert_eq!(posx.as_f64(), Some(1.502522949220E+04));
                 //                 assert_eq!(posy.as_f64(), Some(-1.458877050780E+04));
                 //                 assert_eq!(posz.as_f64(), Some(1.455863281250E+04));
@@ -78,9 +86,9 @@ fn v2_amel0010_21g() {
                 assert_eq!(eph.clock_bias, 6.817653775220E-05);
                 assert_eq!(eph.clock_drift, 1.818989403550E-12);
                 assert_eq!(eph.clock_drift_rate, 4.680000000000E+04);
-                //assert_eq!(eph.get_orbit_f64("ageOp"), Some(0.0));
-                // assert_eq!(eph.get_orbit_f64("channel"), Some(6.0));
-                //assert_eq!(eph.get_orbit_f64("health"), Some(0.0));
+                //assert_eq!(eph.get_orbit_field_f64("ageOp"), Some(0.0));
+                // assert_eq!(eph.get_orbit_field_f64("channel"), Some(6.0));
+                //assert_eq!(eph.get_orbit_field_f64("health"), Some(0.0));
                 //                 assert_eq!(posx.as_f64(), Some(-1.688173828130E+03));
                 //                 assert_eq!(posy.as_f64(), Some(-1.107156738280E+04));
                 //                 assert_eq!(posz.as_f64(), Some(2.293745361330E+04));
@@ -90,9 +98,9 @@ fn v2_amel0010_21g() {
                 assert_eq!(eph.clock_bias, 6.396882236000E-05);
                 assert_eq!(eph.clock_drift, 9.094947017730E-13);
                 assert_eq!(eph.clock_drift_rate, 8.007000000000E+04);
-                //assert_eq!(eph.get_orbit_f64("ageOp"), Some(0.0));
-                //assert_eq!(eph.get_orbit_f64("channel"), Some(1.0));
-                //assert_eq!(eph.get_orbit_f64("health"), Some(0.0));
+                //assert_eq!(eph.get_orbit_field_f64("ageOp"), Some(0.0));
+                //assert_eq!(eph.get_orbit_field_f64("channel"), Some(1.0));
+                //assert_eq!(eph.get_orbit_field_f64("health"), Some(0.0));
                 //                 assert_eq!(posx.as_f64(), Some(-1.754308935550E+04));
                 //                 assert_eq!(posy.as_f64(), Some(-1.481773437500E+03));
                 //                 assert_eq!(posz.as_f64(), Some(1.847386083980E+04));
@@ -102,9 +110,9 @@ fn v2_amel0010_21g() {
                 assert_eq!(eph.clock_bias, -4.201009869580E-05);
                 assert_eq!(eph.clock_drift, 0.0);
                 assert_eq!(eph.clock_drift_rate, 2.88E4);
-                assert!(eph.get_orbit_f64("ageOp").is_none());
-                //assert_eq!(eph.get_orbit_f64("channel"), Some(5.0));
-                //assert_eq!(eph.get_orbit_f64("health"), Some(0.0));
+                assert!(eph.get_orbit_field_f64("ageOp").is_none());
+                //assert_eq!(eph.get_orbit_field_f64("channel"), Some(5.0));
+                //assert_eq!(eph.get_orbit_field_f64("health"), Some(0.0));
                 //                 assert_eq!(posx.as_f64(), Some(1.817068505860E+04));
                 //                 assert_eq!(posy.as_f64(), Some(1.594814404300E+04));
                 //                 assert_eq!(posz.as_f64(), Some(8.090271484380E+03));
@@ -169,7 +177,7 @@ fn v2_cbw10010_21n() {
                     ("tgd", Some(-1.117587089540E-8)),
                     ("t_tm", Some(4.283760000000E5)),
                 ] {
-                    let orbit_value = eph.get_orbit_f64(field);
+                    let orbit_value = eph.get_orbit_field_f64(field);
                     assert_eq!(
                         orbit_value, value,
                         "parsed wrong \"{}\" value for G07 T0",
@@ -179,7 +187,7 @@ fn v2_cbw10010_21n() {
 
                 assert_eq!(eph.get_week(), Some(2138));
                 assert!(
-                    eph.get_orbit_f64("fitInt").is_none(),
+                    eph.get_orbit_field_f64("fitInt").is_none(),
                     "parsed fitInt unexpectedly"
                 );
                 tests_passed += 1;
@@ -213,12 +221,12 @@ fn v2_cbw10010_21n() {
                     ("iodc", Some(8.500000000000E1)),
                     ("t_tm", Some(5.146680000000E5)),
                 ] {
-                    let orbit = eph.get_orbit_f64(field);
+                    let orbit = eph.get_orbit_field_f64(field);
                     assert_eq!(orbit, value, "parsed wrong \"{}\" value for G30 T1", field);
                 }
                 assert_eq!(eph.get_week(), Some(2138));
                 assert!(
-                    eph.get_orbit_f64("fitInt").is_none(),
+                    eph.get_orbit_field_f64("fitInt").is_none(),
                     "parsed fitInt unexpectedly"
                 );
                 tests_passed += 1;
@@ -256,8 +264,8 @@ fn v3_amel00nld_r_2021() {
             assert_eq!(eph.clock_drift, -0.752518047875e-10);
             assert_eq!(eph.clock_drift_rate, 0.0);
 
-            assert_eq!(eph.get_orbit_f64("aode"), Some(0.100000000000e+01));
-            assert_eq!(eph.get_orbit_f64("crs"), Some(0.118906250000e+02));
+            assert_eq!(eph.get_orbit_field_f64("aode"), Some(0.100000000000e+01));
+            assert_eq!(eph.get_orbit_field_f64("crs"), Some(0.118906250000e+02));
 
         //                         let m0 = data.get("m0").unwrap();
         //                         assert_eq!(m0.as_f64(), Some(-0.255139531119e+01));
@@ -291,21 +299,21 @@ fn v3_amel00nld_r_2021() {
             assert_eq!(eph.clock_bias, -0.126023776829e-03);
             assert_eq!(eph.clock_drift, -0.909494701773e-12);
             assert_eq!(eph.clock_drift_rate, 0.0);
-        //                         let pos = data.get("satPosX").unwrap();
+        //                         let pos = data.get("posX").unwrap();
         //                         assert_eq!(pos.as_f64(), Some(0.783916601562e+04));
-        //                         let pos = data.get("satPosY").unwrap();
+        //                         let pos = data.get("posY").unwrap();
         //                         assert_eq!(pos.as_f64(), Some(-0.216949155273e+05));
-        //                         let pos = data.get("satPosZ").unwrap();
+        //                         let pos = data.get("posZ").unwrap();
         //                         assert_eq!(pos.as_f64(), Some(0.109021518555e+05));
         } else if k.sv == r07 {
             assert_eq!(eph.clock_bias, -0.420100986958E-04);
             assert_eq!(eph.clock_drift, 0.0);
             assert_eq!(eph.clock_drift_rate, 0.342000000000e+05);
-        //                         let pos = data.get("satPosX").unwrap();
+        //                         let pos = data.get("posX").unwrap();
         //                         assert_eq!(pos.as_f64(), Some(0.124900639648e+05));
-        //                         let pos = data.get("satPosY").unwrap();
+        //                         let pos = data.get("posY").unwrap();
         //                         assert_eq!(pos.as_f64(), Some(0.595546582031e+04));
-        //                         let pos = data.get("satPosZ").unwrap();
+        //                         let pos = data.get("posZ").unwrap();
         //                         assert_eq!(pos.as_f64(), Some(0.214479208984e+05));
         } else if k.sv == e01 {
             assert_eq!(eph.clock_bias, -0.101553811692e-02);
@@ -473,7 +481,7 @@ fn v3_esbc00dnk_r2020() {
     for (k, eph) in dut.nav_ephemeris_frames_iter() {
         if k.epoch == t0 && k.sv == g30 {
             assert_eq!(
-                eph.sv_clock(),
+                eph.sv_clock_bias_drift_change_s(),
                 (-2.486067824066e-04, -7.844391802792e-12, 0.000000000000e+00)
             );
             tests_passed += 1;
@@ -696,6 +704,8 @@ fn nav_v4_kms300dnk_r2022() {
     }
 
     assert_eq!(tests, 0);
+
+    // Verify BDS Health flags
 }
 
 #[test]
@@ -1005,6 +1015,8 @@ fn toe_helper(week: f64, week_s: f64, ts: TimeScale) -> Epoch {
 
 #[test]
 fn nav_toe_gal_bds() {
+    init_logger();
+
     let mut tests_passed = 0;
 
     let path = format!(
@@ -1022,20 +1034,25 @@ fn nav_toe_gal_bds() {
     for (k, eph) in dut.nav_ephemeris_frames_iter() {
         let ts = k.sv.timescale().expect("only known timescales here!");
 
-        if let Some(toe) = eph.toe(k.sv) {
-            if k.epoch == t0 {
-                assert_eq!(toe, toe_helper(0.782E3, 0.432E6, TimeScale::BDT));
-                tests_passed += 1;
-            } else if k.epoch == t1 {
-                assert_eq!(toe, toe_helper(0.782E3, 0.450E6, TimeScale::BDT));
-                tests_passed += 1;
-            } else if k.epoch == t2 {
-                assert_eq!(toe, toe_helper(0.2138E4, 0.4686E6, TimeScale::GST));
-                tests_passed += 1;
-            } else if k.epoch == t3 {
-                assert_eq!(toe, toe_helper(0.2138E4, 0.4884E6, TimeScale::GST));
-                tests_passed += 1;
-            }
+        match eph.toe(k.sv) {
+            Ok(toe) => {
+                if k.epoch == t0 {
+                    assert_eq!(toe, toe_helper(0.782E3, 0.432E6, TimeScale::BDT));
+                    tests_passed += 1;
+                } else if k.epoch == t1 {
+                    assert_eq!(toe, toe_helper(0.782E3, 0.450E6, TimeScale::BDT));
+                    tests_passed += 1;
+                } else if k.epoch == t2 {
+                    assert_eq!(toe, toe_helper(0.2138E4, 0.4686E6, TimeScale::GST));
+                    tests_passed += 1;
+                } else if k.epoch == t3 {
+                    assert_eq!(toe, toe_helper(0.2138E4, 0.4884E6, TimeScale::GST));
+                    tests_passed += 1;
+                }
+            },
+            Err(e) => {
+                error!("{}({}) - toe error: {}", k.epoch, k.sv, e);
+            },
         }
     }
     assert_eq!(tests_passed, 4);

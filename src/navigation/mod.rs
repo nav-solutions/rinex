@@ -25,9 +25,6 @@ pub use crate::navigation::{
     time::TimeOffset,
 };
 
-#[cfg(feature = "nav")]
-pub use crate::navigation::ephemeris::kepler::{Helper, Kepler, Perturbations};
-
 #[cfg(feature = "processing")]
 pub(crate) mod mask; // mask Trait implementation
 

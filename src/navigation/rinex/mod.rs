@@ -122,15 +122,13 @@ impl Rinex {
         }
     }
 
-    /// [SV] clock state [Iterator].
-    /// ## Inputs
-    /// - self: Navigation [Rinex]
+    /// Satellite clock bias, drift and drift change iterator.
     /// ## Output
     /// - offset (s), drift (s.s⁻¹), drift rate (s.s⁻²)  triplet iterator
     pub fn nav_sv_clock_iter(&self) -> Box<dyn Iterator<Item = (NavKey, (f64, f64, f64))> + '_> {
         Box::new(
             self.nav_ephemeris_frames_iter()
-                .map(|(k, eph)| (*k, eph.sv_clock())),
+                .map(|(k, eph)| (*k, eph.sv_clock_bias_drift_change_s())),
         )
     }
 
