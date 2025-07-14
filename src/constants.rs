@@ -1,5 +1,3 @@
-//! const value of Gnss
-
 #[cfg(feature = "nav")]
 use crate::prelude::{Constellation, SV};
 
@@ -41,9 +39,6 @@ pub(crate) struct Constants;
 
 #[cfg(feature = "nav")]
 impl Constants {
-    /// Maximal iteration in the iterative Kepler solver
-    pub const MAX_KEPLER_ITER: u8 = 30;
-
     /// Earth gravitation.
     pub const fn gm(sv: SV) -> f64 {
         match sv.constellation {
@@ -53,6 +48,7 @@ impl Constants {
             _ => GM::GPS,
         }
     }
+
     /// Earth rotation rate
     pub const fn omega(sv: SV) -> f64 {
         match sv.constellation {
@@ -62,6 +58,7 @@ impl Constants {
             _ => Omega::GPS,
         }
     }
+
     /// Auxiliary Quantities for Calculating Relativistic Effects in Clock Correction
     pub const fn dtr_f(sv: SV) -> f64 {
         match sv.constellation {

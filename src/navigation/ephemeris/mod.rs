@@ -1,3 +1,5 @@
+use thiserror::Error;
+
 mod formatting;
 pub mod orbits;
 mod parsing;
@@ -20,17 +22,9 @@ use log::error;
 #[cfg_attr(docsrs, doc(cfg(feature = "nav")))]
 pub mod kepler;
 
-#[cfg(feature = "nav")]
-use crate::prelude::nav::Almanac;
-
 use crate::prelude::{Constellation, Duration, Epoch, TimeScale, SV};
 
-#[cfg(feature = "nav")]
-use anise::{
-    astro::AzElRange,
-    errors::AlmanacResult,
-    prelude::{Frame, Orbit},
-};
+use anise::errors::AlmanacError;
 
 use std::collections::HashMap;
 
@@ -168,41 +162,83 @@ pub struct Ephemeris {
     pub orbits: HashMap<String, OrbitItem>,
 }
 
+/// Ephemeris processing specific errors.
+#[derive(Debug, Error)]
+pub enum EphemerisError {
+    /// Timescale must be fully supported
+    #[error("{0} is not supported")]
+    NotSupported(Constellation),
+
+    /// Missing some mandatory data fields,
+    /// unable to perform this calculation.
+    #[error("missing data")]
+    MissingData,
+
+    /// Keplerian solver failed to converge
+    /// within reasonnable iterations
+    #[error("kepler solved did not converge")]
+    Diverged,
+
+    /// Bad/invalid operation. Happens when the
+    /// the user attempts incorrect operations
+    /// on GEO/Glonass/SBAS vehicles.
+    #[error("invalid ephemeris operation")]
+    BadOperation,
+
+    /// BDS-IGSO processing not supported yet
+    #[allow(non_snake_case)]
+    #[error("BDS-IGSO not supported yet")]
+    BeidouIgsoNotSupported,
+
+    /// Alamanac error
+    #[error("almanac error: {0}")]
+    AlmanacError(#[from] AlmanacError),
+
+    /// Failed to select an [Ephemeris] frame
+    #[error("{0}({1}): failed to select an ephemeris frame")]
+    FrameSelectionError(Epoch, SV),
+}
+
 impl Ephemeris {
-    /// Returns [SV] onboard clock (bias [s], drift [s/s], drift rate [s/s]).
-    pub fn sv_clock(&self) -> (f64, f64, f64) {
+    /// Returns [SV] onboard clock (bias, drift and drift rate)
+    /// in seconds, s/s and s/s^2.
+    pub fn sv_clock_bias_drift_change_s(&self) -> (f64, f64, f64) {
         (self.clock_bias, self.clock_drift, self.clock_drift_rate)
     }
 
-    /// Returns abstract orbital parameter from readable description and
-    /// interprated as f64.
-    pub fn get_orbit_f64(&self, field: &str) -> Option<f64> {
+    /// Returns any orbital field, from their name and interpreted as [f64],
+    /// which is always feasible as RINEX uses [f64] in its description.
+    /// Refer to <https://github.com/rtk-rs/rinex/tree/main/db/NAV/orbits.json> to see how the
+    /// RINEX fields have been classified.
+    pub fn get_orbit_field_f64(&self, field: &str) -> Option<f64> {
         let value = self.orbits.get(field)?;
         Some(value.as_f64())
     }
 
-    /// Add a new orbital parameters, encoded as f64.
-    pub(crate) fn set_orbit_f64(&mut self, field: &str, value: f64) {
+    /// Manually assign a RINEX field. The field name
+    /// should be preserved and follow the database
+    /// definitions found here <https://github.com/rtk-rs/rinex/tree/main/db/NAV/orbits.json>
+    pub(crate) fn set_orbit_field_f64(&mut self, field: &str, value: f64) {
         self.orbits
             .insert(field.to_string(), OrbitItem::from(value));
     }
 
-    /// Try to retrieve week counter. This exists
-    /// for all Constellations expect [Constellation::Glonass].
+    /// Retrieve the indexed week counter, as [u32].
+    /// This does not apply to [Constellation::Glonass]
+    /// and GEO/SBAS satellites.
     pub(crate) fn get_week(&self) -> Option<u32> {
-        self.orbits
-            .get("week")
-            .and_then(|value| Some(value.as_u32()))
+        self.get_orbit_field_f64("week")
+            .and_then(|value| Some(value.round() as u32))
     }
 
-    /// Returns TGD (if value exists) as [Duration]
+    /// Returns the TGD expressed as a [Duration], if it exists.
     pub fn tgd(&self) -> Option<Duration> {
-        let tgd_s = self.get_orbit_f64("tgd")?;
+        let tgd_s = self.get_orbit_field_f64("tgd")?;
         Some(Duration::from_seconds(tgd_s))
     }
 
-    /// Returns true if this [Ephemeris] declares attached SV as suitable for navigation.
-    pub fn sv_healthy(&self) -> bool {
+    /// Returns true if this [Ephemeris] declares its SV as suitable for navigation.
+    pub fn sv_is_healthy(&self) -> bool {
         let health = self.orbits.get("health");
 
         if health.is_none() {
@@ -260,37 +296,48 @@ impl Ephemeris {
     /// Returns glonass frequency channel, in case this is a Glonass [Ephemeris] message,
     /// with described channel.
     pub fn glonass_freq_channel(&self) -> Option<i8> {
-        if let Some(value) = self.orbits.get("channel") {
-            Some(value.as_i8())
-        } else {
-            None
-        }
+        self.get_orbit_field_f64("channel")
+            .and_then(|value| Some(value.round() as i8))
     }
 
-    /// Return Time of [Ephemeris] (ToE) expressed as [Epoch]
-    pub fn toe(&self, sv: SV) -> Option<Epoch> {
-        let timescale = sv.constellation.timescale()?;
+    /// Return Time of [Ephemeris] (ToE) expressed as [Epoch].
+    /// This does not apply to GEO / SBAS and Glonass [Ephemeris],
+    /// and so should never be invoked in such a pipeline.
+    pub fn toe(&self, sv: SV) -> Result<Epoch, EphemerisError> {
+        if sv.constellation.is_sbas() {
+            return Err(EphemerisError::BadOperation);
+        }
 
-        // TODO: in CNAV V4 TOC is said to be TOE... ...
-        let (week, seconds) = (self.get_week()?, self.get_orbit_f64("toe")?);
+        if sv.constellation == Constellation::Glonass {
+            return Err(EphemerisError::BadOperation);
+        }
+
+        // TODO: in CNAV V4 TOC is said to be TOE... double check that
+        let (week, seconds) = (
+            self.get_week().ok_or(EphemerisError::MissingData)?,
+            self.get_orbit_field_f64("toe")
+                .ok_or(EphemerisError::MissingData)?,
+        );
+
         let nanos = (seconds * 1.0E9).round() as u64;
 
         match sv.constellation {
-            Constellation::GPS | Constellation::QZSS | Constellation::Galileo => {
-                Some(Epoch::from_time_of_week(week, nanos, TimeScale::GPST))
+            Constellation::GPS | Constellation::Galileo => {
+                // Constellation::QZSS => {
+                Ok(Epoch::from_time_of_week(week, nanos, TimeScale::GPST))
             },
-            Constellation::BeiDou => Some(Epoch::from_time_of_week(week, nanos, TimeScale::BDT)),
-            _ => {
-                #[cfg(feature = "log")]
-                error!("{} is not supported", sv.constellation);
-                None
+            Constellation::QZSS => Ok(Epoch::from_time_of_week(week, nanos, TimeScale::QZSST)),
+            Constellation::BeiDou => Ok(Epoch::from_time_of_week(week, nanos, TimeScale::BDT)),
+            Constellation::Glonass => {
+                unreachable!("glonass constellation handled elsewhere")
             },
+            constellation => Err(EphemerisError::NotSupported(constellation)),
         }
     }
 
     /// Returns Adot parameter from a CNAV ephemeris
     pub(crate) fn a_dot(&self) -> Option<f64> {
-        self.get_orbit_f64("a_dot")
+        self.get_orbit_field_f64("a_dot")
     }
 }
 
@@ -309,76 +356,79 @@ impl Ephemeris {
 
     /// Calculates Clock correction for [SV] at [Epoch] based on [Self]
     /// and ToC [Epoch] of publication of [Self] from the free running clock.
+    ///
+    /// ## Inputs
+    /// - sv: satellite identity as [SV]
+    /// - toc: Time of Clock as [Epoch], expressed in any [Timescale].
+    /// - epoch: [Epoch], expressed in any [Timescale].
+    /// - max_iter: max iterations in the solver
+    ///
+    /// ## Output
+    /// - clock correction, expressed as [Duration] in corresponding
+    /// [Timescale]
     pub fn clock_correction(
         &self,
-        toc: Epoch,
-        t: Epoch,
         sv: SV,
+        toc: Epoch,
+        epoch: Epoch,
         max_iter: usize,
-    ) -> Option<Duration> {
-        let sv_ts = sv.constellation.timescale()?;
+    ) -> Result<Duration, EphemerisError> {
+        let sv_ts = match sv.constellation.timescale() {
+            Some(timescale) => timescale,
+            None => {
+                return Err(EphemerisError::NotSupported(sv.constellation));
+            },
+        };
 
-        let t_sv = t.to_time_scale(sv_ts);
+        // transpose if need be
+        let t_sv = epoch.to_time_scale(sv_ts);
         let toc_sv = toc.to_time_scale(sv_ts);
 
-        if t_sv < toc_sv {
-            #[cfg(feature = "log")]
-            error!("t < t_oc: bad op!");
-            None
-        } else {
-            let (a0, a1, a2) = (self.clock_bias, self.clock_drift, self.clock_drift_rate);
-            let mut dt = (t_sv - toc_sv).to_seconds();
-            for _ in 0..max_iter {
-                dt -= a0 + a1 * dt + a2 * dt.powi(2);
-            }
-            Some(Duration::from_seconds(a0 + a1 * dt + a2 * dt.powi(2)))
+        let (a0, a1, a2) = self.sv_clock_bias_drift_change_s();
+
+        let mut dt = (t_sv - toc_sv).to_seconds();
+
+        for _ in 0..max_iter {
+            dt -= a0 + a1 * dt + a2 * dt.powi(2);
         }
-    }
 
-    /// (elevation, azimuth, range) determination helper,
-    /// returned in the form of [AzElRange], for desired [SV] observed at RX coordinates,
-    /// expressed in km in fixed body [Frame] centered on Earth.
-    #[cfg(feature = "nav")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "nav")))]
-    pub fn elevation_azimuth_range(
-        t: Epoch,
-        almanac: &Almanac,
-        fixed_body_frame: Frame,
-        sv_position_km: (f64, f64, f64),
-        rx_position_km: (f64, f64, f64),
-    ) -> AlmanacResult<AzElRange> {
-        let (rx_x_km, rx_y_km, rx_z_km) = rx_position_km;
-        let (tx_x_km, tx_y_km, tx_z_km) = sv_position_km;
-
-        let rx_orbit = Orbit::from_position(rx_x_km, rx_y_km, rx_z_km, t, fixed_body_frame);
-        let tx_orbit = Orbit::from_position(tx_x_km, tx_y_km, tx_z_km, t, fixed_body_frame);
-
-        almanac.azimuth_elevation_range_sez(rx_orbit, tx_orbit, None, None)
+        Ok(Duration::from_seconds(a0 + a1 * dt + a2 * dt.powi(2)))
     }
 
     /// Returns True if this [Ephemeris] frame is valid for specified epoch.
-    /// NB: this only applies to MEO Ephemerides, not GEO Ephemerides,
-    /// which should always be considered "valid".
-    /// ## Input
-    /// - sv: [SV] identity
-    /// - epoch: test [Epoch]
-    pub fn is_valid(&self, sv: SV, t: Epoch) -> bool {
-        if let Some(toe) = self.toe(sv) {
-            if let Some(max_dtoe) = Self::validity_duration(sv.constellation) {
-                (t - toe).abs() < max_dtoe
-            } else {
+    ///
+    /// ## Inputs
+    /// - sv: satellite identity as [SV]
+    /// - toc: Time of Clock as [Epoch]
+    /// - epoch: [Epoch]
+    ///
+    /// ## Returns
+    /// - true when suitable
+    pub fn is_valid(&self, sv: SV, toc: Epoch, epoch: Epoch) -> bool {
+        let max_dtoe = match Self::validity_duration(sv.constellation) {
+            Some(max_dtoe) => max_dtoe,
+            None => {
                 #[cfg(feature = "log")]
-                error!("{} - validity period", sv.constellation);
-                false
-            }
+                error!("{}({}) - constellation not supported", epoch, sv);
+                return false;
+            },
+        };
+
+        if sv.constellation.is_sbas() || sv.constellation == Constellation::Glonass {
+            (epoch - toc).abs() < max_dtoe
         } else {
-            #[cfg(feature = "log")]
-            error!("{} - ToE calculation", sv.constellation);
-            false
+            match self.toe(sv) {
+                Ok(toe) => (epoch - toe).abs() < max_dtoe,
+                Err(e) => {
+                    #[cfg(feature = "log")]
+                    error!("{}({}) - toe-error: {}", epoch, sv, e);
+                    false
+                },
+            }
         }
     }
 
-    /// Ephemeris validity period for this [Constellation]
+    /// Returns [Ephemeris] validity period for this [Constellation].
     pub fn validity_duration(c: Constellation) -> Option<Duration> {
         match c {
             Constellation::GPS | Constellation::QZSS => Some(Duration::from_seconds(7200.0)),
@@ -388,12 +438,9 @@ impl Ephemeris {
             Constellation::Glonass => Some(Duration::from_seconds(1800.0)),
             c => {
                 if c.is_sbas() {
-                    // Tolerate one publication per day.
-                    // Typical RINEX apps will load one set per 24 hr.
-                    // GEO Orbits are very special, with a single entry per day.
-                    // Therefore, in typical RINEX apps, we will have one entry for every day.
-                    // GEO Ephemerides cannot be handled like other Ephemerides anyway, they require
-                    // a complete different logic and calculations
+                    // For GEO / SBAS, we tolerate a 24hr validity period.
+                    // As it seems that some RINEXv3 published a single state per day.
+                    // Obviously, the higher the update rate, the better.
                     Some(Duration::from_days(1.0))
                 } else {
                     None
