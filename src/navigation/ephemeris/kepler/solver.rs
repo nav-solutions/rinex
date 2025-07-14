@@ -192,14 +192,13 @@ impl Solver {
     /// Returns ECEF position and velocity Vector in kilometers.
     pub fn position_velocity_km(&self) -> Result<Vector6, EphemerisError> {
         let (pos_km, vel_km) = match self.sv.constellation {
-            Constellation::GPS | Constellation::Galileo => {
+            Constellation::GPS | Constellation::Galileo | Constellation::QZSS => {
                 (self.meo_position_km(), self.meo_velocity_km())
             },
             Constellation::BeiDou => {
                 if self.sv.is_beidou_geo() {
                     (self.beidou_geo_position_km(), self.beidou_geo_velocity_km())
-                } else if self.sv.is_beidou_geo() {
-                    // TODO
+                } else if self.sv.prn == 6 {
                     return Err(EphemerisError::BeidouIgsoNotSupported);
                 } else {
                     (self.meo_position_km(), self.meo_velocity_km())

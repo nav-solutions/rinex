@@ -322,9 +322,11 @@ impl Ephemeris {
         let nanos = (seconds * 1.0E9).round() as u64;
 
         match sv.constellation {
-            Constellation::GPS | Constellation::QZSS | Constellation::Galileo => {
+            Constellation::GPS | Constellation::Galileo => {
+                // Constellation::QZSS => {
                 Ok(Epoch::from_time_of_week(week, nanos, TimeScale::GPST))
             },
+            Constellation::QZSS => Ok(Epoch::from_time_of_week(week, nanos, TimeScale::QZSST)),
             Constellation::BeiDou => Ok(Epoch::from_time_of_week(week, nanos, TimeScale::BDT)),
             Constellation::Glonass => {
                 unreachable!("glonass constellation handled elsewhere")

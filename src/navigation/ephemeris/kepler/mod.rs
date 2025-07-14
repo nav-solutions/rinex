@@ -156,40 +156,34 @@ impl Ephemeris {
         max_iter: usize,
     ) -> Result<Vector6, EphemerisError> {
         if sv.constellation.is_sbas() || sv.constellation == Constellation::Glonass {
-            // interpolation
+            // position
             let pos_km = Vector3::new(
                 self.get_orbit_field_f64("posX")
-                    .ok_or(EphemerisError::MissingData)?
-                    / 1.0E3,
+                    .ok_or(EphemerisError::MissingData)?,
                 self.get_orbit_field_f64("posY")
-                    .ok_or(EphemerisError::MissingData)?
-                    / 1.0E3,
+                    .ok_or(EphemerisError::MissingData)?,
                 self.get_orbit_field_f64("posZ")
-                    .ok_or(EphemerisError::MissingData)?
-                    / 1.0E3,
+                    .ok_or(EphemerisError::MissingData)?,
             );
 
             // velocity is mandatory
             let vel_km = Vector3::new(
                 self.get_orbit_field_f64("velX")
-                    .ok_or(EphemerisError::MissingData)?
-                    / 1.0E3,
+                    .ok_or(EphemerisError::MissingData)?,
                 self.get_orbit_field_f64("velY")
-                    .ok_or(EphemerisError::MissingData)?
-                    / 1.0E3,
+                    .ok_or(EphemerisError::MissingData)?,
                 self.get_orbit_field_f64("velZ")
-                    .ok_or(EphemerisError::MissingData)?
-                    / 1.0E3,
+                    .ok_or(EphemerisError::MissingData)?,
             );
 
-            // accel increases accuracy but is not required
+            // use accel when it exists
             let accel_km = match (
                 self.get_orbit_field_f64("accelX"),
                 self.get_orbit_field_f64("accelY"),
                 self.get_orbit_field_f64("accelZ"),
             ) {
-                (Some(accel_x_m), Some(accel_y_m), Some(accel_z_m)) => {
-                    Vector3::new(accel_x_m / 1.0E3, accel_y_m / 1.0E3, accel_z_m / 1.0E3)
+                (Some(accel_x_km), Some(accel_y_km), Some(accel_z_km)) => {
+                    Vector3::new(accel_x_km, accel_y_km, accel_z_km)
                 },
                 _ => Vector3::new(0.0, 0.0, 0.0),
             };

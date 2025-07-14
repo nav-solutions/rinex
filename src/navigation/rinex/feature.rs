@@ -4,7 +4,7 @@ use crate::{
     },
     prelude::{
         nav::{Almanac, AzElRange, Orbit},
-        Epoch, Rinex, SV,
+        Constellation, Epoch, Rinex, SV,
     },
 };
 
@@ -69,7 +69,7 @@ impl Rinex {
     /// Note that `ToE` does not exist for GEO/SBAS [SV], so `ToC` is simply
     /// copied in this case, to maintain the API.
     pub fn nav_ephemeris_selection(&self, sv: SV, t: Epoch) -> Option<(Epoch, Epoch, &Ephemeris)> {
-        if sv.constellation.is_sbas() {
+        if sv.constellation.is_sbas() || sv.constellation == Constellation::Glonass {
             self.nav_ephemeris_frames_iter()
                 .filter_map(|(k, eph)| {
                     if k.sv == sv {
@@ -78,7 +78,7 @@ impl Rinex {
                         None
                     }
                 })
-                .min_by_key(|(toc, _, _)| t - *toc)
+                .min_by_key(|(toc, _, _)| (t - *toc).abs())
         } else {
             self.nav_ephemeris_frames_iter()
                 .filter_map(|(k, eph)| {
