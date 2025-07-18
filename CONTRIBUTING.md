@@ -7,7 +7,7 @@ Use the github portal to submit PR, all contributions are welcomed.
 Don't forget to run a quick `cargo fmt` prior any submissions, so the CI/CD does not fail
 on coding style "issues".
 
-This crate and ecosystem is part of the [RTK-rs framework and community](https://github.com/rtk-rs).  
+This crate and ecosystem is part of the [RTK-rs framework and community](https://github.com/nav-solutions).  
 You can contact us on [Discord](https://discord.com/invite/VwuKPcw6)
 
 Crate architecture
