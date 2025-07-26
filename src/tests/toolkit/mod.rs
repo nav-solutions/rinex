@@ -10,13 +10,6 @@ pub use observation::{
     generic_observation_rinex_test, SignalDataPoint,
 };
 
-// IONEX test toolkit
-#[cfg(feature = "ionex")]
-mod ionex;
-
-#[cfg(feature = "ionex")]
-pub use ionex::{generic_ionex_test, TecPoint};
-
 // NAV RINEX dedicated tools
 #[cfg(feature = "nav")]
 mod nav;
@@ -219,7 +212,6 @@ pub fn generic_header_comparison(dut: &Header, model: &Header) {
     assert_eq!(dut.meteo, model.meteo);
     assert_eq!(dut.clock, model.clock);
     assert_eq!(dut.antex, model.antex);
-    assert_eq!(dut.ionex, model.ionex);
     assert_eq!(dut.doris, model.doris);
 }
 

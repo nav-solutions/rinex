@@ -61,9 +61,6 @@ ut1 = [
 # METEO RINEX dedicated Iterators & methods.
 meteo = []
 
-# IONEX (special RINEX) dedicated Iterators & methods.
-ionex = []
-
 # CLOCK (Special RINEX) dedicated Iterators & methods.
 clock = []
 
@@ -101,7 +98,6 @@ full = [
     "clock",
     "doris",
     "flate2",
-    "ionex",
     "meteo",
     "nav",
     "obs",

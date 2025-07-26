@@ -10,23 +10,25 @@ pub enum Type {
     /// Phase & Pseudo range measurements
     #[default]
     ObservationData,
+
     /// Describes Navigation Data (NAV)
     /// Ephemeris data, and other possible
     /// modern declinations
     NavigationData,
+
     /// Describes Meteorological data (MET)
     MeteoData,
+
     /// Clock Data (CLK)
     ClockData,
-    /// Ionosphere Maps (IONEX)
-    /// contains list of TEC Maps.
-    IonosphereMaps,
+
     /// Antenna Data (ATX or Antex) special RINEX format,
     /// contains sets of Antenna characterization coefficients.
     /// No database is furnished by this lib (way too big).
     /// Users interested in such calibrations / conversions / calculations,
     /// should use this parser as a mean to extract the antenna coefficients solely
     AntennaData,
+
     /// DORIS measurements.
     /// Things to note when processing DORIS files:
     ///   - header.receiver.sn is the DORIS chain #ID
@@ -47,7 +49,6 @@ impl std::fmt::Display for Type {
             Self::MeteoData => write!(fmt, "METEO DATA"),
             Self::ClockData => write!(fmt, "CLOCK DATA"),
             Self::AntennaData => write!(fmt, "ANTEX"),
-            Self::IonosphereMaps => write!(fmt, "IONOSPHERE MAPS"),
             Self::DORIS => write!(fmt, "DORIS"),
         }
     }
@@ -65,7 +66,6 @@ impl Type {
             Self::MeteoData => String::from("METEOROLOGICAL DATA"),
             Self::ClockData => String::from("CLOCK DATA"),
             Self::AntennaData => String::from("ANTEX"),
-            Self::IonosphereMaps => String::from("IONOSPHERE MAPS"),
             Self::DORIS => String::from("DORIS"),
         }
     }
@@ -85,8 +85,6 @@ impl std::str::FromStr for Type {
             Ok(Self::ClockData)
         } else if s.eq("antex") {
             Ok(Self::AntennaData)
-        } else if s.eq("ionosphere maps") {
-            Ok(Self::IonosphereMaps)
         } else if s.eq("doris") || s.eq("d") {
             Ok(Self::DORIS)
         } else {

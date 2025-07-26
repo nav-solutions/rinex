@@ -10,18 +10,7 @@ use crate::{
     doris::{
         is_new_epoch as is_new_doris_epoch, parse_epoch as parse_doris_epoch, Record as DorisRecord,
     },
-    epoch::parse_ionex_utc as parse_ionex_utc_epoch,
     hatanaka::DecompressorExpert,
-    ionex::{
-        is_new_height_map,
-        is_new_rms_map,
-        is_new_tec_map,
-        //parse_height_map as parse_ionex_height_map,
-        parse_rms_map as parse_ionex_rms_map,
-        parse_tec_map as parse_ionex_tec_map,
-        Quantized as IonexQuantized,
-        Record as IonexRecord,
-    },
     is_rinex_comment,
     meteo::{
         is_new_epoch as is_new_meteo_epoch, parse_epoch as parse_meteo_epoch, Record as MeteoRecord,
@@ -151,25 +140,6 @@ impl Record {
             }
         }
 
-        // IONEX case
-        //  Default map type is TEC, it will come with identified Epoch
-        //  but others may exist:
-        //  in this case we use the previously identified Epoch
-        //  and attach other kinds of maps
-        let mut ionex_rec = IonexRecord::new();
-        let mut ionex_t = Epoch::default();
-        let mut ionex_tec_exponent = Default::default();
-        let mut ionex_lat_exponent = Default::default();
-        let mut ionex_long_exponent = Default::default();
-        let mut ionex_alt_exponent = Default::default();
-
-        if let Some(ionex) = &header.ionex {
-            ionex_tec_exponent = ionex.exponent;
-            ionex_lat_exponent = IonexQuantized::find_exponent(ionex.grid.latitude.spacing);
-            ionex_long_exponent = IonexQuantized::find_exponent(ionex.grid.longitude.spacing);
-            ionex_alt_exponent = IonexQuantized::find_exponent(ionex.grid.height.spacing);
-        }
-
         // Iterate and consume, one line at a time
         while let Ok(size) = reader.read_line(&mut line_buf) {
             if size == 0 {
@@ -182,34 +152,6 @@ impl Record {
             if is_rinex_comment(&line_buf) {
                 let comment = line_buf.split_at(60).0.trim_end();
                 comment_content.push(comment.to_string());
-
-                // skip parsing
-                line_buf.clear();
-                continue;
-            }
-
-            // (special case) IONEX exponent scaling:
-            // keep up to date, so data interpretation remains correct
-            if line_buf.contains("EXPONENT") {
-                // we don't tolerate invalid scaling specs.
-                // This assures that data interpretation is always correct.
-                ionex_tec_exponent = line_buf
-                    .split_at(60)
-                    .0
-                    .trim()
-                    .parse::<i8>()
-                    .map_err(|_| ParsingError::IonexScalingExponent)?;
-
-                // skip parsing
-                line_buf.clear();
-                continue;
-            }
-
-            // (special case) IONEX temporal classification
-            if line_buf.contains("EPOCH OF CURRENT MAP") {
-                // we do not tolerate invalid temporal specs
-                // This assures that data is always correctly sorted
-                ionex_t = parse_ionex_utc_epoch(line_buf.split_at(60).0)?;
 
                 // skip parsing
                 line_buf.clear();
@@ -335,49 +277,6 @@ impl Record {
                             let (antenna, content) = parse_antex_antenna(&epoch_buf).unwrap();
                             atx_rec.push((antenna, content));
                         },
-
-                        Type::IonosphereMaps => {
-                            if is_new_tec_map(&line_buf) {
-                                match parse_ionex_tec_map(
-                                    &epoch_buf,
-                                    ionex_lat_exponent,
-                                    ionex_long_exponent,
-                                    ionex_alt_exponent,
-                                    ionex_tec_exponent,
-                                    ionex_t,
-                                    &mut ionex_rec,
-                                ) {
-                                    Ok(()) => {},
-                                    Err(_) => {},
-                                }
-                            } else if is_new_rms_map(&line_buf) {
-                                match parse_ionex_rms_map(
-                                    &epoch_buf,
-                                    ionex_lat_exponent,
-                                    ionex_long_exponent,
-                                    ionex_alt_exponent,
-                                    ionex_tec_exponent,
-                                    ionex_t,
-                                    &mut ionex_rec,
-                                ) {
-                                    Ok(()) => {},
-                                    Err(_) => {},
-                                }
-                            } else {
-                                // match parse_ionex_height_map(
-                                //     &epoch_buf,
-                                //     ionex_lat_exponent,
-                                //     ionex_long_exponent,
-                                //     ionex_alt_exponent,
-                                //     ionex_tec_exponent,
-                                //     ionex_t,
-                                //     &mut ionex_rec,
-                                // ) {
-                                //     Ok(()) => {},
-                                //     Err(_) => {},
-                                // }
-                            }
-                        },
                     }
                 }
             }
@@ -401,7 +300,6 @@ impl Record {
         let record = match &header.rinex_type {
             Type::AntennaData => Record::AntexRecord(atx_rec),
             Type::ClockData => Record::ClockRecord(clk_rec),
-            Type::IonosphereMaps => Record::IonexRecord(ionex_rec),
             Type::MeteoData => Record::MeteoRecord(met_rec),
             Type::NavigationData => Record::NavRecord(nav_rec),
             Type::ObservationData => Record::ObsRecord(obs_rec),
@@ -417,9 +315,6 @@ impl Record {
         match &header.rinex_type {
             Type::AntennaData => is_new_antex_epoch(line),
             Type::ClockData => is_new_clock_epoch(line),
-            Type::IonosphereMaps => {
-                is_new_tec_map(line) || is_new_rms_map(line) || is_new_height_map(line)
-            },
             Type::NavigationData => is_new_nav_epoch(line, header.version),
             Type::ObservationData => is_new_observation_epoch(line, header.version),
             Type::MeteoData => is_new_meteo_epoch(line, header.version),

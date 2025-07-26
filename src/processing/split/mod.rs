@@ -5,7 +5,6 @@ use gnss_qc_traits::Split;
 mod clock;
 mod doris;
 mod header;
-mod ionex;
 mod meteo;
 mod nav;
 mod obs;
@@ -21,10 +20,6 @@ use meteo::{
 
 use clock::{
     split as clock_split, split_even_dt as clock_split_even_dt, split_mut as clock_split_mut,
-};
-
-use ionex::{
-    split as ionex_split, split_even_dt as ionex_split_even_dt, split_mut as ionex_split_mut,
 };
 
 use doris::{
@@ -45,9 +40,6 @@ impl Split for Rinex {
         } else if let Some(r) = self.record.as_clock() {
             let (r0, r1) = clock_split(r, t);
             (Record::ClockRecord(r0), Record::ClockRecord(r1))
-        } else if let Some(r) = self.record.as_ionex() {
-            let (r0, r1) = ionex_split(r, t);
-            (Record::IonexRecord(r0), Record::IonexRecord(r1))
         } else if let Some(r) = self.record.as_doris() {
             let (r0, r1) = doris_split(r, t);
             (Record::DorisRecord(r0), Record::DorisRecord(r1))
@@ -93,8 +85,6 @@ impl Split for Rinex {
             Record::NavRecord(nav_split_mut(r, t))
         } else if let Some(r) = self.record.as_mut_clock() {
             Record::ClockRecord(clock_split_mut(r, t))
-        } else if let Some(r) = self.record.as_mut_ionex() {
-            Record::IonexRecord(ionex_split_mut(r, t))
         } else if let Some(r) = self.record.as_mut_doris() {
             Record::DorisRecord(doris_split_mut(r, t))
         } else if let Some(r) = self.record.as_mut_meteo() {
@@ -130,11 +120,6 @@ impl Split for Rinex {
             meteo_split_even_dt(r, dt)
                 .into_iter()
                 .map(|rec| Record::MeteoRecord(rec))
-                .collect::<Vec<_>>()
-        } else if let Some(r) = self.record.as_ionex() {
-            ionex_split_even_dt(r, dt)
-                .into_iter()
-                .map(|rec| Record::IonexRecord(rec))
                 .collect::<Vec<_>>()
         } else if let Some(r) = self.record.as_doris() {
             doris_split_even_dt(r, dt)

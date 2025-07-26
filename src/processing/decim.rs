@@ -1,6 +1,6 @@
 use crate::{
     clock::record::clock_decim_mut, doris::decim::decim_mut as doris_decim_mut,
-    ionex::decim_mut as ionex_decim_mut, meteo::decim::decim_mut as meteo_decim_mut,
+    meteo::decim::decim_mut as meteo_decim_mut,
     navigation::decim::decim_mut as navigation_decim_mut,
     observation::decim::decim_mut as observation_decim_mut, prelude::Rinex,
 };
@@ -26,8 +26,6 @@ impl Decimate for Rinex {
             meteo_decim_mut(rec, f)
         } else if let Some(rec) = self.record.as_mut_doris() {
             doris_decim_mut(rec, f)
-        } else if let Some(rec) = self.record.as_mut_ionex() {
-            ionex_decim_mut(rec, f)
         }
     }
 }
