@@ -39,15 +39,6 @@ impl Split for Header {
             }
         }
 
-        if let Some(ion) = &mut a.ionex {
-            ion.epoch_of_first_map = std::cmp::min(ion.epoch_of_first_map, t);
-            ion.epoch_of_last_map = std::cmp::max(ion.epoch_of_last_map, t);
-        }
-
-        if let Some(ion) = &mut b.ionex {
-            ion.epoch_of_first_map = std::cmp::max(ion.epoch_of_first_map, t);
-        }
-
         (a, b)
     }
 

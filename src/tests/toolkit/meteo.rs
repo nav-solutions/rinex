@@ -49,7 +49,6 @@ pub fn generic_comparison(dut: &Rinex, model: &Rinex) {
 fn basic_header_tests(dut: &Header) {
     assert!(dut.obs.is_none(),);
     assert!(dut.meteo.is_some(),);
-    assert!(dut.ionex.is_none(),);
     assert!(dut.clock.is_none(),);
 
     let _ = dut.meteo.as_ref().expect("missing specific specs");
