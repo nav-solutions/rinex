@@ -156,7 +156,7 @@ impl TimeOffset {
         let t_ref = parse_epoch_in_timescale(epoch.trim(), lhs)?;
         let (t_week, t_nanos) = t_ref.to_time_of_week();
 
-        let (t_tm, rem) = line_2.split_at(23);
+        let (_, rem) = line_2.split_at(23);
         let (a0, rem) = rem.split_at(19);
         let (a1, rem) = rem.split_at(19);
         let (a2, _) = rem.split_at(19);

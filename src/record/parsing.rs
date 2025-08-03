@@ -274,8 +274,9 @@ impl Record {
                         },
 
                         Type::AntennaData => {
-                            let (antenna, content) = parse_antex_antenna(&epoch_buf).unwrap();
-                            atx_rec.push((antenna, content));
+                            if let Ok((antenna, content)) = parse_antex_antenna(&epoch_buf) {
+                                atx_rec.push((antenna, content));
+                            }
                         },
                     }
                 }

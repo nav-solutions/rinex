@@ -269,8 +269,6 @@ impl Ephemeris {
 
     /// Return Time of [Ephemeris] (ToE) expressed as [Epoch]
     pub fn toe(&self, sv: SV) -> Option<Epoch> {
-        let timescale = sv.constellation.timescale()?;
-
         // TODO: in CNAV V4 TOC is said to be TOE... ...
         let (week, seconds) = (self.get_week()?, self.get_orbit_f64("toe")?);
         let nanos = (seconds * 1.0E9).round() as u64;

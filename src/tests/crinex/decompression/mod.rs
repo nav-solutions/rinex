@@ -19,7 +19,7 @@ use std::{
 use crate::{
     hatanaka::Decompressor,
     prelude::{Constellation, Observable},
-    tests::toolkit::{generic_observation_comparison, random_name},
+    tests::toolkit::generic_observation_comparison,
 };
 
 /// This method is used by all "raw" decompression tests

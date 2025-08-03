@@ -66,11 +66,17 @@ impl Header {
         let mut antex = AntexHeader::default();
         let mut doris = DorisHeader::default();
 
-        for l in reader.lines() {
-            let line = l.unwrap();
+        for line in reader.lines() {
+            if line.is_err() {
+                continue;
+            }
+
+            let line = line.unwrap();
+
             if line.len() < 60 {
                 continue; // --> invalid header content
             }
+
             let (content, marker) = line.split_at(60);
             ///////////////////////////////
             // [0] END OF HEADER
