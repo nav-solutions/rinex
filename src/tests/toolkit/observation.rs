@@ -9,8 +9,8 @@ use crate::{
         Constellation, Epoch, GeodeticMarker, Header, Observable, Rinex, RinexType, Version, SV,
     },
     tests::toolkit::{
-        generic_null_rinex_test, generic_rinex_test, gnss_csv as gnss_from_csv,
-        observables_csv as observable_from_csv, sv_csv as sv_from_csv, TimeFrame,
+        generic_rinex_test, gnss_csv as gnss_from_csv, observables_csv as observable_from_csv,
+        sv_csv as sv_from_csv, TimeFrame,
     },
 };
 

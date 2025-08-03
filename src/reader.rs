@@ -68,6 +68,7 @@ impl<R: Read> BufRead for Reader<R> {
         }
         Ok(&self.buf[self.rd_ptr..])
     }
+
     fn consume(&mut self, s: usize) {
         let avail = 8192 - self.rd_ptr;
         if avail >= s {

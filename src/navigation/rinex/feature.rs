@@ -15,7 +15,7 @@ impl Rinex {
     /// ## Returns
     /// - orbital state: expressed as ECEF [Orbit]
     pub fn sv_orbit(&self, sv: SV, t: Epoch) -> Option<Orbit> {
-        let (toc, _, eph) = self.nav_ephemeris_selection(sv, t)?;
+        let (_, _, eph) = self.nav_ephemeris_selection(sv, t)?;
         eph.kepler2position(sv, t)
     }
 
@@ -52,8 +52,6 @@ impl Rinex {
     /// Note that `ToE` does not exist for GEO/SBAS [SV], so `ToC` is simply
     /// copied in this case, to maintain the API.
     pub fn nav_ephemeris_selection(&self, sv: SV, t: Epoch) -> Option<(Epoch, Epoch, &Ephemeris)> {
-        let sv_ts = sv.constellation.timescale()?;
-
         if sv.constellation.is_sbas() {
             self.nav_ephemeris_frames_iter()
                 .filter_map(|(k, eph)| {
