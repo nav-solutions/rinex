@@ -45,7 +45,7 @@ other RINEX-like formats have their own parser:
 
 If you need to reference this work, please use the following model:
 
-`RTK-rs Team (2025), RINEX: analysis and processing (MPLv2), https://github.com/nav-solutions`
+`Nav-solutions (2025), RINEX: analysis and processing (MPLv2), https://github.com/nav-solutions`
 
 Formats & revisions
 ===================
