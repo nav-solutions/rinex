@@ -265,38 +265,8 @@ pub(crate) fn parse_ionex_utc(s: &str) -> Result<Epoch, ParsingError> {
     Ok(Epoch::from_gregorian_utc(y, m, d, hh, mm, ss, 0))
 }
 
-/*
- * Until Hifitime provides a decomposition method in timescale other than UTC
- * we have this tweak to decompose %Y %M %D %HH %MM %SS and without nanoseconds
- */
-pub(crate) fn epoch_decompose(e: Epoch) -> (i32, u8, u8, u8, u8, u8, u32) {
-    let isofmt = e.to_gregorian_str(e.time_scale);
-    let mut datetime = isofmt.split('T');
-    let date = datetime.next().unwrap();
-    let mut date = date.split('-');
-
-    let time = datetime.next().unwrap();
-    let mut time_scale = time.split(' ');
-    let time = time_scale.next().unwrap();
-    let mut time = time.split(':');
-
-    let years = date.next().unwrap().parse::<i32>().unwrap();
-    let months = date.next().unwrap().parse::<u8>().unwrap();
-    let days = date.next().unwrap().parse::<u8>().unwrap();
-
-    let hours = time.next().unwrap().parse::<u8>().unwrap();
-    let mins = time.next().unwrap().parse::<u8>().unwrap();
-    let seconds = f64::from_str(time.next().unwrap()).unwrap();
-
-    (
-        years,
-        months,
-        days,
-        hours,
-        mins,
-        seconds.floor() as u8,
-        (seconds.fract() * 1E9).round() as u32,
-    )
+pub(crate) fn epoch_decompose(epoch: Epoch) -> (i32, u8, u8, u8, u8, u8, u32) {
+    epoch.to_gregorian(epoch.time_scale)
 }
 
 #[cfg(test)]
