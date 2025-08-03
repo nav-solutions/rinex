@@ -306,6 +306,7 @@ mod test {
         assert_eq!(e.time_scale, TimeScale::UTC);
         assert_eq!(format(e, Type::NavigationData, 2), "21  1  1 16 15  0.0");
     }
+
     #[test]
     fn epoch_parse_nav_v2_nanos() {
         let e = parse_utc("20 12 31 23 45  0.1");
@@ -316,6 +317,7 @@ mod test {
         assert_eq!(ns, 100_000_000);
         assert_eq!(format(e, Type::NavigationData, 2), "20 12 31 23 45  0.1");
     }
+
     #[test]
     fn epoch_parse_nav_v3() {
         let e = parse_utc("2021 01 01 00 00 00 ");
@@ -371,6 +373,7 @@ mod test {
         assert_eq!(ns, 0);
         assert_eq!(format(e, Type::NavigationData, 3), "2020 06 25 09 49 04");
     }
+
     #[test]
     fn epoch_parse_obs_v2() {
         let e = parse_utc(" 21 12 21  0  0  0.0000000");
@@ -438,6 +441,7 @@ mod test {
             "21  1  1  0  7 30.0000000"
         );
     }
+
     #[test]
     fn epoch_parse_obs_v3() {
         let e = parse_utc(" 2022 01 09 00 00  0.0000000");
@@ -504,6 +508,7 @@ mod test {
             "2022 03 04 00 02 30.0000000"
         );
     }
+
     #[test]
     fn epoch_parse_obs_v2_nanos() {
         let e = parse_utc(" 21  1  1  0  7 39.1234567");
@@ -517,6 +522,7 @@ mod test {
             "21  1  1  0  7 39.1234567"
         );
     }
+
     #[test]
     fn epoch_parse_obs_v3_nanos() {
         let e = parse_utc("2022 01 09 00 00  0.1000000");
@@ -552,6 +558,7 @@ mod test {
             "2022 01 09 00 00  8.7654321"
         );
     }
+
     #[test]
     fn epoch_parse_meteo_v2() {
         let e = parse_utc(" 22  1  4  0  0  0  ");
@@ -567,6 +574,7 @@ mod test {
         assert_eq!(ns, 0);
         assert_eq!(format(e, Type::MeteoData, 2), "22  1  4  0  0  0");
     }
+
     #[test]
     fn ionex_parsing() {
         for (desc, expected) in [(
@@ -579,6 +587,7 @@ mod test {
             assert_eq!(epoch, expected, "invalid IONEX/UTC epoch");
         }
     }
+
     #[test]
     fn epoch_decomposition() {
         for (epoch, y, m, d, hh, mm, ss, ns) in [
@@ -600,6 +609,7 @@ mod test {
             );
         }
     }
+
     #[test]
     fn test_formatted_month() {
         assert_eq!(parse_formatted_month("Jan").unwrap(), 1);
