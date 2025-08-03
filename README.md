@@ -20,23 +20,19 @@ To contribute to either of our project or join our community, you way
 ## Advantages :rocket: 
 
 - Fast
-- Open sources: read and access all the code!
+- Open sources: read and access all the code
 - All modern GNSS constellations, codes and signals
-  - Surveying with GPS, Galileo, BeiDou and QZSS
+  - GPS, Galileo, BeiDou and QZSS
 - Time scales: GPST, QZSST, BDT, GST, UTC, TAI
 - Efficient seamless compression and decompression
+  - modern rewrite of the Hatanaka compression algorithm
 - RINEX V4 full support, including
   - new Ionospheric coorections
   - new Time offset corrections
   - precise Earth Orientation updates
-- Navigation supported in the following constellations
-  - GPS
-  - Galileo
-  - BeiDou
-  - QZSS
-- Most RINEX formats supported (see following table)
-- High Precision Clock RINEX products (for PPP)
-- DORIS (special RINEX)
+- Supports Observation, Navigation, Meteo and Clock RINEX,
+other RINEX-like formats have their own parser:
+  - [IONEX](https://github.com/nav-solutions/ionex)
 - Many pre-processing algorithms including Filter Designer
 - Several file operations: merging, splitting, time binning (batch)
 
@@ -49,7 +45,7 @@ To contribute to either of our project or join our community, you way
 
 If you need to reference this work, please use the following model:
 
-`RTK-rs Team (2025), RINEX: analysis and processing (MPLv2), https://github.com/nav-solutions`
+`Nav-solutions (2025), RINEX: analysis and processing (MPLv2), https://github.com/nav-solutions`
 
 Formats & revisions
 ===================

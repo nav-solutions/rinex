@@ -86,10 +86,6 @@ pub struct DetailedProductionAttributes {
 
 impl ProductionAttributes {
     /* filename generator */
-    pub(crate) fn ionex_format(name: &str, region: char, ddd: &str, yy: &str) -> String {
-        format!("{}{}{}0.{}I", name, region, ddd, yy,)
-    }
-    /* filename generator */
     pub(crate) fn rinex_short_format(name: &str, ddd: &str, yy: &str, ext: char) -> String {
         format!("{}{}0.{}{}", &name, ddd, yy, ext,)
     }
@@ -411,21 +407,6 @@ mod test {
             assert_eq!(attrs.year, year);
             assert_eq!(attrs.doy, doy);
             assert_eq!(attrs.v3_details, Some(detail));
-        }
-    }
-    #[test]
-    fn ionex_filenames() {
-        for (filename, name, year, doy, region) in [
-            ("CKMG0020.22I", "CKM", 2022, 2, 'G'),
-            ("CKMG0090.21I", "CKM", 2021, 9, 'G'),
-            ("jplg0010.17i", "JPL", 2017, 1, 'G'),
-        ] {
-            println!("Testing IONEX filename \"{}\"", filename);
-            let attrs = ProductionAttributes::from_str(filename).unwrap();
-            assert_eq!(attrs.name, name);
-            assert_eq!(attrs.year, year);
-            assert_eq!(attrs.doy, doy);
-            assert_eq!(attrs.region, Some(region));
         }
     }
 }

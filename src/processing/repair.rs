@@ -1,6 +1,5 @@
 use crate::{
-    doris::repair::repair_mut as doris_repair_mut, ionex::repair_mut as ionex_repair_mut,
-    meteo::repair::repair_mut as meteo_repair_mut,
+    doris::repair::repair_mut as doris_repair_mut, meteo::repair::repair_mut as meteo_repair_mut,
     navigation::repair::repair_mut as navigation_repair_mut,
     observation::repair::repair_mut as observation_repair_mut, prelude::Rinex,
 };
@@ -20,8 +19,6 @@ impl RepairTrait for Rinex {
             meteo_repair_mut(rec, r);
         } else if let Some(rec) = self.record.as_mut_doris() {
             doris_repair_mut(rec, r);
-        } else if let Some(rec) = self.record.as_mut_ionex() {
-            ionex_repair_mut(rec, r);
         } else if let Some(rec) = self.record.as_mut_nav() {
             navigation_repair_mut(rec, r);
         }

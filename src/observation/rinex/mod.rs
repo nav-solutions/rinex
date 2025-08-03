@@ -8,12 +8,6 @@ use crate::{
 #[cfg_attr(docsrs, doc(cfg(feature = "obs")))]
 pub(crate) mod feature; // feature dependent, high level methods
 
-#[cfg(feature = "obs")]
-#[cfg(feature = "ionex")]
-#[cfg_attr(docsrs, doc(cfg(feature = "obs")))]
-#[cfg_attr(docsrs, doc(cfg(feature = "ionex")))]
-pub(crate) mod tec; // ionex + obs capabilities
-
 use std::collections::btree_map::{Iter, IterMut, Keys};
 
 impl Rinex {

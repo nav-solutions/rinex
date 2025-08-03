@@ -1,6 +1,6 @@
 use crate::{
     antex::Record as AntexRecord, clock::Record as ClockRecord, doris::Record as DorisRecord,
-    ionex::Record as IonexRecord, meteo::Record as MeteoRecord, navigation::Record as NavRecord,
+    meteo::Record as MeteoRecord, navigation::Record as NavRecord,
     observation::Record as ObservationRecord, prelude::Epoch,
 };
 
@@ -21,9 +21,6 @@ pub enum Record {
 
     /// [ClockRecord] contains SV and ground clock states
     ClockRecord(ClockRecord),
-
-    /// IONEX: TEC maps stored as [IonexRecord]
-    IonexRecord(IonexRecord),
 
     /// Meteo sensor observations, stored as [MeteoRecord]
     MeteoRecord(MeteoRecord),
@@ -72,22 +69,6 @@ impl Record {
     pub fn as_mut_clock(&mut self) -> Option<&mut ClockRecord> {
         match self {
             Record::ClockRecord(r) => Some(r),
-            _ => None,
-        }
-    }
-
-    /// [IonexRecord] unwrapping attempt.
-    pub fn as_ionex(&self) -> Option<&IonexRecord> {
-        match self {
-            Record::IonexRecord(r) => Some(r),
-            _ => None,
-        }
-    }
-
-    /// Mutable [IonexRecord] unwrapping attempt.
-    pub fn as_mut_ionex(&mut self) -> Option<&mut IonexRecord> {
-        match self {
-            Record::IonexRecord(r) => Some(r),
             _ => None,
         }
     }
