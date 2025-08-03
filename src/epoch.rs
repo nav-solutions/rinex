@@ -5,8 +5,6 @@ use crate::{
     types::Type,
 };
 
-use std::str::FromStr;
-
 /// Infaillible `Epoch::now()` call.
 pub(crate) fn now() -> Epoch {
     Epoch::now().unwrap_or(Epoch::from_gregorian_utc_at_midnight(2000, 1, 1))
