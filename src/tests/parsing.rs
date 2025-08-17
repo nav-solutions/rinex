@@ -12,8 +12,8 @@ mod test {
         let test_resources = PathBuf::new().join(env!("CARGO_MANIFEST_DIR")).join("data");
 
         for data in vec![
-            "OBS", // "CRNX",
-            "MET", "NAV", "IONEX", "CLK", "ATX",
+            "OBS", //"CRNX",
+            "MET", "NAV", "CLK", "ATX",
         ] {
             let data_path = test_resources.clone().join(data);
             for revision in std::fs::read_dir(data_path).unwrap() {
@@ -138,17 +138,6 @@ mod test {
                             assert!(rinex.header.clock.is_some(), "badly formed CLK RINEX");
                             assert!(rinex.epoch_iter().count() > 0); // all files have content
                             let _ = rinex.record.as_clock().unwrap();
-                        },
-                        "IONEX" => {
-                            assert!(rinex.is_ionex());
-                            assert!(rinex.epoch_iter().count() > 0); // all files have content
-                            for e in rinex.epoch_iter() {
-                                assert!(
-                                    e.time_scale == TimeScale::UTC,
-                                    "wrong {} timescale for a IONEX",
-                                    e.time_scale
-                                );
-                            }
                         },
                         _ => unreachable!(),
                     }

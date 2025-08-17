@@ -56,7 +56,6 @@ impl SignalDataPoint {
 fn basic_header_tests(dut: &Header, timeof_first_obs: Option<&str>, timeof_last_obs: Option<&str>) {
     assert!(dut.obs.is_some(),);
     assert!(dut.meteo.is_none(),);
-    assert!(dut.ionex.is_none(),);
     assert!(dut.clock.is_none(),);
 
     let specs = dut.obs.as_ref().expect("missing specific specs");
