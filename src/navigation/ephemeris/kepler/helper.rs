@@ -4,46 +4,54 @@ use log::{error, warn};
 use crate::{
     constants::{Constants, Omega},
     navigation::Ephemeris,
-    prelude::{nav::Orbit, Constellation, Epoch, TimeScale, SV},
+    prelude::{Constellation, Epoch, SV},
 };
 
 use nalgebra::{Matrix3, Rotation, Rotation3, SMatrix, Vector4};
 
-use anise::{constants::frames::EARTH_J2000, math::Vector3};
+use anise::math::Vector3;
 
 /// [Helper] helps calcualte satellite orbital state from Keplerian elements.
 #[derive(Debug, Clone, Copy)]
 pub struct Helper {
-    /// Satellite
+    /// [SV] satellite identity
     pub sv: SV,
+
     /// The difference between the calculated time and the ephemeris reference time
     pub t_k: f64,
-    /// Ascending angle(corrected)
+
+    /// Ascending angle (corrected) in radians
     pub u_k: f64,
-    /// Radius(corrected)
+
+    /// Radius(corrected) in radians
     pub r_k: f64,
-    /// Orbital inclination(corrected)
+
+    /// Orbital inclination (corrected) in radians
     pub i_k: f64,
-    /// Ascending node right ascension
+
+    /// Ascending node right ascension (in radians)
     pub omega_k: f64,
+
     /// First Derivative of Ascending angle(corrected)
     pub fd_u_k: f64,
+
     /// First Derivative of Radius(corrected)
     pub fd_r_k: f64,
+
     /// First Derivative of Orbital inclination(corrected)
     pub fd_i_k: f64,
+
     /// First Derivative of Ascending node right ascension
     pub fd_omega_k: f64,
+
     /// Relativistic Effect Correction
     pub dtr: f64,
+
     /// First Derivative of Relativistic Effect Correction
     pub fd_dtr: f64,
+
     /// r_sv in meters ECEF
     pub r_sv: (f64, f64, f64),
-    /// ECEF to Celestial rotation matrix
-    pub cie_rot: Rotation3<f64>,
-    /// Orbit
-    pub orbit: Orbit,
 }
 
 impl Helper {
@@ -228,19 +236,13 @@ impl Helper {
 impl Ephemeris {
     /// Try to form obtain a [Helper] for Keplerian equations solving.
     /// This will fail on Glonass and SBAS constellations.
-    pub fn helper(&self, sv: SV, t_sv: Epoch, t: Epoch) -> Option<Helper> {
+    pub fn helper(&self, sv: SV, t: Epoch) -> Option<Helper> {
         // const
         let gm_m3_s2 = Constants::gm(sv);
         let omega = Constants::omega(sv);
         let dtr_f = Constants::dtr_f(sv);
 
         let t_k = self.t_k(sv, t)?;
-        if t_k < 0.0 {
-            #[cfg(feature = "log")]
-            error!("t_k < 0.0: bad op");
-
-            return None;
-        }
 
         let mut kepler = self.kepler()?;
         let perturbations = self.perturbations()?;
@@ -332,52 +334,11 @@ impl Ephemeris {
         // position in orbital plane
         let (x, y) = (r_k * u_k.cos(), r_k * u_k.sin());
 
-        // rotated position
-        // let (sin_omega_k, cos_omega_k) = omega_k.sin_cos();
-        // let (sin_i_k, cos_i_k) = i_k.sin_cos();
-
-        // earth rotation
-        let t_sv_gpst = t_sv.to_time_scale(TimeScale::GPST);
-        let t_gpst = t.to_time_scale(TimeScale::GPST);
-        let earth_rot = omega * (t_sv_gpst - t_gpst).to_seconds();
-        let (sin_earth_rot, cos_earth_rot) = earth_rot.sin_cos();
-
-        //let r_sv = (
-        //    x * cos_omega_k - y * sin_omega_k * sin_i_k,
-        //    x * sin_omega_k + y * cos_omega_k * cos_i_k,
-        //    y * sin_i_k,
-        //);
         let r_sv = (x, y, 0.0);
-
-        let cie_rot = Rotation3::from_matrix(&Matrix3::new(
-            cos_earth_rot,
-            -sin_earth_rot,
-            0.0,
-            sin_earth_rot,
-            cos_earth_rot,
-            0.0,
-            0.0,
-            0.0,
-            1.0,
-        ));
-
-        // Finally, determine Orbital state
-        let orbit = Orbit::try_keplerian(
-            kepler.a * 1e-3,
-            kepler.e,
-            i_k.to_degrees(),
-            omega_k.to_degrees(),
-            omega.to_degrees(),
-            v_k.to_degrees(),
-            t_gpst,
-            EARTH_J2000.with_mu_km3_s2(gm_m3_s2 * 1e-9),
-        )
-        .ok()?;
 
         Some(Helper {
             sv,
             t_k,
-            orbit,
             omega_k,
             dtr,
             fd_dtr,
@@ -389,7 +350,6 @@ impl Ephemeris {
             fd_i_k,
             fd_omega_k,
             r_sv,
-            cie_rot,
         })
     }
 }

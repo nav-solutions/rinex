@@ -9,8 +9,6 @@ use orbits::OrbitItem;
 
 use flags::{
     bds::{BdsHealth, BdsSatH1},
-    gal::GalHealth,
-    geo::GeoHealth,
     glonass::{GlonassHealth, GlonassHealth2},
     gps::GpsQzssl1cHealth,
 };
@@ -20,7 +18,7 @@ use log::error;
 
 #[cfg(feature = "nav")]
 #[cfg_attr(docsrs, doc(cfg(feature = "nav")))]
-mod kepler;
+pub mod kepler;
 
 #[cfg(feature = "nav")]
 use crate::prelude::nav::Almanac;
@@ -36,16 +34,135 @@ use anise::{
 
 use std::collections::HashMap;
 
-/// Ephermeris NAV frame type
+/// Ephemeris Navigation message. May be found in all RINEX revisions.
+/// Describes the content of the radio message at publication time.
+/// Usually published at midnight and regularly updated with respect
+/// to [Ephemeris] validity period.
+///
+/// Any [Ephemeris] comes with the description of the on-board clock,
+/// but other data fields are [Constellation] and RINEX version dependent.
+/// We store them as dictionary of [OrbitItem]s. This dictionary
+/// is parsed based on our built-in JSON descriptor, it proposes methods
+/// to access raw data or higher level methods for types that we can interpret.
+/// Refer to [OrbitItem] for more information.
+///
+/// RINEX V3 example:
+/// ```
+/// use rinex::{
+///     prelude::Rinex,
+///     navigation::{NavFrameType, NavMessageType},
+/// };
+///
+/// let rinex = Rinex::from_gzip_file("data/NAV/V3/BRDC00GOP_R_20210010000_01D_MN.rnx.gz")
+///     .unwrap();
+///
+/// // You can always unwrap inner structures manually and access everything.
+/// // But we propose higher level iteration methods to make things easier:
+/// for (key, ephemeris) in rinex.nav_ephemeris_frames_iter() {
+///     
+///     let toc = key.epoch;
+///     let sv_broadcaster = key.sv;
+///     let sv_timescale = key.sv.constellation.timescale();
+///
+///     // we support most GNSS [Timescale]s completely.
+///     // But incomplete support prohibits most Ephemeris exploitation.
+///     if sv_timescale.is_none() {
+///         continue;
+///     }
+///
+///     let sv_timescale = sv_timescale.unwrap();
+///
+///     // until RINEXv3 (included) you can only find this type of frame
+///     assert_eq!(key.frmtype, NavFrameType::Ephemeris);
+///
+///     // until RINEXv3 (included) you can only find this kind of message
+///     assert_eq!(key.msgtype, NavMessageType::LNAV);
+///
+///     assert_eq!(toc.time_scale, sv_timescale); // always true in NAV RINEX
+///
+///     // Ephemeris serves many purposes and applications, so
+///     // it has a lot to offer.
+///
+///     // ToE is most important when considering a frame.
+///     // When missing (blanked), the frame should be discarded.
+///     if let Some(toe) = ephemeris.toe(sv_broadcaster) {
+///     
+///     }
+///
+///     if let Some(tgd) = ephemeris.tgd() {
+///         // TGD was found & interpreted as duration
+///         let tgd = tgd.total_nanoseconds();
+///     }
+///
+///     // SV Health highest interpretation level: as simple boolean
+///     if !ephemeris.sv_healthy() {
+///         // should most likely be ignored in navigation processing
+///     }
+///
+///     // finer health interpretation is constellation dependent.
+///     // Refer to RINEX standards and related constellation ICD.
+///     if let Some(health) = ephemeris.orbits.get("health") {
+///         if let Some(gps_qzss_l1l2l5) = health.as_gps_qzss_l1l2l5_health_flag() {
+///             assert!(gps_qzss_l1l2l5.healthy());
+///         }
+///     }
+///
+///     // other example: l2p flag in GPS messages
+///     if let Some(l2p) = ephemeris.orbits.get("l2p") {
+///         let flag = l2p.as_gps_l2p_flag().unwrap();
+///         assert!(flag); // P2(Y) streams LNAV message
+///     }
+///
+///     // on "nav" feature (heavy) we integrate the kepler solver
+///     // that can resolve the coordinates of the SV using this very frame.
+///     // You still have to manage your ephemeris frames correctly.
+///     // This is just an example.
+///     if let Some(orbital_state) = ephemeris.kepler2position(sv_broadcaster, toc) {
+///         // continue with [Orbit] processing
+///     }
+/// }
+/// ```
+///
+/// Working with other RINEX revisions does not change anything
+/// when dealing with this type, unless maybe the data fields you may
+/// find the dictionary. For example, RINEX v4 describes beta-testing
+/// health flags for BDS vehicles:
+///
+/// ```
+/// use rinex::{
+///     prelude::Rinex,
+///     navigation::{NavFrameType, NavMessageType, bds::BdsHealth},
+/// };
+///
+/// let rinex = Rinex::from_gzip_file("data/NAV/V4/BRD400DLR_S_20230710000_01D_MN.rnx.gz")
+///     .unwrap();
+///
+/// // You can always unwrap inner structures manually and access everything.
+/// // But we propose higher level iteration methods to make things easier:
+/// for (key, ephemeris) in rinex.nav_ephemeris_frames_iter() {
+///
+///     if let Some(health) = ephemeris.orbits.get("health") {
+///         // health flag found & possibly interpreted
+///         // this for example, only applies to modern BDS messages
+///         if let Some(flag) = health.as_bds_health_flag() {
+///             if flag == BdsHealth::UnhealthyTesting {
+///             }
+///         }
+///     }
+/// }    
+/// ```
 #[derive(Default, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Ephemeris {
     /// Clock bias (in seconds)
     pub clock_bias: f64,
+
     /// Clock drift (s.s⁻¹)
     pub clock_drift: f64,
+
     /// Clock drift rate (s.s⁻²)).   
     pub clock_drift_rate: f64,
+
     /// Orbits are revision and constellation dependent,
     /// sorted by key and content, described in navigation::database
     pub orbits: HashMap<String, OrbitItem>,
@@ -122,7 +239,7 @@ impl Ephemeris {
         }
     }
 
-    /// Returns true if this [Ephemeris] declares this satellite as in testing mode. declared healthy (suitable
+    /// Returns true if this [Ephemeris] message declares this satellite in testing mode.
     pub fn sv_in_testing(&self) -> bool {
         let health = self.orbits.get("health");
 
@@ -150,21 +267,20 @@ impl Ephemeris {
         }
     }
 
-    /// Return ToE expressed as [Epoch]
-    pub fn toe(&self, sv_ts: TimeScale) -> Option<Epoch> {
+    /// Return Time of [Ephemeris] (ToE) expressed as [Epoch]
+    pub fn toe(&self, sv: SV) -> Option<Epoch> {
         // TODO: in CNAV V4 TOC is said to be TOE... ...
-        let week = self.get_week()?;
-        let sec = self.get_orbit_f64("toe")?;
-        let week_dur = Duration::from_days((week * 7) as f64);
-        let sec_dur = Duration::from_seconds(sec);
-        match sv_ts {
-            TimeScale::GPST | TimeScale::QZSST | TimeScale::GST => {
-                Some(Epoch::from_duration(week_dur + sec_dur, TimeScale::GPST))
+        let (week, seconds) = (self.get_week()?, self.get_orbit_f64("toe")?);
+        let nanos = (seconds * 1.0E9).round() as u64;
+
+        match sv.constellation {
+            Constellation::GPS | Constellation::QZSS | Constellation::Galileo => {
+                Some(Epoch::from_time_of_week(week, nanos, TimeScale::GPST))
             },
-            TimeScale::BDT => Some(Epoch::from_bdt_duration(week_dur + sec_dur)),
+            Constellation::BeiDou => Some(Epoch::from_time_of_week(week, nanos, TimeScale::BDT)),
             _ => {
                 #[cfg(feature = "log")]
-                error!("{} is not supported", sv_ts);
+                error!("{} is not supported", sv.constellation);
                 None
             },
         }
@@ -238,15 +354,24 @@ impl Ephemeris {
         almanac.azimuth_elevation_range_sez(rx_orbit, tx_orbit, None, None)
     }
 
-    /// Returns True if Self is Valid at specified `t`.
+    /// Returns True if this [Ephemeris] frame is valid for specified epoch.
     /// NB: this only applies to MEO Ephemerides, not GEO Ephemerides,
     /// which should always be considered "valid".
-    pub fn is_valid(&self, sv: SV, t: Epoch, toe: Epoch) -> bool {
-        if let Some(max_dtoe) = Self::validity_duration(sv.constellation) {
-            t > toe && (t - toe) < max_dtoe
+    /// ## Input
+    /// - sv: [SV] identity
+    /// - epoch: test [Epoch]
+    pub fn is_valid(&self, sv: SV, t: Epoch) -> bool {
+        if let Some(toe) = self.toe(sv) {
+            if let Some(max_dtoe) = Self::validity_duration(sv.constellation) {
+                (t - toe).abs() < max_dtoe
+            } else {
+                #[cfg(feature = "log")]
+                error!("{} - validity period", sv.constellation);
+                false
+            }
         } else {
             #[cfg(feature = "log")]
-            error!("{} not fully supported", sv.constellation);
+            error!("{} - ToE calculation", sv.constellation);
             false
         }
     }

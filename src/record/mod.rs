@@ -1,6 +1,6 @@
 use crate::{
     antex::Record as AntexRecord, clock::Record as ClockRecord, doris::Record as DorisRecord,
-    ionex::Record as IonexRecord, meteo::Record as MeteoRecord, navigation::Record as NavRecord,
+    meteo::Record as MeteoRecord, navigation::Record as NavRecord,
     observation::Record as ObservationRecord, prelude::Epoch,
 };
 
@@ -12,22 +12,26 @@ use serde::Serialize;
 mod formatting;
 mod parsing;
 
+/// RINEX [Record] type, inner content is RINEX type dependent.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum Record {
     /// [AntexRecord] contains antenna calibration profile
     AntexRecord(AntexRecord),
+
     /// [ClockRecord] contains SV and ground clock states
     ClockRecord(ClockRecord),
-    /// IONEX (Ionosphere maps), see [IonexRecord]
-    IonexRecord(IonexRecord),
-    /// Meteo record, see [MeteoRecord]
+
+    /// Meteo sensor observations, stored as [MeteoRecord]
     MeteoRecord(MeteoRecord),
-    /// Navigation messages stored in [NavRecord]
+
+    /// Navigation messages stored as [NavRecord]
     NavRecord(NavRecord),
-    /// Observation record [ObservationRecord]
+
+    /// Observation record: signals observation
     ObsRecord(ObservationRecord),
-    /// DORIS RINEX, special DORIS signals observation
+
+    /// DORIS RINEX, special observations
     DorisRecord(DorisRecord),
 }
 
@@ -65,22 +69,6 @@ impl Record {
     pub fn as_mut_clock(&mut self) -> Option<&mut ClockRecord> {
         match self {
             Record::ClockRecord(r) => Some(r),
-            _ => None,
-        }
-    }
-
-    /// [IonexRecord] unwrapping attempt.
-    pub fn as_ionex(&self) -> Option<&IonexRecord> {
-        match self {
-            Record::IonexRecord(r) => Some(r),
-            _ => None,
-        }
-    }
-
-    /// Mutable [IonexRecord] unwrapping attempt.
-    pub fn as_mut_ionex(&mut self) -> Option<&mut IonexRecord> {
-        match self {
-            Record::IonexRecord(r) => Some(r),
             _ => None,
         }
     }

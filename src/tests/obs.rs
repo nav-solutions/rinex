@@ -2,7 +2,8 @@ use crate::{
     observation::{EpochFlag, LliFlags, ObsKey, SignalObservation, SNR},
     prelude::{Epoch, GeodeticMarker, Observable, Rinex, SV},
     tests::toolkit::{
-        generic_observation_rinex_test, generic_rinex_comparison, SignalDataPoint, TimeFrame,
+        generic_null_rinex_test, generic_observation_rinex_test, generic_rinex_comparison,
+        SignalDataPoint, TimeFrame,
     },
 };
 
@@ -579,4 +580,47 @@ fn v3_noa10630() {
     generic_rinex_comparison(&parsed, &dut);
 
     let _ = remove_file("v3_noa10630.txt");
+}
+
+#[test]
+fn obs_null_substract() {
+    // Self - Self is always a null RINEX
+
+    for file in ["aopr0010.17o", "npaz3550.21o", "rovn0010.21o"] {
+        let fullpath = format!("{}/data/OBS/V2/{}", env!("CARGO_MANIFEST_DIR"), file);
+        let dut = Rinex::from_file(fullpath).unwrap();
+
+        let diffed = dut.observations_substract(&dut).unwrap_or_else(|e| {
+            panic!("v2/{} diff failed with: {:?}", file, e);
+        });
+
+        generic_null_rinex_test(&diffed);
+    }
+
+    for file in ["DUTH0630.22O", "NOA10630.22O"] {
+        let fullpath = format!("{}/data/OBS/V3/{}", env!("CARGO_MANIFEST_DIR"), file);
+        let dut = Rinex::from_file(fullpath).unwrap();
+
+        let diffed = dut.observations_substract(&dut).unwrap_or_else(|e| {
+            panic!("v3/{} diff failed with: {:?}", file, e);
+        });
+
+        generic_null_rinex_test(&diffed);
+    }
+
+    for file in [
+        "DUTH0630.22D",
+        "VLNS0010.22D",
+        "VLNS0630.22D",
+        "pdel0010.21d",
+    ] {
+        let fullpath = format!("{}/data/CRNX/V3/{}", env!("CARGO_MANIFEST_DIR"), file);
+        let dut = Rinex::from_file(fullpath).unwrap();
+
+        let diffed = dut.observations_substract(&dut).unwrap_or_else(|e| {
+            panic!("v3/{} diff failed with: {:?}", file, e);
+        });
+
+        generic_null_rinex_test(&diffed);
+    }
 }

@@ -27,42 +27,65 @@ include!(concat!(env!("OUT_DIR"), "/nav_orbits.rs"));
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum OrbitItem {
-    /// unsigned byte
+    /// Interpreted as unsigned byte
     U8(u8),
-    /// signed byte
+
+    /// Interpreted as signed byte
     I8(i8),
-    /// unsigned 32 bit value
+
+    /// Interpreted as unsigned 32 bit value
     U32(u32),
-    /// double precision data
+
+    /// Interpreted as double precision data
     F64(f64),
+
+    /// L2P flag from GPS message is asserted when
+    /// the quadrature L2 P(Y) does stream data
+    /// otherwise it has been commanded off, most likely under A/S.
+    Gpsl2pFlag(bool),
+
     /// GPS / QZSS [GpsQzssl1cHealth] flag
     GpsQzssl1cHealth(GpsQzssl1cHealth),
+
     /// GPS / QZSS [GpsQzssl1l2l5Health] flag
     GpsQzssl1l2l5Health(GpsQzssl1l2l5Health),
+
     /// [GeoHealth] SV indication
     GeoHealth(GeoHealth),
+
     /// [GalHealth] SV indication
     GalHealth(GalHealth),
+
     /// [GalDataSource] signal indication
     GalDataSource(GalDataSource),
+
     /// [IrnssHealth] SV indication
     IrnssHealth(IrnssHealth),
+
     /// [GlonassHealth] SV indication
     GlonassHealth(GlonassHealth),
+
     /// [GlonassHealth2] SV indication present in modern frames
     GlonassHealth2(GlonassHealth2),
+
     /// [GlonassStatus] NAV4 Orbit7 status flag
     GlonassStatus(GlonassStatus),
+
     /// [BdsSatH1] health flag in historical and D1/D2 frames
     BdsSatH1(BdsSatH1),
+
     /// [BdsHealth] flag in modern frames
     BdsHealth(BdsHealth),
+
     /// [BdsSatelliteType] indication
     BdsSatelliteType(BdsSatelliteType),
+
     /// [BdsB1cIntegrity] flag
     BdsB1cIntegrity(BdsB1cIntegrity),
+
     /// [BdsB2aB1cIntegrity] flag
     BdsB2aB1cIntegrity(BdsB2aB1cIntegrity),
+
     /// [BdsB2bIntegrity] flag
     BdsB2bIntegrity(BdsB2bIntegrity),
 }
@@ -74,6 +97,7 @@ impl std::fmt::Display for OrbitItem {
             Self::I8(val) => write!(f, "{:02x}", val),
             Self::U32(val) => write!(f, "{:08X}", val),
             Self::F64(val) => write!(f, "{}", val),
+            Self::Gpsl2pFlag(val) => write!(f, "l2p={:?}", val),
             Self::GeoHealth(val) => write!(f, "{:?}", val),
             Self::GalHealth(val) => write!(f, "{:?}", val),
             Self::GalDataSource(val) => write!(f, "{:?}", val),
@@ -128,7 +152,7 @@ impl OrbitItem {
             _ => {}, // non-native types
         }
 
-        // handle native type right away & exit
+        // uninterpreted data remains as native type and we exit.
         match type_str {
             "u8" => {
                 let unsigned = float.round() as u8;
@@ -297,6 +321,10 @@ impl OrbitItem {
                             _ => Err(ParsingError::NavHealthFlagDefinition),
                         }
                     },
+                    "l2p" => {
+                        // l2p flag from GPS navigation message
+                        Ok(OrbitItem::Gpsl2pFlag(unsigned > 0))
+                    },
                     _ => Err(ParsingError::NavFlagsDefinition),
                 }
             },
@@ -314,6 +342,7 @@ impl OrbitItem {
             OrbitItem::U8(val) => *val as f64,
             OrbitItem::I8(val) => *val as f64,
             OrbitItem::U32(val) => *val as f64,
+            OrbitItem::Gpsl2pFlag(flag) => (*flag as u8) as f64,
             OrbitItem::GalHealth(flags) => flags.bits() as f64,
             OrbitItem::GpsQzssl1cHealth(flags) => flags.bits() as f64,
             OrbitItem::GpsQzssl1l2l5Health(flags) => flags.0 as f64,
@@ -339,6 +368,7 @@ impl OrbitItem {
             OrbitItem::U8(val) => *val as u32,
             OrbitItem::I8(val) => *val as u32,
             OrbitItem::F64(val) => val.round() as u32,
+            OrbitItem::Gpsl2pFlag(flag) => *flag as u32,
             OrbitItem::GalHealth(health) => health.bits(),
             OrbitItem::GpsQzssl1cHealth(flags) => flags.bits(),
             OrbitItem::GpsQzssl1l2l5Health(flags) => flags.0,
@@ -364,6 +394,7 @@ impl OrbitItem {
             OrbitItem::U8(val) => *val,
             OrbitItem::I8(val) => *val as u8,
             OrbitItem::F64(val) => val.round() as u8,
+            OrbitItem::Gpsl2pFlag(flag) => *flag as u8,
             OrbitItem::GalHealth(health) => health.bits() as u8,
             OrbitItem::GpsQzssl1cHealth(flags) => flags.bits() as u8,
             OrbitItem::GpsQzssl1l2l5Health(flags) => flags.0 as u8,
@@ -389,6 +420,7 @@ impl OrbitItem {
             OrbitItem::I8(val) => *val,
             OrbitItem::U8(val) => *val as i8,
             OrbitItem::F64(val) => val.round() as i8,
+            OrbitItem::Gpsl2pFlag(flag) => *flag as i8,
             OrbitItem::GalHealth(health) => health.bits() as i8,
             OrbitItem::GpsQzssl1cHealth(flags) => flags.bits() as i8,
             OrbitItem::GpsQzssl1l2l5Health(flags) => flags.0 as i8,
@@ -407,7 +439,15 @@ impl OrbitItem {
         }
     }
 
-    /// Unwraps Self as [Gpsl1l2l5Health] flag (if feasible), which also applies to QZSS.
+    /// Unwraps Self as [Gpsl2pFlag] (if feasible)
+    pub fn as_gps_l2p_flag(&self) -> Option<bool> {
+        match self {
+            OrbitItem::Gpsl2pFlag(flag) => Some(*flag),
+            _ => None,
+        }
+    }
+
+    /// Unwraps Self as [GpsQzssl1l2l5Health] flag (if feasible).
     pub fn as_gps_qzss_l1l2l5_health_flag(&self) -> Option<GpsQzssl1l2l5Health> {
         match self {
             OrbitItem::GpsQzssl1l2l5Health(h) => Some(h.clone()),
@@ -415,7 +455,7 @@ impl OrbitItem {
         }
     }
 
-    /// Unwraps Self as [Gpsl1cHealth] flag (if feasible), which also applies to QZSS.
+    /// Unwraps Self as [GpsQzssl1cHealth] flag (if feasible).
     pub fn as_gps_qzss_l1c_health_flag(&self) -> Option<GpsQzssl1cHealth> {
         match self {
             OrbitItem::GpsQzssl1cHealth(h) => Some(h.clone()),

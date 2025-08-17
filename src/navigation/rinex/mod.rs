@@ -1,14 +1,14 @@
 #[cfg(feature = "nav")]
 #[cfg_attr(docsrs, doc(cfg(feature = "nav")))]
-mod feature; // feature dependent, high level methods
+pub mod feature; // feature dependent, high level methods
 
 #[cfg(all(feature = "nav", feature = "processing"))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "nav", feature = "processing"))))]
-mod time; // feature dependent high level methods
+pub mod time; // feature dependent high level methods
 
 #[cfg(feature = "ut1")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ut1")))]
-mod ut1; // feature dependent high level methods
+pub mod ut1; // feature dependent high level methods
 
 use crate::{
     navigation::{

@@ -1,6 +1,6 @@
 use crate::{
     navigation::{NavFrameType, NavMessageType},
-    prelude::{Constellation, Duration, Epoch, Rinex, TimeScale, SV},
+    prelude::{Constellation, Epoch, Rinex, TimeScale, SV},
     tests::toolkit::{generic_navigation_test, TimeFrame},
 };
 
@@ -1022,7 +1022,7 @@ fn nav_toe_gal_bds() {
     for (k, eph) in dut.nav_ephemeris_frames_iter() {
         let ts = k.sv.timescale().expect("only known timescales here!");
 
-        if let Some(toe) = eph.toe(ts) {
+        if let Some(toe) = eph.toe(k.sv) {
             if k.epoch == t0 {
                 assert_eq!(toe, toe_helper(0.782E3, 0.432E6, TimeScale::BDT));
                 tests_passed += 1;
@@ -1217,7 +1217,7 @@ fn nav_v2_iono_alphabeta_and_toe() {
         assert_eq!(sv_ts, TimeScale::GPST, "GPS NAV");
 
         let toe = eph
-            .toe(sv_ts)
+            .toe(k.sv)
             .expect(&format!("toe() failed for {} ({})", k.epoch, k.sv));
 
         assert_eq!(

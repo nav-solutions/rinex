@@ -9,8 +9,8 @@ use crate::{
         Constellation, Epoch, GeodeticMarker, Header, Observable, Rinex, RinexType, Version, SV,
     },
     tests::toolkit::{
-        generic_null_rinex_test, generic_rinex_test, gnss_csv as gnss_from_csv,
-        observables_csv as observable_from_csv, sv_csv as sv_from_csv, TimeFrame,
+        generic_rinex_test, gnss_csv as gnss_from_csv, observables_csv as observable_from_csv,
+        sv_csv as sv_from_csv, TimeFrame,
     },
 };
 
@@ -56,7 +56,6 @@ impl SignalDataPoint {
 fn basic_header_tests(dut: &Header, timeof_first_obs: Option<&str>, timeof_last_obs: Option<&str>) {
     assert!(dut.obs.is_some(),);
     assert!(dut.meteo.is_none(),);
-    assert!(dut.ionex.is_none(),);
     assert!(dut.clock.is_none(),);
 
     let specs = dut.obs.as_ref().expect("missing specific specs");
@@ -154,10 +153,6 @@ pub fn generic_observation_rinex_test(
     let content = dut.constellations_iter().sorted().collect::<Vec<_>>();
     let expected = gnss_from_csv(gnss_csv);
     assert_eq!(content, expected);
-
-    // Self - Self should be 0
-    let null_dut = dut.observation_substract(&dut);
-    generic_null_rinex_test(&null_dut);
 
     // Test clock data points
     for point in clock_points {

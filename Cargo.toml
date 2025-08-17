@@ -1,11 +1,11 @@
 [package]
 name = "rinex"
-version = "0.17.1"
+version = "0.21.0"
 license = "MPL-2.0"
 authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
 description = "RINEX file parsing, analysis and production"
-homepage = "https://github.com/rtk-rs"
-repository = "https://github.com/rtk-rs/rinex"
+homepage = "https://github.com/nav-solutions"
+repository = "https://github.com/nav-solutions/rinex"
 keywords = ["geo", "gnss", "gps", "galileo"]
 categories = ["science", "science::geo", "parsing"]
 edition = "2021"
@@ -61,9 +61,6 @@ ut1 = [
 # METEO RINEX dedicated Iterators & methods.
 meteo = []
 
-# IONEX (special RINEX) dedicated Iterators & methods.
-ionex = []
-
 # CLOCK (Special RINEX) dedicated Iterators & methods.
 clock = []
 
@@ -101,7 +98,6 @@ full = [
     "clock",
     "doris",
     "flate2",
-    "ionex",
     "meteo",
     "nav",
     "obs",
@@ -124,6 +120,18 @@ thiserror = "2"
 lazy_static = "1.4"
 num-derive = "0.4"
 itertools = "0.13.0"
+# dms-coordinates = "1.3.1"
+# geo = { version = "0.28", optional = true }
+flate2 = { version = "1", optional = true }
+maud = { version = "0.26", optional = true }
+nalgebra = { version = "0.33.0", optional = true }
+bitflags = { version = "2.3", features = ["serde"] } 
+anise = { version = "0.6", optional = true }
+hifitime = { version = "4.1", features = ["serde", "std"] }
+wkt = { version = "0.10.0", default-features = false, optional = true }
+gnss-rs = { version = "2.4", features = ["serde", "domes", "cospar"] }
+gnss-qc-traits = { version = "0.3.2", features = ["html"], optional = true }
+serde = { version = "1.0", optional = true, default-features = false, features = ["derive"] }
 
 # Log is optional and our "debug" feature: use this if you're a dev.
 # Turn this on to obtain debug traces during parsing, formatting and calculations
@@ -131,27 +139,8 @@ itertools = "0.13.0"
 # Use normal sensitivy for error / warning traces.
 log = { version = "0.4", optional = true }
 
-dms-coordinates = "1.3.1"
-bitflags = { version = "2.3", features = ["serde"] } 
-serde = { version = "1.0", optional = true, default-features = false, features = ["derive"] }
-
-geo = { version = "0.28", optional = true }
-flate2 = { version = "1", optional = true }
-wkt = { version = "0.10.0", default-features = false, optional = true }
-
-nalgebra = { version = "0.33.0", optional = true }
-
-anise = { git = "https://github.com/nyx-space/anise", branch = "dep/hifitime-github", optional = true }
-hifitime = { git = "https://github.com/nyx-space/hifitime", branch = "master", features = ["serde", "std"] }
-
-gnss-rs = { git = "https://github.com/rtk-rs/gnss", branch = "main", features = ["serde", "domes", "cospar"] }
-
-gnss-qc-traits = { git = "https://github.com/rtk-rs/qc-traits", branch = "main", features = ["html"], optional = true }
-
-maud = { version = "0.26", optional = true }
-
 # BINEX
-binex = { git = "https://github.com/rtk-rs/binex", branch = "main", optional = true }
+binex = { version = "0.5", optional = true }
 
 # RTCM
 rtcm-rs = { version = "0.11", optional = true }
@@ -163,10 +152,11 @@ num-traits = "0.2.15"
 num-integer = "0.1.44"
 
 [dev-dependencies]
+flate2 = "1"
+rand = "0.8.4"
 serde_json = "1"
 criterion = "0.6"
-rand = "0.8.4"
-flate2 = "1"
+env_logger = "0.11"
 
 [[bench]]
 name = "parsing"

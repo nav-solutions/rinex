@@ -1,15 +1,17 @@
-#![doc(html_logo_url = "https://raw.githubusercontent.com/rtk-rs/.github/master/logos/logo2.jpg")]
+#![doc(
+    html_logo_url = "https://raw.githubusercontent.com/nav-solutions/.github/master/logos/logo2.jpg"
+)]
 #![doc = include_str!("../README.md")]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![allow(clippy::type_complexity)]
 
 /*
- * RINEX is part of the rtk-rs framework.
+ * RINEX is part of the nav-solutions framework.
  * Authors: Guillaume W. Bres <guillaume.bressaix@gmail.com> et al.
- * (cf. https://github.com/rtk-rs/rinex/graphs/contributors)
+ * (cf. https://github.com/nav-solutions/rinex/graphs/contributors)
  * This framework is shipped under Mozilla Public V2 license.
  *
- * Documentation: https://github.com/rtk-rs/rinex
+ * Documentation: https://github.com/nav-solutions/rinex
  */
 
 extern crate num_derive;
@@ -35,7 +37,6 @@ pub mod error;
 pub mod hardware;
 pub mod hatanaka;
 pub mod header;
-pub mod ionex;
 pub mod marker;
 pub mod meteo;
 pub mod navigation;
@@ -136,10 +137,6 @@ pub mod prelude {
         pub use crate::antex::AntennaMatcher;
     }
 
-    #[cfg(feature = "ionex")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "ionex")))]
-    pub use crate::ionex::{IonexKey, QuantizedCoordinates, TEC};
-
     #[cfg(feature = "obs")]
     #[cfg_attr(docsrs, doc(cfg(feature = "obs")))]
     pub mod obs {
@@ -190,8 +187,8 @@ pub mod prelude {
     #[cfg_attr(docsrs, doc(cfg(feature = "processing")))]
     pub mod processing {
         pub use qc_traits::{
-            Decimate, DecimationFilter, Filter, GnssAbsoluteTime, MaskFilter, Masking,
-            Preprocessing, Split, Timeshift,
+            Decimate, DecimationFilter, Filter, MaskFilter, Masking, Preprocessing, Split,
+            TimeCorrection, TimeCorrectionError, TimeCorrectionsDB, Timeshift,
         };
     }
 
@@ -220,8 +217,8 @@ use qc_traits::{MaskFilter, Masking};
 #[cfg(feature = "processing")]
 use crate::{
     clock::record::clock_mask_mut, doris::mask::mask_mut as doris_mask_mut,
-    header::processing::header_mask_mut, ionex::mask_mut as ionex_mask_mut,
-    meteo::mask::mask_mut as meteo_mask_mut, navigation::mask::mask_mut as navigation_mask_mut,
+    header::processing::header_mask_mut, meteo::mask::mask_mut as meteo_mask_mut,
+    navigation::mask::mask_mut as navigation_mask_mut,
     observation::mask::mask_mut as observation_mask_mut,
 };
 
@@ -477,41 +474,6 @@ impl Rinex {
         let constellation = header.constellation;
 
         let mut filename = match rinextype {
-            RinexType::IonosphereMaps => {
-                let name = match custom {
-                    Some(ref custom) => {
-                        custom.name[..std::cmp::min(3, custom.name.len())].to_string()
-                    },
-                    None => self.production.name.clone(),
-                };
-                let region = match &custom {
-                    Some(ref custom) => custom.region.unwrap_or('G'),
-                    None => self.production.region.unwrap_or('G'),
-                };
-                let ddd = match &custom {
-                    Some(ref custom) => format!("{:03}", custom.doy),
-                    None => {
-                        if let Some(epoch) = self.first_epoch() {
-                            let ddd = epoch.day_of_year().round() as u32;
-                            format!("{:03}", ddd)
-                        } else {
-                            format!("{:03}", self.production.doy)
-                        }
-                    },
-                };
-                let yy = match &custom {
-                    Some(ref custom) => format!("{:02}", custom.year - 2_000),
-                    None => {
-                        if let Some(epoch) = self.first_epoch() {
-                            let yy = epoch_decompose(epoch).0;
-                            format!("{:02}", yy - 2_000)
-                        } else {
-                            format!("{:02}", self.production.year - 2_000)
-                        }
-                    },
-                };
-                ProductionAttributes::ionex_format(&name, region, &ddd, &yy)
-            },
             RinexType::ObservationData | RinexType::MeteoData | RinexType::NavigationData => {
                 let name = match custom {
                     Some(ref custom) => custom.name.clone(),
@@ -761,11 +723,6 @@ impl Rinex {
                     }
                 },
             },
-            RinexType::IonosphereMaps => {
-                if let Some(agency) = &self.header.agency {
-                    attributes.name = agency.to_string();
-                }
-            },
             _ => match &self.header.geodetic_marker {
                 Some(marker) => attributes.name = marker.name.to_string(),
                 _ => {
@@ -916,36 +873,8 @@ impl Rinex {
     /// Will panic if provided file does not exist or is not readable.
     /// Refer to [Self::from_file] for more information.
     ///
-    /// IONEX example:
     /// ```
     /// use rinex::prelude::Rinex;
-    ///
-    /// let rinex = Rinex::from_gzip_file("data/IONEX/V1/CKMG0020.22I.gz")
-    ///     .unwrap();
-    ///
-    /// assert!(rinex.is_ionex());
-    /// assert!(rinex.is_ionex_2d());
-    ///
-    /// let params = rinex.header.ionex
-    ///     .as_ref()
-    ///     .unwrap();
-    ///
-    /// // fixed altitude IONEX (=single isosurface)
-    /// assert_eq!(params.grid.height.start, 350.0);
-    /// assert_eq!(params.grid.height.end, 350.0);
-    ///     
-    /// // latitude grid
-    /// assert_eq!(params.grid.latitude.start, 87.5);
-    /// assert_eq!(params.grid.latitude.end, -87.5);
-    /// assert_eq!(params.grid.latitude.spacing, -2.5);
-    ///
-    /// // longitude grid
-    /// assert_eq!(params.grid.longitude.start, -180.0);
-    /// assert_eq!(params.grid.longitude.end, 180.0);
-    /// assert_eq!(params.grid.longitude.spacing, 5.0);
-
-    /// assert_eq!(params.elevation_cutoff, 0.0);
-    /// assert_eq!(params.mapping, None);
     /// ```
     #[cfg(feature = "flate2")]
     #[cfg_attr(docsrs, doc(cfg(feature = "flate2")))]
@@ -1069,8 +998,6 @@ impl Rinex {
             Box::new(r.iter().map(|(k, _)| k.epoch))
         } else if let Some(r) = self.record.as_clock() {
             Box::new(r.iter().map(|(k, _)| *k))
-        } else if let Some(r) = self.record.as_ionex() {
-            Box::new(r.iter().map(|(k, _)| k.epoch).unique())
         } else {
             Box::new([].into_iter())
         }
@@ -1259,64 +1186,70 @@ impl Rinex {
     }
 
     /// Copies and returns new [Rinex] that is the result
-    /// of observation differentiation. See [Self::observation_substract_mut] for more
+    /// of observation differentiation. See [Self::observations_substract_mut] for more
     /// information.
-    pub fn observation_substract(&self, rhs: &Self) -> Self {
+    pub fn observations_substract(&self, rhs: &Self) -> Result<Self, Error> {
         let mut s = self.clone();
-        s.observation_substract_mut(rhs);
-        s
+        s.observations_substract_mut(rhs)?;
+        Ok(s)
     }
 
     /// Modifies [Rinex] in place with observation differentiation
     /// using the remote (RHS) counterpart, for each identical observation and signal source.
-    /// This only applies to Observation RINEX (1), DORIS (2) or Meteo RINEX (3).
-    /// 1: only same [Observable] from same [SV] are differentiated
-    /// 2: only same [Observable] from same [Station] are diffentiated
-    /// 3: only same [Observable] are differentiated.
+    ///
+    /// This is currently limited to Observation RINEX. NB:
+    /// - Only matched (differentiated) symbols will remain, any other observations are
+    /// discarded.
+    /// - Output symbols are not compliant with Observation RINEX, this is sort
+    /// of like a "residual" RINEX. Use with care.
     ///
     /// This allows analyzing a local clock used as GNSS receiver reference clock
     /// spread to dual GNSS receiver, by means of phase differential analysis.
-    pub fn observation_substract_mut(&mut self, rhs: &Self) {
+    pub fn observations_substract_mut(&mut self, rhs: &Self) -> Result<(), Error> {
+        let lhs_dt = self
+            .dominant_sampling_interval()
+            .ok_or(Error::UndeterminedSamplingPeriod)?;
+
+        let half_lhs_dt = lhs_dt / 2.0;
+
         if let Some(rhs) = rhs.record.as_obs() {
             if let Some(rec) = self.record.as_mut_obs() {
-                for (k, v) in rec.iter_mut() {
-                    if let Some(rhs) = rhs.get(&k) {
-                        for signal in v.signals.iter_mut() {
-                            if let Some(rhs) = rhs
-                                .signals
-                                .iter()
-                                .filter(|sig| {
-                                    sig.observable == signal.observable && sig.sv == signal.sv
-                                })
-                                .reduce(|k, _| k)
-                            {
-                                signal.value -= rhs.value;
+                rec.retain(|k, v| {
+                    v.signals.retain_mut(|sig| {
+                        let mut reference = 0.0;
+                        let mut min_dt = Duration::MAX;
+
+                        // temporal filter
+                        let filtered_rhs_epochs = rhs.iter().filter(|(rhs, _)| {
+                            let dt = (rhs.epoch - k.epoch).abs();
+                            dt <= half_lhs_dt
+                        });
+
+                        for (rhs_epoch, rhs_values) in filtered_rhs_epochs {
+                            for rhs_sig in rhs_values.signals.iter() {
+                                if rhs_sig.sv == sig.sv && rhs_sig.observable == sig.observable {
+                                    let dt = (rhs_epoch.epoch - k.epoch).abs();
+                                    if dt <= min_dt {
+                                        reference = rhs_sig.value;
+                                        min_dt = dt;
+                                    }
+                                }
                             }
                         }
-                    }
-                }
-            }
-        } else if let Some(rhs) = rhs.record.as_doris() {
-            if let Some(rec) = self.record.as_mut_doris() {
-                for (k, v) in rec.iter_mut() {
-                    if let Some(rhs) = rhs.get(&k) {
-                        for (k, v) in v.signals.iter_mut() {
-                            if let Some(rhs) = rhs.signals.get(&k) {
-                                v.value -= rhs.value;
-                            }
+
+                        if min_dt < Duration::MAX {
+                            sig.value -= reference;
                         }
-                    }
-                }
-            }
-        } else if let Some(rhs) = rhs.record.as_meteo() {
-            if let Some(rec) = self.record.as_mut_meteo() {
-                for (k, v) in rec.iter_mut() {
-                    if let Some(rhs) = rhs.get(&k) {
-                        *v -= rhs;
-                    }
-                }
+
+                        min_dt < Duration::MAX
+                    });
+
+                    !v.signals.is_empty()
+                });
             }
         }
+
+        Ok(())
     }
 }
 
@@ -1340,8 +1273,6 @@ impl Masking for Rinex {
             meteo_mask_mut(rec, f);
         } else if let Some(rec) = self.record.as_mut_doris() {
             doris_mask_mut(rec, f);
-        } else if let Some(rec) = self.record.as_mut_ionex() {
-            ionex_mask_mut(rec, f);
         }
     }
 }

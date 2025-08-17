@@ -463,12 +463,6 @@ fn parse_signals_v3(
             Ok(found) => {
                 sv = found;
             },
-            #[cfg(feature = "log")]
-            Err(e) => {
-                //error!("sv parsing: {}", e);
-                continue;
-            },
-            #[cfg(not(feature = "log"))]
             Err(_) => {
                 continue;
             },

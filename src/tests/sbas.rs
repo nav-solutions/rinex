@@ -1,11 +1,17 @@
 // SBAS specific tests
+
+#[cfg(feature = "qc")]
 use crate::prelude::{Constellation, Rinex, SV};
-use qc_traits::{Filter, FilterItem, MaskOperand, Preprocessing};
+
+#[cfg(feature = "qc")]
 use std::str::FromStr;
+
+#[cfg(feature = "qc")]
+use qc_traits::{Filter, FilterItem, MaskOperand, Preprocessing};
 
 // Formatting issue
 #[test]
-#[cfg(feature = "flate2")]
+#[cfg(all(feature = "flate2", feature = "qc"))]
 fn test_sbas_obs_v3_formatting() {
     let rinex =
         Rinex::from_gzip_file("data/CRNX/V3/ESBC00DNK_R_20201770000_01D_30S_MO.crx.gz").unwrap();
