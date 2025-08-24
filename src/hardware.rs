@@ -15,16 +15,22 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "qc")]
 use qc_traits::{html, Markup, QcHtmlReporting};
 
+#[cfg(feature = "python")]
+use pyo3::prelude::*;
+
 /// GNSS receiver description
 #[derive(Default, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "python", pyclass)]
 pub struct Receiver {
-    /// Receiver (hardware) model
+    /// Receiver model
     pub model: String,
-    /// Receiver (hardware) identification info
-    pub sn: String, // serial #
-    /// Receiver embedded software info
-    pub firmware: String, // firmware #
+
+    /// Serial number
+    pub serial_number: String,
+
+    /// Embedded software information.
+    pub firmware: String,
 }
 
 impl Receiver {
