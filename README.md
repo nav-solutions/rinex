@@ -32,7 +32,8 @@ To contribute to either of our project or join our community, you way
   - precise Earth Orientation updates
 - Supports Observation, Navigation, Meteo and Clock RINEX,
 other RINEX-like formats have their own parser:
-  - [IONEX](https://github.com/nav-solutions/ionex)
+  - [IONEX (Ionosphere Maps)](https://github.com/nav-solutions/ionex)
+  - [DORIS (special observations)](https://github.com/nav-solutions/doris)
 - Many pre-processing algorithms including Filter Designer
 - Several file operations: merging, splitting, time binning (batch)
 
