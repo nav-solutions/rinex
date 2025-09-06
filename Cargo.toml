@@ -1,6 +1,6 @@
 [package]
 name = "rinex"
-version = "0.21.0"
+version = "0.22.0"
 license = "MPL-2.0"
 authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
 description = "RINEX file parsing, analysis and production"
@@ -67,9 +67,6 @@ clock = []
 # ANTEX for accurate antenna characteristics: dedicated Iterators & methods.
 antex = []
 
-# DORIS (Special Observation RINEX) specific Iterators & methods.
-doris = []
-
 # BINEX RNX2BIN and BIN2RNX serdes
 binex = [
     "dep:binex"
@@ -96,7 +93,6 @@ processing = [
 full = [
     "antex",
     "clock",
-    "doris",
     "flate2",
     "meteo",
     "nav",

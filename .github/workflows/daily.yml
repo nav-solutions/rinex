@@ -92,12 +92,6 @@ jobs:
         command: clean
     
     - uses: actions-rs/cargo@v1
-      name: Build (DORIS)
-      with:
-        command: build
-        args: --features doris
-    
-    - uses: actions-rs/cargo@v1
       name: Clean
       with:
         command: clean

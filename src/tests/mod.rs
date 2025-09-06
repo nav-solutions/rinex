@@ -23,9 +23,6 @@ mod clock;
 #[cfg(feature = "processing")]
 mod processing;
 
-#[cfg(feature = "doris")]
-mod doris;
-
 #[cfg(feature = "meteo")]
 mod meteo;
 

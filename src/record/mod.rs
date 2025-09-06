@@ -1,5 +1,5 @@
 use crate::{
-    antex::Record as AntexRecord, clock::Record as ClockRecord, doris::Record as DorisRecord,
+    antex::Record as AntexRecord, clock::Record as ClockRecord,
     meteo::Record as MeteoRecord, navigation::Record as NavRecord,
     observation::Record as ObservationRecord, prelude::Epoch,
 };
@@ -30,9 +30,6 @@ pub enum Record {
 
     /// Observation record: signals observation
     ObsRecord(ObservationRecord),
-
-    /// DORIS RINEX, special observations
-    DorisRecord(DorisRecord),
 }
 
 /// Record comments are high level informations, sorted by epoch
@@ -117,21 +114,6 @@ impl Record {
     pub fn as_mut_obs(&mut self) -> Option<&mut ObservationRecord> {
         match self {
             Record::ObsRecord(r) => Some(r),
-            _ => None,
-        }
-    }
-    /// [DorisRecord] unwrapping attempt.
-    pub fn as_doris(&self) -> Option<&DorisRecord> {
-        match self {
-            Record::DorisRecord(r) => Some(r),
-            _ => None,
-        }
-    }
-
-    /// Mutable [DorisRecord] unwrapping attempt.
-    pub fn as_mut_doris(&mut self) -> Option<&mut DorisRecord> {
-        match self {
-            Record::DorisRecord(r) => Some(r),
             _ => None,
         }
     }
