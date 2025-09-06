@@ -12,7 +12,7 @@ use std::io::{BufWriter, Write};
 
 impl Ephemeris {
     /// Formats [Ephemeris] according to RINEX standards
-    pub(crate) fn format<W: Write>(
+    pub fn format<W: Write>(
         &self,
         w: &mut BufWriter<W>,
         sv: SV,
