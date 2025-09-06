@@ -2,7 +2,6 @@
 use crate::{
     antex::{HeaderFields as AntexHeader, Pcv},
     clock::{ClockProfileType, HeaderFields as ClockHeader, WorkClock},
-    doris::{HeaderFields as DorisHeader, Station as DorisStation},
     hardware::{Antenna, Receiver, SvAntenna},
     hatanaka::CRINEX,
     header::{DcbCompensation, Header, PcvCompensation},
@@ -63,7 +62,6 @@ impl Header {
         let mut meteo = MeteoHeader::default();
         let mut clock = ClockHeader::default();
         let mut antex = AntexHeader::default();
-        let mut doris = DorisHeader::default();
 
         for line in reader.lines() {
             if line.is_err() {
@@ -199,11 +197,7 @@ impl Header {
                 let constell_str = constell_str.trim();
 
                 // File type identification
-                if type_str == "O" && constell_str == "D" {
-                    rinex_type = Type::DORIS;
-                } else {
-                    rinex_type = Type::from_str(type_str)?;
-                }
+                rinex_type = Type::from_str(type_str)?;
 
                 // Determine (file) Constellation
                 //  1. NAV SPECIAL CASE
@@ -231,7 +225,7 @@ impl Header {
                             }
                         }
                     },
-                    Type::MeteoData | Type::DORIS => {
+                    Type::MeteoData => {
                         // no constellation associated to them
                     },
                     _ => {
@@ -361,14 +355,7 @@ impl Header {
                 let (gnss, rem) = content.split_at(2);
                 let gnss = gnss.trim();
 
-                /*
-                 * DORIS measurement special case, otherwise, standard OBS_RINEX
-                 */
-                let constell = if gnss.eq("D") {
-                    Constellation::Mixed // scaling applies to all measurements
-                } else {
-                    Constellation::from_str(gnss)?
-                };
+                let constell = Constellation::from_str(gnss)?;
 
                 // Parse scaling factor
                 let (factor, rem) = rem.split_at(6);
@@ -383,11 +370,7 @@ impl Header {
                     let observable = Observable::from_str(observable_str)?;
 
                     // latch scaling value
-                    if rinex_type == Type::DORIS {
-                        doris.with_scaling(observable, scaling);
-                    } else {
-                        observation.with_scaling(constell, observable, scaling);
-                    }
+                    observation.with_scaling(constell, observable, scaling);
                 }
             } else if marker.contains("SENSOR MOD/TYPE/ACC") {
                 if let Ok(sensor) = MeteoSensor::from_str(content) {
@@ -546,38 +529,15 @@ impl Header {
                 // <o blank field when no corrections applied
             } else if marker.contains("TIME OF FIRST OBS") {
                 let time_of_first_obs = Self::parse_time_of_obs(content)?;
-
-                if rinex_type == Type::DORIS {
-                    doris.timeof_first_obs = Some(time_of_first_obs);
-                } else {
-                    observation = observation.with_timeof_first_obs(time_of_first_obs);
-                }
+                observation = observation.with_timeof_first_obs(time_of_first_obs);
             } else if marker.contains("TIME OF LAST OBS") {
                 let time_of_last_obs = Self::parse_time_of_obs(content)?;
-
-                if rinex_type == Type::DORIS {
-                    doris.timeof_last_obs = Some(time_of_last_obs);
-                } else {
-                    observation = observation.with_timeof_last_obs(time_of_last_obs);
-                }
+                observation = observation.with_timeof_last_obs(time_of_last_obs);
             } else if marker.contains("TYPES OF OBS") {
                 // these observations can serve both Observation & Meteo RINEX
                 Self::parse_v2_observables(content, constellation, &mut meteo, &mut observation);
             } else if marker.contains("SYS / # / OBS TYPES") {
-                match rinex_type {
-                    Type::ObservationData => {
-                        Self::parse_v3_observables(
-                            content,
-                            &mut current_constell,
-                            &mut observation,
-                        );
-                    },
-                    Type::DORIS => {
-                        /* in DORIS RINEX, observations are not tied to a particular constellation */
-                        Self::parse_doris_observables(content, &mut doris);
-                    },
-                    _ => {},
-                }
+                Self::parse_v3_observables(content, &mut current_constell, &mut observation);
             } else if marker.contains("ANALYSIS CENTER") {
                 let (code, agency) = content.split_at(3);
                 clock = clock.igs(code.trim());
@@ -782,19 +742,6 @@ impl Header {
                 let timescale = content.trim();
                 let ts = TimeScale::from_str(timescale)?;
                 clock = clock.timescale(ts);
-            } else if marker.contains("L2 / L1 DATE OFFSET") {
-                // DORIS special case
-                let content = content[1..].trim();
-
-                let time_offset_us = content
-                    .parse::<f64>()
-                    .or(Err(ParsingError::DorisL1L2DateOffset))?;
-
-                doris.u2_s1_time_offset = Duration::from_microseconds(time_offset_us);
-            } else if marker.contains("STATION REFERENCE") {
-                // DORIS special case
-                let station = DorisStation::from_str(content.trim())?;
-                doris.stations.push(station);
             }
         }
 
@@ -856,13 +803,6 @@ impl Header {
             antex: {
                 if rinex_type == Type::AntennaData {
                     Some(antex)
-                } else {
-                    None
-                }
-            },
-            doris: {
-                if rinex_type == Type::DORIS {
-                    Some(doris)
                 } else {
                     None
                 }
@@ -1015,17 +955,6 @@ impl Header {
                         observation.codes.insert(*constell, vec![observable]);
                     }
                 }
-            }
-        }
-    }
-    /*
-     * Parse list of DORIS observables
-     */
-    fn parse_doris_observables(line: &str, doris: &mut DorisHeader) {
-        let items = line.split_at(6).1;
-        for item in items.split_ascii_whitespace() {
-            if let Ok(observable) = Observable::from_str(item) {
-                doris.observables.push(observable);
             }
         }
     }

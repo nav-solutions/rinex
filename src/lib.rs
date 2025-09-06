@@ -32,7 +32,6 @@ extern crate gnss_qc_traits as qc_traits;
 pub mod antex;
 pub mod carrier;
 pub mod clock;
-pub mod doris;
 pub mod error;
 pub mod hardware;
 pub mod hatanaka;
@@ -107,7 +106,6 @@ pub mod prelude {
     // export
     pub use crate::{
         carrier::Carrier,
-        doris::Station,
         error::{Error, FormattingError, ParsingError},
         hatanaka::{
             Decompressor, DecompressorExpert, DecompressorExpertIO, DecompressorIO, CRINEX,
@@ -216,9 +214,8 @@ use qc_traits::{MaskFilter, Masking};
 
 #[cfg(feature = "processing")]
 use crate::{
-    clock::record::clock_mask_mut, doris::mask::mask_mut as doris_mask_mut,
-    header::processing::header_mask_mut, meteo::mask::mask_mut as meteo_mask_mut,
-    navigation::mask::mask_mut as navigation_mask_mut,
+    clock::record::clock_mask_mut, header::processing::header_mask_mut,
+    meteo::mask::mask_mut as meteo_mask_mut, navigation::mask::mask_mut as navigation_mask_mut,
     observation::mask::mask_mut as observation_mask_mut,
 };
 
@@ -992,8 +989,6 @@ impl Rinex {
             Box::new(r.iter().map(|(k, _)| k.epoch))
         } else if let Some(r) = self.record.as_meteo() {
             Box::new(r.iter().map(|(k, _)| k.epoch).unique())
-        } else if let Some(r) = self.record.as_doris() {
-            Box::new(r.iter().map(|(k, _)| k.epoch))
         } else if let Some(r) = self.record.as_nav() {
             Box::new(r.iter().map(|(k, _)| k.epoch))
         } else if let Some(r) = self.record.as_clock() {
@@ -1141,7 +1136,7 @@ impl Rinex {
     // }
 
     /// Returns [Observable]s Iterator.
-    /// Applies to Observation RINEX, Meteo RINEX and DORIS.
+    /// Applies to Observation and Meteo RINEX.
     /// Returns null for any other formats.  
     pub fn observables_iter(&self) -> Box<dyn Iterator<Item = &Observable> + '_> {
         if self.is_observation_rinex() {
@@ -1158,16 +1153,6 @@ impl Rinex {
                     .unique()
                     .sorted(),
             )
-        // } else if self.record.as_doris().is_some() {
-        //     Box::new(
-        //         self.doris()
-        //             .flat_map(|(_, stations)| {
-        //                 stations
-        //                     .iter()
-        //                     .flat_map(|(_, observables)| observables.iter().map(|(k, _)| k))
-        //             })
-        //             .unique(),
-        //     )
         } else {
             Box::new([].into_iter())
         }
@@ -1271,8 +1256,6 @@ impl Masking for Rinex {
             clock_mask_mut(rec, f);
         } else if let Some(rec) = self.record.as_mut_meteo() {
             meteo_mask_mut(rec, f);
-        } else if let Some(rec) = self.record.as_mut_doris() {
-            doris_mask_mut(rec, f);
         }
     }
 }

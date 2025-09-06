@@ -1,5 +1,4 @@
 use crate::{
-    doris::format as format_doris_observations,
     hatanaka::Compressor,
     meteo::format as format_meteo_observations,
     navigation::format as format_navigation,
@@ -38,8 +37,6 @@ impl Record {
             Ok(())
         } else if let Some(rec) = self.as_meteo() {
             format_meteo_observations(w, rec, header)
-        } else if let Some(rec) = self.as_doris() {
-            format_doris_observations(w, rec, header)
         } else if let Some(rec) = self.as_nav() {
             format_navigation(w, rec, header)
         } else {

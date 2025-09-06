@@ -212,7 +212,6 @@ impl Header {
                     )
                 )?;
             },
-            Type::DORIS => {},
             Type::AntennaData => {},
         }
 
@@ -234,8 +233,6 @@ impl Header {
             clock.format(w)
         } else if let Some(antex) = &self.antex {
             antex.format(w)
-        } else if let Some(doris) = &self.doris {
-            doris.format(w)
         } else {
             Ok(()) // should not happen
         }
