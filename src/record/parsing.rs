@@ -7,9 +7,6 @@ use crate::{
         record::{is_new_epoch as is_new_clock_epoch, parse_epoch as parse_clock_epoch},
         ClockKey, ClockProfile, Record as ClockRecord,
     },
-    doris::{
-        is_new_epoch as is_new_doris_epoch, parse_epoch as parse_doris_epoch, Record as DorisRecord,
-    },
     hatanaka::DecompressorExpert,
     is_rinex_comment,
     meteo::{
@@ -100,9 +97,6 @@ impl Record {
 
         // CLK
         let mut clk_rec = ClockRecord::new();
-
-        // DORIS
-        let mut dor_rec = DorisRecord::new();
 
         // OBSERVATION case: timescale is either defined by
         // [+] TIME OF FIRST header field
@@ -241,13 +235,6 @@ impl Record {
                             observations.signals.clear(); // reset for next parsing (single alloc)
                         },
 
-                        Type::DORIS => {
-                            if let Ok((k, observations)) = parse_doris_epoch(header, &epoch_buf) {
-                                comment_ts = k.epoch; // for comments storage
-                                dor_rec.insert(k, observations);
-                            }
-                        },
-
                         Type::MeteoData => {
                             if let Ok(items) = parse_meteo_epoch(header, &epoch_buf) {
                                 for (k, v) in items.iter() {
@@ -304,7 +291,6 @@ impl Record {
             Type::MeteoData => Record::MeteoRecord(met_rec),
             Type::NavigationData => Record::NavRecord(nav_rec),
             Type::ObservationData => Record::ObsRecord(obs_rec),
-            Type::DORIS => Record::DorisRecord(dor_rec),
         };
         Ok((record, comments))
     }
@@ -319,7 +305,6 @@ impl Record {
             Type::NavigationData => is_new_nav_epoch(line, header.version),
             Type::ObservationData => is_new_observation_epoch(line, header.version),
             Type::MeteoData => is_new_meteo_epoch(line, header.version),
-            Type::DORIS => is_new_doris_epoch(line),
         }
     }
 }

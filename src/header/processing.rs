@@ -49,7 +49,4 @@ pub(crate) fn header_mask_mut(hd: &mut Header, f: &MaskFilter) {
     if let Some(met) = &mut hd.meteo {
         met.mask_mut(f);
     }
-    if let Some(doris) = &mut hd.doris {
-        doris.mask_mut(f);
-    }
 }

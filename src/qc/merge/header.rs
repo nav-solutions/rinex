@@ -131,17 +131,6 @@ impl Merge for Header {
                 merge_mut_unique_vec(&mut lhs.sensors, &rhs.sensors);
             }
         }
-        if let Some(lhs) = &mut self.doris {
-            if let Some(rhs) = &rhs.doris {
-                merge_time_of_first_obs(&mut lhs.timeof_first_obs, &rhs.timeof_first_obs);
-                merge_time_of_last_obs(&mut lhs.timeof_last_obs, &rhs.timeof_last_obs);
-                merge_mut_unique_vec(&mut lhs.stations, &rhs.stations);
-                merge_mut_unique_vec(&mut lhs.observables, &rhs.observables);
-                //TODO: merge_scaling();
-                //merge_mut_unique_map2d(&mut lhs.scaling, &rhs.scaling);
-                lhs.u2_s1_time_offset = std::cmp::max(lhs.u2_s1_time_offset, rhs.u2_s1_time_offset);
-            }
-        }
 
         // add special comment
         let now = Epoch::now().map_err(|_| MergeError::Other)?;

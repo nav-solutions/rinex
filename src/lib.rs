@@ -214,9 +214,8 @@ use qc_traits::{MaskFilter, Masking};
 
 #[cfg(feature = "processing")]
 use crate::{
-    clock::record::clock_mask_mut, 
-    header::processing::header_mask_mut, meteo::mask::mask_mut as meteo_mask_mut,
-    navigation::mask::mask_mut as navigation_mask_mut,
+    clock::record::clock_mask_mut, header::processing::header_mask_mut,
+    meteo::mask::mask_mut as meteo_mask_mut, navigation::mask::mask_mut as navigation_mask_mut,
     observation::mask::mask_mut as observation_mask_mut,
 };
 

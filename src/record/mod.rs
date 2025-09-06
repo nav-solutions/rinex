@@ -1,7 +1,6 @@
 use crate::{
-    antex::Record as AntexRecord, clock::Record as ClockRecord,
-    meteo::Record as MeteoRecord, navigation::Record as NavRecord,
-    observation::Record as ObservationRecord, prelude::Epoch,
+    antex::Record as AntexRecord, clock::Record as ClockRecord, meteo::Record as MeteoRecord,
+    navigation::Record as NavRecord, observation::Record as ObservationRecord, prelude::Epoch,
 };
 
 use std::collections::BTreeMap;

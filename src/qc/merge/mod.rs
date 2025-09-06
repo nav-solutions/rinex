@@ -6,7 +6,6 @@ use crate::prelude::{
 
 mod antex;
 mod clock;
-mod doris;
 mod header;
 mod meteo;
 mod nav;
@@ -16,7 +15,6 @@ mod prod;
 
 use antex::merge_mut as merge_mut_antex;
 use clock::merge_mut as merge_mut_clock;
-use doris::merge_mut as merge_mut_doris;
 use meteo::merge_mut as merge_mut_meteo;
 use nav::merge_mut as merge_mut_nav;
 use obs::merge_mut as merge_mut_obs;
@@ -122,41 +120,36 @@ impl Merge for Rinex {
 
         if let Some(lhs) = self.record.as_mut_nav() {
             if let Some(rhs) = rhs.record.as_nav() {
-                return merge_mut_nav(lhs, rhs);
+                merge_mut_nav(lhs, rhs)
             } else {
-                return Err(MergeError::FileTypeMismatch);
+                Err(MergeError::FileTypeMismatch)
             }
         } else if let Some(lhs) = self.record.as_mut_obs() {
             if let Some(rhs) = rhs.record.as_obs() {
-                return merge_mut_obs(lhs, rhs);
+                merge_mut_obs(lhs, rhs)
             } else {
-                return Err(MergeError::FileTypeMismatch);
+                Err(MergeError::FileTypeMismatch)
             }
         } else if let Some(lhs) = self.record.as_mut_meteo() {
             if let Some(rhs) = rhs.record.as_meteo() {
-                return merge_mut_meteo(lhs, rhs);
+                merge_mut_meteo(lhs, rhs)
             } else {
-                return Err(MergeError::FileTypeMismatch);
+                Err(MergeError::FileTypeMismatch)
             }
         } else if let Some(lhs) = self.record.as_mut_antex() {
             if let Some(rhs) = rhs.record.as_antex() {
-                return merge_mut_antex(lhs, rhs);
+                merge_mut_antex(lhs, rhs)
             } else {
-                return Err(MergeError::FileTypeMismatch);
+                Err(MergeError::FileTypeMismatch)
             }
         } else if let Some(lhs) = self.record.as_mut_clock() {
             if let Some(rhs) = rhs.record.as_clock() {
-                return merge_mut_clock(lhs, rhs);
+                merge_mut_clock(lhs, rhs)
             } else {
-                return Err(MergeError::FileTypeMismatch);
+                Err(MergeError::FileTypeMismatch)
             }
         } else {
-            let doris = self.record.as_mut_doris().unwrap();
-            if let Some(rhs) = rhs.record.as_doris() {
-                return merge_mut_doris(doris, rhs);
-            } else {
-                return Err(MergeError::FileTypeMismatch);
-            }
+            Err(MergeError::FileTypeMismatch)
         }
     }
 }

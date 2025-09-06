@@ -1,8 +1,9 @@
-//! RINEX file format description
+#[cfg(doc)]
+use crate::prelude::Rinex;
 
 use crate::prelude::{Constellation, ParsingError};
 
-/// [Type] describes all supported [RINEX] formats
+/// [Type] describes all supported [Rinex] formats.
 #[derive(Default, Copy, Clone, PartialEq, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Type {
@@ -28,17 +29,6 @@ pub enum Type {
     /// Users interested in such calibrations / conversions / calculations,
     /// should use this parser as a mean to extract the antenna coefficients solely
     AntennaData,
-
-    /// DORIS measurements.
-    /// Things to note when processing DORIS files:
-    ///   - header.receiver.sn is the DORIS chain #ID
-    ///   - header.receiver.model is the DORIS instrument type
-    ///   - header.receiver.firmware is the DORIS/DIODE version used
-    /// The list of observables being published, is described in the dedicated
-    /// header fields, and serve as Key index in the Record content.
-    /// The API exposes measurements in TAI Timescale, we can't directly represent
-    /// the DORIS timescale, therefore we apply the appropriate offsets.
-    DORIS,
 }
 
 impl std::fmt::Display for Type {
@@ -49,7 +39,6 @@ impl std::fmt::Display for Type {
             Self::MeteoData => write!(fmt, "METEO DATA"),
             Self::ClockData => write!(fmt, "CLOCK DATA"),
             Self::AntennaData => write!(fmt, "ANTEX"),
-            Self::DORIS => write!(fmt, "DORIS"),
         }
     }
 }
@@ -66,7 +55,6 @@ impl Type {
             Self::MeteoData => String::from("METEOROLOGICAL DATA"),
             Self::ClockData => String::from("CLOCK DATA"),
             Self::AntennaData => String::from("ANTEX"),
-            Self::DORIS => String::from("DORIS"),
         }
     }
 }
@@ -85,8 +73,6 @@ impl std::str::FromStr for Type {
             Ok(Self::ClockData)
         } else if s.eq("antex") {
             Ok(Self::AntennaData)
-        } else if s.eq("doris") || s.eq("d") {
-            Ok(Self::DORIS)
         } else {
             Err(ParsingError::TypeParsing)
         }

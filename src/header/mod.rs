@@ -3,7 +3,6 @@
 use crate::{
     antex::HeaderFields as AntexHeader,
     clock::HeaderFields as ClockHeader,
-    doris::HeaderFields as DorisHeader,
     hardware::{Antenna, Receiver, SvAntenna},
     hatanaka::CRINEX,
     leap::Leap,
@@ -168,10 +167,6 @@ pub struct Header {
     /// ANTEX specific fields
     #[cfg_attr(feature = "serde", serde(default))]
     pub antex: Option<AntexHeader>,
-
-    /// DORIS RINEX specific fields
-    #[cfg_attr(feature = "serde", serde(default))]
-    pub doris: Option<DorisHeader>,
 }
 
 impl Default for Header {
@@ -203,7 +198,6 @@ impl Default for Header {
             doi: None,
             meteo: None,
             nav: None,
-            doris: None,
             clock: None,
             antex: None,
             rcvr: None,
