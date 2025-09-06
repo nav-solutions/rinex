@@ -19,15 +19,6 @@ pub use nav::{
     generic_comparison as generic_navigation_comparison, generic_test as generic_navigation_test,
 };
 
-// DORIS RINEX dedicated tools
-#[cfg(feature = "doris")]
-mod doris;
-
-#[cfg(feature = "doris")]
-pub use doris::{
-    check_observables as doris_check_observables, check_stations as doris_check_stations,
-};
-
 // Meteo RINEX dedicated tests
 #[cfg(feature = "meteo")]
 mod meteo;
@@ -212,7 +203,6 @@ pub fn generic_header_comparison(dut: &Header, model: &Header) {
     assert_eq!(dut.meteo, model.meteo);
     assert_eq!(dut.clock, model.clock);
     assert_eq!(dut.antex, model.antex);
-    assert_eq!(dut.doris, model.doris);
 }
 
 /// Compares strict equality between [A, B]
