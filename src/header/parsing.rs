@@ -948,41 +948,6 @@ impl Header {
         .map_err(|_| ParsingError::DatetimeParsing)
     }
 
-    /*
-     * Parse IONEX grid
-     */
-    fn parse_grid(line: &str) -> Result<Linspace, ParsingError> {
-        let mut start = 0.0_f64;
-        let mut end = 0.0_f64;
-        let mut spacing = 0.0_f64;
-        for (index, item) in line.split_ascii_whitespace().enumerate() {
-            let item = item.trim();
-            match index {
-                0 => {
-                    start = f64::from_str(item).or(Err(ParsingError::IonexGridSpecs))?;
-                },
-                1 => {
-                    end = f64::from_str(item).or(Err(ParsingError::IonexGridSpecs))?;
-                },
-                2 => {
-                    spacing = f64::from_str(item).or(Err(ParsingError::IonexGridSpecs))?;
-                },
-                _ => {},
-            }
-        }
-        if spacing == 0.0 {
-            // avoid linspace verification in this case
-            Ok(Linspace {
-                start,
-                end,
-                spacing,
-            })
-        } else {
-            let grid = Linspace::new(start, end, spacing)?;
-            Ok(grid)
-        }
-    }
-
     /// Parse list of [Observable]s which applies to both METEO and OBS RINEX
     pub(crate) fn parse_v2_observables(
         line: &str,
