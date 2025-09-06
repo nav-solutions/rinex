@@ -131,49 +131,6 @@ impl Merge for Header {
                 merge_mut_unique_vec(&mut lhs.sensors, &rhs.sensors);
             }
         }
-        if let Some(lhs) = &mut self.doris {
-            if let Some(rhs) = &rhs.doris {
-                merge_time_of_first_obs(&mut lhs.timeof_first_obs, &rhs.timeof_first_obs);
-                merge_time_of_last_obs(&mut lhs.timeof_last_obs, &rhs.timeof_last_obs);
-                merge_mut_unique_vec(&mut lhs.stations, &rhs.stations);
-                merge_mut_unique_vec(&mut lhs.observables, &rhs.observables);
-                //TODO: merge_scaling();
-                //merge_mut_unique_map2d(&mut lhs.scaling, &rhs.scaling);
-                lhs.u2_s1_time_offset = std::cmp::max(lhs.u2_s1_time_offset, rhs.u2_s1_time_offset);
-            }
-        }
-        if let Some(lhs) = &mut self.ionex {
-            if let Some(rhs) = &rhs.ionex {
-                if lhs.reference != rhs.reference {
-                    return Err(MergeError::ReferenceFrameMismatch);
-                }
-                if lhs.grid != rhs.grid {
-                    return Err(MergeError::DimensionMismatch);
-                }
-                if lhs.map_dimension != rhs.map_dimension {
-                    return Err(MergeError::DimensionMismatch);
-                }
-                if lhs.base_radius != rhs.base_radius {
-                    return Err(MergeError::DimensionMismatch);
-                }
-
-                //TODO: this is not enough, need to take into account and rescale..
-                lhs.exponent = std::cmp::min(lhs.exponent, rhs.exponent);
-
-                merge_mut_option(&mut lhs.description, &rhs.description);
-                merge_mut_option(&mut lhs.mapping, &rhs.mapping);
-                if lhs.elevation_cutoff == 0.0 {
-                    // means "unknown"
-                    lhs.elevation_cutoff = rhs.elevation_cutoff; // => overwrite in this case
-                }
-                merge_mut_option(&mut lhs.observables, &rhs.observables);
-                lhs.nb_stations = std::cmp::max(lhs.nb_stations, rhs.nb_stations);
-                lhs.nb_satellites = std::cmp::max(lhs.nb_satellites, rhs.nb_satellites);
-                for (b, dcb) in &rhs.dcbs {
-                    lhs.dcbs.insert(b.clone(), *dcb);
-                }
-            }
-        }
 
         // add special comment
         let now = Epoch::now().map_err(|_| MergeError::Other)?;

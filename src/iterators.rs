@@ -15,18 +15,6 @@ impl Rinex {
     ///     println!("{} value: {} °C", epoch, value);
     /// }
     /// ```
-    ///
-    /// DORIS example:
-    /// ```
-    /// use rinex::prelude::Rinex;
-    ///
-    /// let doris = Rinex::from_gzip_file("data/DOR/V3/cs2rx18164.gz")
-    ///     .unwrap();
-    ///
-    /// for (epoch, value) in doris.temperature_iter() {
-    ///     println!("{} value: {} °C", epoch, value);
-    /// }
-    /// ```
     pub fn temperature_iter(&self) -> Box<dyn Iterator<Item = (Epoch, f64)> + '_> {
         if self.is_meteo_rinex() {
             Box::new(self.meteo_observations_iter().filter_map(|(k, v)| {
@@ -36,17 +24,6 @@ impl Rinex {
                     None
                 }
             }))
-        } else if self.is_doris() {
-            Box::new(
-                self.doris_ground_station_signals_iter()
-                    .filter_map(|(k, v, s)| {
-                        if v.observable == Observable::Temperature {
-                            Some((k.epoch, s.value))
-                        } else {
-                            None
-                        }
-                    }),
-            )
         } else {
             Box::new([].into_iter())
         }
@@ -63,17 +40,6 @@ impl Rinex {
                     None
                 }
             }))
-        } else if self.is_doris() {
-            Box::new(
-                self.doris_ground_station_signals_iter()
-                    .filter_map(|(k, v, s)| {
-                        if v.observable == Observable::Pressure {
-                            Some((k.epoch, s.value))
-                        } else {
-                            None
-                        }
-                    }),
-            )
         } else {
             Box::new([].into_iter())
         }
@@ -90,17 +56,6 @@ impl Rinex {
                     None
                 }
             }))
-        } else if self.is_doris() {
-            Box::new(
-                self.doris_ground_station_signals_iter()
-                    .filter_map(|(k, v, s)| {
-                        if v.observable == Observable::HumidityRate {
-                            Some((k.epoch, s.value))
-                        } else {
-                            None
-                        }
-                    }),
-            )
         } else {
             Box::new([].into_iter())
         }

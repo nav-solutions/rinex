@@ -14,14 +14,13 @@ impl Rinex {
     /// // For example: BDT is not available.
     /// let rinex = Rinex::from_gzip_file("data/NAV/V3/ESBC00DNK_R_20201770000_01D_MN.rnx.gz")
     ///     .unwrap();
-
+    ///
     /// let db = rinex.time_corrections_database()
     ///     .unwrap_or_else(|| {
-    ///         panic!("Time corrections should exist for V3/BRDC00GOP_R_20210010000_01D_MN.rnx.gz");
+    ///         panic!("Time corrections should exist for V3/ESBC00DNK_R_20201770000_01D_MN.rnx.gz");
     ///     });
     ///
     /// // In its default form, the database applies without any restriction.
-
     /// for (t_before, t_in, t_after, ts) in [
     ///     (
     ///         "2020-06-24T12:00:00 GPST",
@@ -76,7 +75,7 @@ impl Rinex {
     /// // verify that BDT is indeed not available
     /// let t_before = "2020-06-24T12:00:00 BDT";
     /// let t = Epoch::from_str(t_before).unwrap();
-
+    ///
     /// assert!(db.precise_epoch_correction(t, TimeScale::GPST)
     ///     .is_none(),
     ///     "GPST/BDT is not available!",
@@ -84,15 +83,15 @@ impl Rinex {
     ///
     /// let t_in = "2020-06-25T12:00:00 BDT";
     /// let t = Epoch::from_str(t_in).unwrap();
-
+    ///
     /// assert!(db.precise_epoch_correction(t, TimeScale::GPST)
     ///     .is_none(),
     ///     "GPST/BDT is not available!",
     /// );
-
+    ///
     /// let t_after = "2020-06-26T01:00:00 BDT";
     /// let t = Epoch::from_str(t_after).unwrap();
-
+    ///
     /// assert!(db.precise_epoch_correction(t, TimeScale::GPST)
     ///     .is_none(),
     ///     "GPST/BDT is not available!",

@@ -212,9 +212,7 @@ impl Header {
                     )
                 )?;
             },
-            Type::DORIS => {},
             Type::AntennaData => {},
-            Type::IonosphereMaps => {},
         }
 
         Ok(())
@@ -233,12 +231,8 @@ impl Header {
             meteo.format(w)
         } else if let Some(clock) = &self.clock {
             clock.format(w)
-        } else if let Some(ionex) = &self.ionex {
-            ionex.format(w)
         } else if let Some(antex) = &self.antex {
             antex.format(w)
-        } else if let Some(doris) = &self.doris {
-            doris.format(w)
         } else {
             Ok(()) // should not happen
         }

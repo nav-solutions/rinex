@@ -2,17 +2,10 @@
 use crate::{
     antex::{HeaderFields as AntexHeader, Pcv},
     clock::{ClockProfileType, HeaderFields as ClockHeader, WorkClock},
-    doris::{HeaderFields as DorisHeader, Station as DorisStation},
-    epoch::parse_ionex_utc as parse_ionex_utc_epoch,
     hardware::{Antenna, Receiver, SvAntenna},
     hatanaka::CRINEX,
     header::{DcbCompensation, Header, PcvCompensation},
-    ionex::{
-        HeaderFields as IonexHeaderFields, MappingFunction as IonexMappingFunction,
-        RefSystem as IonexRefSystem,
-    },
     leap::Leap,
-    linspace::Linspace,
     marker::{GeodeticMarker, MarkerType},
     meteo::{HeaderFields as MeteoHeader, Sensor as MeteoSensor},
     navigation::{HeaderFields as NavigationHeader, IonosphereModel, KbModel, TimeOffset},
@@ -69,14 +62,18 @@ impl Header {
         let mut meteo = MeteoHeader::default();
         let mut clock = ClockHeader::default();
         let mut antex = AntexHeader::default();
-        let mut ionex = IonexHeaderFields::default();
-        let mut doris = DorisHeader::default();
 
-        for l in reader.lines() {
-            let line = l.unwrap();
+        for line in reader.lines() {
+            if line.is_err() {
+                continue;
+            }
+
+            let line = line.unwrap();
+
             if line.len() < 60 {
                 continue; // --> invalid header content
             }
+
             let (content, marker) = line.split_at(60);
             ///////////////////////////////
             // [0] END OF HEADER
@@ -187,21 +184,6 @@ impl Header {
                     }
                 }
 
-            //////////////////////////////////////
-            // [2] IONEX special header
-            //////////////////////////////////////
-            } else if marker.contains("IONEX VERSION / TYPE") {
-                let (vers_str, rem) = line.split_at(20);
-                let (type_str, rem) = rem.split_at(20);
-                let (system_str, _) = rem.split_at(20);
-
-                let vers_str = vers_str.trim();
-                version = Version::from_str(vers_str).or(Err(ParsingError::IonexVersion))?;
-
-                rinex_type = Type::from_str(type_str.trim())?;
-                let ref_system = IonexRefSystem::from_str(system_str.trim())?;
-                ionex = ionex.with_reference_system(ref_system);
-
             ///////////////////////////////////////
             // ==> from now on
             // RINEX standard / shared attributes
@@ -215,11 +197,7 @@ impl Header {
                 let constell_str = constell_str.trim();
 
                 // File type identification
-                if type_str == "O" && constell_str == "D" {
-                    rinex_type = Type::DORIS;
-                } else {
-                    rinex_type = Type::from_str(type_str)?;
-                }
+                rinex_type = Type::from_str(type_str)?;
 
                 // Determine (file) Constellation
                 //  1. NAV SPECIAL CASE
@@ -247,7 +225,7 @@ impl Header {
                             }
                         }
                     },
-                    Type::MeteoData | Type::DORIS => {
+                    Type::MeteoData => {
                         // no constellation associated to them
                     },
                     _ => {
@@ -377,14 +355,7 @@ impl Header {
                 let (gnss, rem) = content.split_at(2);
                 let gnss = gnss.trim();
 
-                /*
-                 * DORIS measurement special case, otherwise, standard OBS_RINEX
-                 */
-                let constell = if gnss.eq("D") {
-                    Constellation::Mixed // scaling applies to all measurements
-                } else {
-                    Constellation::from_str(gnss)?
-                };
+                let constell = Constellation::from_str(gnss)?;
 
                 // Parse scaling factor
                 let (factor, rem) = rem.split_at(6);
@@ -399,11 +370,7 @@ impl Header {
                     let observable = Observable::from_str(observable_str)?;
 
                     // latch scaling value
-                    if rinex_type == Type::DORIS {
-                        doris.with_scaling(observable, scaling);
-                    } else {
-                        observation.with_scaling(constell, observable, scaling);
-                    }
+                    observation.with_scaling(constell, observable, scaling);
                 }
             } else if marker.contains("SENSOR MOD/TYPE/ACC") {
                 if let Ok(sensor) = MeteoSensor::from_str(content) {
@@ -562,38 +529,15 @@ impl Header {
                 // <o blank field when no corrections applied
             } else if marker.contains("TIME OF FIRST OBS") {
                 let time_of_first_obs = Self::parse_time_of_obs(content)?;
-
-                if rinex_type == Type::DORIS {
-                    doris.timeof_first_obs = Some(time_of_first_obs);
-                } else {
-                    observation = observation.with_timeof_first_obs(time_of_first_obs);
-                }
+                observation = observation.with_timeof_first_obs(time_of_first_obs);
             } else if marker.contains("TIME OF LAST OBS") {
                 let time_of_last_obs = Self::parse_time_of_obs(content)?;
-
-                if rinex_type == Type::DORIS {
-                    doris.timeof_last_obs = Some(time_of_last_obs);
-                } else {
-                    observation = observation.with_timeof_last_obs(time_of_last_obs);
-                }
+                observation = observation.with_timeof_last_obs(time_of_last_obs);
             } else if marker.contains("TYPES OF OBS") {
                 // these observations can serve both Observation & Meteo RINEX
                 Self::parse_v2_observables(content, constellation, &mut meteo, &mut observation);
             } else if marker.contains("SYS / # / OBS TYPES") {
-                match rinex_type {
-                    Type::ObservationData => {
-                        Self::parse_v3_observables(
-                            content,
-                            &mut current_constell,
-                            &mut observation,
-                        );
-                    },
-                    Type::DORIS => {
-                        /* in DORIS RINEX, observations are not tied to a particular constellation */
-                        Self::parse_doris_observables(content, &mut doris);
-                    },
-                    _ => {},
-                }
+                Self::parse_v3_observables(content, &mut current_constell, &mut observation);
             } else if marker.contains("ANALYSIS CENTER") {
                 let (code, agency) = content.split_at(3);
                 clock = clock.igs(code.trim());
@@ -798,79 +742,6 @@ impl Header {
                 let timescale = content.trim();
                 let ts = TimeScale::from_str(timescale)?;
                 clock = clock.timescale(ts);
-            } else if marker.contains("DESCRIPTION") {
-                // IONEX description
-                // <o
-                //   if "DESCRIPTION" is to be encountered in other RINEX
-                //   we can safely test RinexType here because its already been determined
-                ionex = ionex.with_description(content.trim());
-            } else if marker.contains("# OF MAPS IN FILE") {
-                if let Ok(num) = content.trim().parse::<usize>() {
-                    ionex = ionex.with_number_of_maps(num);
-                }
-            } else if marker.contains("EPOCH OF FIRST MAP") {
-                if let Ok(epoch) = parse_ionex_utc_epoch(content.trim()) {
-                    ionex = ionex.with_epoch_of_first_map(epoch);
-                }
-            } else if marker.contains("EPOCH OF LAST MAP") {
-                if let Ok(epoch) = parse_ionex_utc_epoch(content.trim()) {
-                    ionex = ionex.with_epoch_of_last_map(epoch);
-                }
-            } else if marker.contains("OBSERVABLES USED") {
-                // IONEX observables
-                ionex = ionex.with_observables(content.trim());
-            } else if marker.contains("ELEVATION CUTOFF") {
-                if let Ok(f) = f32::from_str(content.trim()) {
-                    ionex = ionex.with_elevation_cutoff(f);
-                }
-            } else if marker.contains("BASE RADIUS") {
-                if let Ok(f) = f32::from_str(content.trim()) {
-                    ionex = ionex.with_base_radius(f);
-                }
-            } else if marker.contains("MAPPING FUCTION") {
-                let mapf = IonexMappingFunction::from_str(content.trim())?;
-                ionex = ionex.with_mapping_function(mapf);
-            } else if marker.contains("# OF STATIONS") {
-                // IONEX
-                if let Ok(u) = content.trim().parse::<u32>() {
-                    ionex = ionex.with_nb_stations(u)
-                }
-            } else if marker.contains("# OF SATELLITES") {
-                // IONEX
-                if let Ok(u) = content.trim().parse::<u32>() {
-                    ionex = ionex.with_nb_satellites(u)
-                }
-            /*
-             * Initial TEC map scaling
-             */
-            } else if marker.contains("EXPONENT") {
-                if let Ok(e) = content.trim().parse::<i8>() {
-                    ionex = ionex.with_exponent(e);
-                }
-
-            // IONEX grid definitions
-            } else if marker.contains("HGT1 / HGT2 / DHGT") {
-                let grid = Self::parse_grid(content)?;
-                ionex = ionex.with_altitude_grid(grid);
-            } else if marker.contains("LAT1 / LAT2 / DLAT") {
-                let grid = Self::parse_grid(content)?;
-                ionex = ionex.with_latitude_grid(grid);
-            } else if marker.contains("LON1 / LON2 / DLON") {
-                let grid = Self::parse_grid(content)?;
-                ionex = ionex.with_longitude_grid(grid);
-            } else if marker.contains("L2 / L1 DATE OFFSET") {
-                // DORIS special case
-                let content = content[1..].trim();
-
-                let time_offset_us = content
-                    .parse::<f64>()
-                    .or(Err(ParsingError::DorisL1L2DateOffset))?;
-
-                doris.u2_s1_time_offset = Duration::from_microseconds(time_offset_us);
-            } else if marker.contains("STATION REFERENCE") {
-                // DORIS special case
-                let station = DorisStation::from_str(content.trim())?;
-                doris.stations.push(station);
             }
         }
 
@@ -929,23 +800,9 @@ impl Header {
                     None
                 }
             },
-            ionex: {
-                if rinex_type == Type::IonosphereMaps {
-                    Some(ionex)
-                } else {
-                    None
-                }
-            },
             antex: {
                 if rinex_type == Type::AntennaData {
                     Some(antex)
-                } else {
-                    None
-                }
-            },
-            doris: {
-                if rinex_type == Type::DORIS {
-                    Some(doris)
                 } else {
                     None
                 }
@@ -1030,41 +887,6 @@ impl Header {
         .map_err(|_| ParsingError::DatetimeParsing)
     }
 
-    /*
-     * Parse IONEX grid
-     */
-    fn parse_grid(line: &str) -> Result<Linspace, ParsingError> {
-        let mut start = 0.0_f64;
-        let mut end = 0.0_f64;
-        let mut spacing = 0.0_f64;
-        for (index, item) in line.split_ascii_whitespace().enumerate() {
-            let item = item.trim();
-            match index {
-                0 => {
-                    start = f64::from_str(item).or(Err(ParsingError::IonexGridSpecs))?;
-                },
-                1 => {
-                    end = f64::from_str(item).or(Err(ParsingError::IonexGridSpecs))?;
-                },
-                2 => {
-                    spacing = f64::from_str(item).or(Err(ParsingError::IonexGridSpecs))?;
-                },
-                _ => {},
-            }
-        }
-        if spacing == 0.0 {
-            // avoid linspace verification in this case
-            Ok(Linspace {
-                start,
-                end,
-                spacing,
-            })
-        } else {
-            let grid = Linspace::new(start, end, spacing)?;
-            Ok(grid)
-        }
-    }
-
     /// Parse list of [Observable]s which applies to both METEO and OBS RINEX
     pub(crate) fn parse_v2_observables(
         line: &str,
@@ -1133,17 +955,6 @@ impl Header {
                         observation.codes.insert(*constell, vec![observable]);
                     }
                 }
-            }
-        }
-    }
-    /*
-     * Parse list of DORIS observables
-     */
-    fn parse_doris_observables(line: &str, doris: &mut DorisHeader) {
-        let items = line.split_at(6).1;
-        for item in items.split_ascii_whitespace() {
-            if let Ok(observable) = Observable::from_str(item) {
-                doris.observables.push(observable);
             }
         }
     }

@@ -5,8 +5,6 @@ use crate::{
     types::Type,
 };
 
-use std::str::FromStr;
-
 /// Infaillible `Epoch::now()` call.
 pub(crate) fn now() -> Epoch {
     Epoch::now().unwrap_or(Epoch::from_gregorian_utc_at_midnight(2000, 1, 1))
@@ -89,10 +87,6 @@ pub(crate) fn format(epoch: Epoch, t: Type, revision: u8) -> String {
                 format!("{:04} {:02} {:02} {:02} {:02} {:02}", y, m, d, hh, mm, ss)
             }
         },
-        Type::IonosphereMaps => format!(
-            "{:04}   {:>2}    {:>2}    {:>2}    {:>2}    {:>2}",
-            y, m, d, hh, mm, ss
-        ),
         _ => {
             if revision < 3 {
                 // old RINEX wants 2 digit YY field
@@ -219,84 +213,8 @@ pub(crate) fn parse_utc(s: &str) -> Result<Epoch, ParsingError> {
     parse_in_timescale(s, TimeScale::UTC)
 }
 
-pub(crate) fn parse_ionex_utc(s: &str) -> Result<Epoch, ParsingError> {
-    let (mut y, mut m, mut d, mut hh, mut mm, mut ss) = (0_i32, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8);
-    for (index, field) in s.split_ascii_whitespace().enumerate() {
-        match index {
-            0 => {
-                y = field
-                    .trim()
-                    .parse::<i32>()
-                    .map_err(|_| ParsingError::EpochParsing)?;
-            },
-            1 => {
-                m = field
-                    .trim()
-                    .parse::<u8>()
-                    .map_err(|_| ParsingError::EpochParsing)?;
-            },
-            2 => {
-                d = field
-                    .trim()
-                    .parse::<u8>()
-                    .map_err(|_| ParsingError::EpochParsing)?;
-            },
-            3 => {
-                hh = field
-                    .trim()
-                    .parse::<u8>()
-                    .map_err(|_| ParsingError::EpochParsing)?;
-            },
-            4 => {
-                mm = field
-                    .trim()
-                    .parse::<u8>()
-                    .map_err(|_| ParsingError::EpochParsing)?;
-            },
-            5 => {
-                ss = field
-                    .trim()
-                    .parse::<u8>()
-                    .map_err(|_| ParsingError::EpochParsing)?;
-            },
-            _ => {},
-        }
-    }
-    Ok(Epoch::from_gregorian_utc(y, m, d, hh, mm, ss, 0))
-}
-
-/*
- * Until Hifitime provides a decomposition method in timescale other than UTC
- * we have this tweak to decompose %Y %M %D %HH %MM %SS and without nanoseconds
- */
-pub(crate) fn epoch_decompose(e: Epoch) -> (i32, u8, u8, u8, u8, u8, u32) {
-    let isofmt = e.to_gregorian_str(e.time_scale);
-    let mut datetime = isofmt.split('T');
-    let date = datetime.next().unwrap();
-    let mut date = date.split('-');
-
-    let time = datetime.next().unwrap();
-    let mut time_scale = time.split(' ');
-    let time = time_scale.next().unwrap();
-    let mut time = time.split(':');
-
-    let years = date.next().unwrap().parse::<i32>().unwrap();
-    let months = date.next().unwrap().parse::<u8>().unwrap();
-    let days = date.next().unwrap().parse::<u8>().unwrap();
-
-    let hours = time.next().unwrap().parse::<u8>().unwrap();
-    let mins = time.next().unwrap().parse::<u8>().unwrap();
-    let seconds = f64::from_str(time.next().unwrap()).unwrap();
-
-    (
-        years,
-        months,
-        days,
-        hours,
-        mins,
-        seconds.floor() as u8,
-        (seconds.fract() * 1E9).round() as u32,
-    )
+pub(crate) fn epoch_decompose(epoch: Epoch) -> (i32, u8, u8, u8, u8, u8, u32) {
+    epoch.to_gregorian(epoch.time_scale)
 }
 
 #[cfg(test)]
@@ -336,6 +254,7 @@ mod test {
         assert_eq!(e.time_scale, TimeScale::UTC);
         assert_eq!(format(e, Type::NavigationData, 2), "21  1  1 16 15  0.0");
     }
+
     #[test]
     fn epoch_parse_nav_v2_nanos() {
         let e = parse_utc("20 12 31 23 45  0.1");
@@ -346,6 +265,7 @@ mod test {
         assert_eq!(ns, 100_000_000);
         assert_eq!(format(e, Type::NavigationData, 2), "20 12 31 23 45  0.1");
     }
+
     #[test]
     fn epoch_parse_nav_v3() {
         let e = parse_utc("2021 01 01 00 00 00 ");
@@ -401,6 +321,7 @@ mod test {
         assert_eq!(ns, 0);
         assert_eq!(format(e, Type::NavigationData, 3), "2020 06 25 09 49 04");
     }
+
     #[test]
     fn epoch_parse_obs_v2() {
         let e = parse_utc(" 21 12 21  0  0  0.0000000");
@@ -468,6 +389,7 @@ mod test {
             "21  1  1  0  7 30.0000000"
         );
     }
+
     #[test]
     fn epoch_parse_obs_v3() {
         let e = parse_utc(" 2022 01 09 00 00  0.0000000");
@@ -534,6 +456,7 @@ mod test {
             "2022 03 04 00 02 30.0000000"
         );
     }
+
     #[test]
     fn epoch_parse_obs_v2_nanos() {
         let e = parse_utc(" 21  1  1  0  7 39.1234567");
@@ -547,6 +470,7 @@ mod test {
             "21  1  1  0  7 39.1234567"
         );
     }
+
     #[test]
     fn epoch_parse_obs_v3_nanos() {
         let e = parse_utc("2022 01 09 00 00  0.1000000");
@@ -582,6 +506,7 @@ mod test {
             "2022 01 09 00 00  8.7654321"
         );
     }
+
     #[test]
     fn epoch_parse_meteo_v2() {
         let e = parse_utc(" 22  1  4  0  0  0  ");
@@ -597,18 +522,7 @@ mod test {
         assert_eq!(ns, 0);
         assert_eq!(format(e, Type::MeteoData, 2), "22  1  4  0  0  0");
     }
-    #[test]
-    fn ionex_parsing() {
-        for (desc, expected) in [(
-            "  2022     1     2     0     0     0                        ",
-            Epoch::from_str("2022-01-02T00:00:00 UTC").unwrap(),
-        )] {
-            let epoch = parse_ionex_utc(desc);
-            assert!(epoch.is_ok(), "failed to parse IONEX/UTC epoch");
-            let epoch = epoch.unwrap();
-            assert_eq!(epoch, expected, "invalid IONEX/UTC epoch");
-        }
-    }
+
     #[test]
     fn epoch_decomposition() {
         for (epoch, y, m, d, hh, mm, ss, ns) in [
@@ -630,6 +544,7 @@ mod test {
             );
         }
     }
+
     #[test]
     fn test_formatted_month() {
         assert_eq!(parse_formatted_month("Jan").unwrap(), 1);

@@ -32,20 +32,10 @@ jobs:
         args: -r
     
     - uses: actions-rs/cargo@v1
-      name: Clean
-      with:
-        command: clean
-    
-    - uses: actions-rs/cargo@v1
       name: Build (all features)
       with:
         command: build
         args: --all-features
-    
-    - uses: actions-rs/cargo@v1
-      name: Clean
-      with:
-        command: clean
     
     - uses: actions-rs/cargo@v1
       name: Build (Observation)
@@ -54,20 +44,10 @@ jobs:
         args: --features obs
     
     - uses: actions-rs/cargo@v1
-      name: Clean
-      with:
-        command: clean
-    
-    - uses: actions-rs/cargo@v1
       name: Build (Navigation)
       with:
         command: build
         args: --features nav
-    
-    - uses: actions-rs/cargo@v1
-      name: Clean
-      with:
-        command: clean
     
     - uses: actions-rs/cargo@v1
       name: Build (Meteo)
@@ -76,31 +56,10 @@ jobs:
         args: --features meteo
     
     - uses: actions-rs/cargo@v1
-      name: Clean
-      with:
-        command: clean
-    
-    - uses: actions-rs/cargo@v1
       name: Build (Clock)
       with:
         command: build
         args: --features clock
-    
-    - uses: actions-rs/cargo@v1
-      name: Clean
-      with:
-        command: clean
-    
-    - uses: actions-rs/cargo@v1
-      name: Build (DORIS)
-      with:
-        command: build
-        args: --features doris
-    
-    - uses: actions-rs/cargo@v1
-      name: Clean
-      with:
-        command: clean
     
     - uses: actions-rs/cargo@v1
       name: Build (ANTEX)
@@ -109,31 +68,16 @@ jobs:
         args: --features antex
 
     - uses: actions-rs/cargo@v1
-      name: Clean
-      with:
-        command: clean
-    
-    - uses: actions-rs/cargo@v1
       name: Build (Qc)
       with:
         command: build
         args: --features qc
     
     - uses: actions-rs/cargo@v1
-      name: Clean
-      with:
-        command: clean
-    
-    - uses: actions-rs/cargo@v1
       name: Build (Processing)
       with:
         command: build
         args: --features processing
-    
-    - uses: actions-rs/cargo@v1
-      name: Clean
-      with:
-        command: clean
     
     - uses: actions-rs/cargo@v1
       name: Test (all features)

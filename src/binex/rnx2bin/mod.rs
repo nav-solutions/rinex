@@ -143,7 +143,10 @@ impl<'a> RNX2BIN<'a> {
         let mut geo = MonumentGeoRecord::default();
         geo.epoch = self.t0;
         geo.meta = MonumentGeoMetadata::RNX2BIN;
-        geo = geo.with_software_name(&format!("rtk-rs/rinex v{}", env!("CARGO_PKG_VERSION")));
+        geo = geo.with_software_name(&format!(
+            "nav-solutions/rinex v{}",
+            env!("CARGO_PKG_VERSION")
+        ));
         geo
     }
 }

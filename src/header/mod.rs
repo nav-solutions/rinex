@@ -3,10 +3,8 @@
 use crate::{
     antex::HeaderFields as AntexHeader,
     clock::HeaderFields as ClockHeader,
-    doris::HeaderFields as DorisHeader,
     hardware::{Antenna, Receiver, SvAntenna},
     hatanaka::CRINEX,
-    ionex::HeaderFields as IonexHeader,
     leap::Leap,
     marker::GeodeticMarker,
     meteo::HeaderFields as MeteoHeader,
@@ -72,80 +70,103 @@ pub struct PcvCompensation {
 pub struct Header {
     /// RINEX [Version]
     pub version: Version,
+
     /// RINEX [Type]
     pub rinex_type: Type,
+
     /// GNSS [Constellation] describing this entire file.
     pub constellation: Option<Constellation>,
+
     /// Comments from this section
     pub comments: Vec<String>,
+
     /// Possible software name (publishing software)
     pub program: Option<String>,
+
     /// Possible software operator
     pub run_by: Option<String>,
+
     /// Possible date of publication
     pub date: Option<String>,
+
     /// Possible station / agency URL
     pub station_url: Option<String>,
+
     /// Name of observer / operator
     pub observer: Option<String>,
+
     /// Production Agency
     pub agency: Option<String>,
+
     /// Possible [GeodeticMarker]
     pub geodetic_marker: Option<GeodeticMarker>,
+
     /// Glonass FDMA channels
     pub glo_channels: HashMap<SV, i8>,
+
     /// Possible COSPAR number (launch information)
     pub cospar: Option<COSPAR>,
+
     /// Possible [Leap] seconds counter
     pub leap: Option<Leap>,
+
     /// Approximate coordinates expressed in ECEF m
     pub rx_position: Option<(f64, f64, f64)>,
+
     /// Optionnal wavelength correction factors
     pub wavelengths: Option<(u32, u32)>,
+
     /// Possible sampling interval
     pub sampling_interval: Option<Duration>,
+
     /// Possible file license
     pub license: Option<String>,
+
     /// Possible Digital Object Identifier
     pub doi: Option<String>,
+
     /// Possible [Receiver] information
     #[cfg_attr(feature = "serde", serde(default))]
     pub rcvr: Option<Receiver>,
+
     /// Possible information about Receiver [Antenna]
     #[cfg_attr(feature = "serde", serde(default))]
     pub rcvr_antenna: Option<Antenna>,
+
     /// Possible information about satellite vehicle antenna.
     /// This only exists in ANTEX format.
     #[cfg_attr(feature = "serde", serde(default))]
     pub sv_antenna: Option<SvAntenna>,
+
     /// Possible Ionospheric Delay correction model, described in
     /// header section of old RINEX files (<V4).
     pub ionod_corrections: HashMap<Constellation, IonosphereModel>,
+
     /// Possible DCBs compensation information
     pub dcb_compensations: Vec<DcbCompensation>,
+
     /// Possible PCVs compensation information
     pub pcv_compensations: Vec<PcvCompensation>,
+
     /// Observation RINEX specific fields
     #[cfg_attr(feature = "serde", serde(default))]
     pub obs: Option<ObservationHeader>,
+
     /// NAV RINEX specific fields
     #[cfg_attr(feature = "serde", serde(default))]
     pub nav: Option<NavigationHeader>,
+
     /// Meteo RINEX specific fields
     #[cfg_attr(feature = "serde", serde(default))]
     pub meteo: Option<MeteoHeader>,
+
     /// High Precision Clock RINEX specific fields
     #[cfg_attr(feature = "serde", serde(default))]
     pub clock: Option<ClockHeader>,
+
     /// ANTEX specific fields
     #[cfg_attr(feature = "serde", serde(default))]
     pub antex: Option<AntexHeader>,
-    /// IONEX specific fields
-    #[cfg_attr(feature = "serde", serde(default))]
-    pub ionex: Option<IonexHeader>,
-    /// DORIS RINEX specific fields
-    #[cfg_attr(feature = "serde", serde(default))]
-    pub doris: Option<DorisHeader>,
 }
 
 impl Default for Header {
@@ -175,10 +196,8 @@ impl Default for Header {
             wavelengths: None,
             cospar: None,
             doi: None,
-            ionex: None,
             meteo: None,
             nav: None,
-            doris: None,
             clock: None,
             antex: None,
             rcvr: None,
@@ -220,11 +239,6 @@ impl Header {
             .with_type(Type::ObservationData)
             .with_constellation(Constellation::Mixed)
             .with_observation_fields(ObservationHeader::default().with_crinex(CRINEX::default()))
-    }
-
-    /// Builds a basic [Header] for IONEX
-    pub fn basic_ionex() -> Self {
-        Self::default().with_ionex_fields(IonexHeader::default())
     }
 
     /// Formats the package version (possibly shortenned, in case of lengthy release)
@@ -350,13 +364,6 @@ impl Header {
     pub fn with_observation_fields(&self, fields: ObservationHeader) -> Self {
         let mut s = self.clone();
         s.obs = Some(fields);
-        s
-    }
-
-    /// Copies and returns [Header] with specific [IonexHeader]
-    pub fn with_ionex_fields(&self, fields: IonexHeader) -> Self {
-        let mut s = self.clone();
-        s.ionex = Some(fields);
         s
     }
 

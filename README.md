@@ -1,42 +1,39 @@
 RINEX 
 =====
 
-[![Rust](https://github.com/rtk-rs/rinex/actions/workflows/rust.yml/badge.svg)](https://github.com/rtk-rs/rinex/actions/workflows/rust.yml)
-[![Rust](https://github.com/rtk-rs/rinex/actions/workflows/daily.yml/badge.svg)](https://github.com/rtk-rs/rinex/actions/workflows/daily.yml)
+[![Rust](https://github.com/nav-solutions/rinex/actions/workflows/rust.yml/badge.svg)](https://github.com/nav-solutions/rinex/actions/workflows/rust.yml)
+[![Rust](https://github.com/nav-solutions/rinex/actions/workflows/daily.yml/badge.svg)](https://github.com/nav-solutions/rinex/actions/workflows/daily.yml)
 [![crates.io](https://docs.rs/rinex/badge.svg)](https://docs.rs/rinex/)
 [![crates.io](https://img.shields.io/crates/d/rinex.svg)](https://crates.io/crates/rinex)
 
 [![MRSV](https://img.shields.io/badge/MSRV-1.82.0-orange?style=for-the-badge)](https://github.com/rust-lang/rust/releases/tag/1.82.0)
-[![License](https://img.shields.io/badge/license-MPL_2.0-orange?style=for-the-badge&logo=mozilla)](https://github.com/rtk-rs/rinex/blob/main/LICENSE)
+[![License](https://img.shields.io/badge/license-MPL_2.0-orange?style=for-the-badge&logo=mozilla)](https://github.com/nav-solutions/rinex/blob/main/LICENSE)
 
 [RINEX (Receiver Independent EXchange)](https://en.wikipedia.org/wiki/RINEX) parser and formatter.   
 The RINEX format is fully open source and is specified to answer the requirements of navigation and much more.
 
 To contribute to either of our project or join our community, you way
-- open an [Issue on Github.com](https://github.com/rtk-rs/rinex/issues) 
-- follow our [Discussions on Github.com](https://github.com/rtk-rs/discussions)
+- open an [Issue on Github.com](https://github.com/nav-solutions/rinex/issues) 
+- follow our [Discussions on Github.com](https://github.com/nav-solutions/discussions)
 - join our [Discord channel](https://discord.gg/EqhEBXBmJh)
 
 ## Advantages :rocket: 
 
 - Fast
-- Open sources: read and access all the code!
+- Open sources: read and access all the code
 - All modern GNSS constellations, codes and signals
-  - Surveying with GPS, Galileo, BeiDou and QZSS
+  - GPS, Galileo, BeiDou and QZSS
 - Time scales: GPST, QZSST, BDT, GST, UTC, TAI
 - Efficient seamless compression and decompression
+  - modern rewrite of the Hatanaka compression algorithm
 - RINEX V4 full support, including
   - new Ionospheric coorections
   - new Time offset corrections
   - precise Earth Orientation updates
-- Navigation supported in the following constellations
-  - GPS
-  - Galileo
-  - BeiDou
-  - QZSS
-- Most RINEX formats supported (see following table)
-- High Precision Clock RINEX products (for PPP)
-- DORIS (special RINEX)
+- Supports Observation, Navigation, Meteo and Clock RINEX,
+other RINEX-like formats have their own parser:
+  - [IONEX (Ionosphere Maps)](https://github.com/nav-solutions/ionex)
+  - [DORIS (special observations)](https://github.com/nav-solutions/doris)
 - Many pre-processing algorithms including Filter Designer
 - Several file operations: merging, splitting, time binning (batch)
 
@@ -49,7 +46,7 @@ To contribute to either of our project or join our community, you way
 
 If you need to reference this work, please use the following model:
 
-`RTK-rs Team (2025), RINEX: analysis and processing (MPLv2), https://github.com/rtk-rs`
+`Nav-solutions (2025), RINEX: analysis and processing (MPLv2), https://github.com/nav-solutions`
 
 Formats & revisions
 ===================

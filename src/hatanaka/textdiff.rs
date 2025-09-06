@@ -85,15 +85,17 @@ impl TextDiff {
             let mut compressed = self.compressed.as_bytes_mut().iter_mut();
 
             while let Some(buffered) = buffered.next() {
-                let byte = bytes.next().unwrap();
-                let compressed = compressed.next().unwrap();
-                if byte == buffered {
-                    *compressed = b' ';
-                } else {
-                    if *byte == b' ' {
-                        *compressed = b'&';
-                    } else {
-                        *compressed = *byte;
+                if let Some(byte) = bytes.next() {
+                    if let Some(compressed) = compressed.next() {
+                        if byte == buffered {
+                            *compressed = b' ';
+                        } else {
+                            if *byte == b' ' {
+                                *compressed = b'&';
+                            } else {
+                                *compressed = *byte;
+                            }
+                        }
                     }
                 }
             }
