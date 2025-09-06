@@ -151,7 +151,7 @@ binex = { version = "0.5", optional = true }
 rtcm-rs = { version = "0.11", optional = true }
 
 # U-Blox streaming
-ublox = { version = "0.5", optional = true }
+ublox = { version = "0.6", optional = true, features = ["std", "sfrbx-gps"] }
 
 # TODO: see if we can get rid of FromPrimitive ?
 num-traits = "0.2.15"
