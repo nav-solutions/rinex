@@ -107,6 +107,23 @@ impl Version {
     pub fn new(major: u8, minor: u8) -> Self {
         Self { major, minor }
     }
+
+    /// Builds desired major [Version] with minor = 0
+    pub fn from_major(major: u8) -> Self {
+        Self { major, minor: 0 }
+    }
+
+    /// Copies and returns [Version] with updated major
+    pub fn with_major(mut self, major: u8) -> Self {
+        self.major = major;
+        self
+    }
+
+    /// Copies and returns [Version] with updated minor
+    pub fn with_minor(mut self, minor: u8) -> Self {
+        self.minor = minor;
+        self
+    }
 }
 
 #[cfg(test)]
