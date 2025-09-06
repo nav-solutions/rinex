@@ -7,7 +7,6 @@ use crate::{
     hatanaka::CRINEX,
     header::{DcbCompensation, Header, PcvCompensation},
     leap::Leap,
-    linspace::Linspace,
     marker::{GeodeticMarker, MarkerType},
     meteo::{HeaderFields as MeteoHeader, Sensor as MeteoSensor},
     navigation::{HeaderFields as NavigationHeader, IonosphereModel, KbModel, TimeOffset},
