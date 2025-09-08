@@ -1,17 +1,13 @@
 use crate::{
     navigation::{Ephemeris, NavKey},
-    prelude::{Constellation, Epoch, Rinex, SV},
+    prelude::{Constellation, Rinex},
 };
 
-use ublox::{CfgAntBuilder, MgaGloEph, MgaGpsEphRef, PacketRef, RxmSfrbx};
+use ublox::PacketRef;
 
 /// NAV Record Streamer
 pub struct Streamer<'a> {
     ephemeris_iter: Box<dyn Iterator<Item = (&'a NavKey, &'a Ephemeris)> + 'a>,
-}
-
-fn forge_gps_ephemeris_mga<'a>(_toc: &Epoch, sv: SV, eph: &Ephemeris) -> Option<MgaGpsEphRef<'a>> {
-    None
 }
 
 impl<'a> Streamer<'a> {
@@ -25,12 +21,24 @@ impl<'a> Streamer<'a> {
 impl<'a> Iterator for Streamer<'a> {
     type Item = PacketRef<'a>;
     fn next(&mut self) -> Option<Self::Item> {
-        let (key, eph) = self.ephemeris_iter.next()?;
+        let (key, ephemeris) = self.ephemeris_iter.next()?;
 
         match key.sv.constellation {
             Constellation::GPS => {
-                let mga = forge_gps_ephemeris_mga(&key.epoch, key.sv, eph)?;
-                Some(PacketRef::MgaGpsEph(mga))
+                let _ = ephemeris.to_ubx_mga_gps_qzss(key.epoch, key.sv)?;
+                None // TODO: UBX encapsulation
+            },
+            Constellation::QZSS => {
+                let _ = ephemeris.to_ubx_mga_gps_qzss(key.epoch, key.sv)?;
+                None // TODO: UBX encapsulation
+            },
+            Constellation::BeiDou => {
+                let _ = ephemeris.to_ubx_mga_bds(key.epoch, key.sv)?;
+                None // TODO: UBX encapsulation
+            },
+            Constellation::Glonass => {
+                let _ = ephemeris.to_ubx_mga_glo(key.sv)?;
+                None // TODO: UBX encapsulation
             },
             _ => None,
         }
