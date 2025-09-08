@@ -158,7 +158,7 @@ gnss-protos = { version = "0.0.2", optional = true, features = ["gps"] }
 
 # U-Blox
 # ublox = { version = "0.6", optional = true, features = ["std", "sfrbx-gps"] }
-ublox = { git = "https://github.com/ublox-rs/ublox", rev = "843f7fc69fda64896b74689d1fb2473b035ea111", optional = true, features = ["std", "sfrbx-gps"] }
+ublox = { git = "https://github.com/ublox-rs/ublox", rev = "3abb76a9ad4f0a77a2d33e30ed3d57e849ad0a00", optional = true, features = ["std", "sfrbx-gps"] }
 
 # TODO: see if we can get rid of FromPrimitive ?
 num-traits = "0.2.15"
