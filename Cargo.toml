@@ -156,8 +156,9 @@ rtcm-rs = { version = "0.11", optional = true }
 # RINEX to GNSS protos
 gnss-protos = { version = "0.0.2", optional = true, features = ["gps"] }
 
-# U-Blox streaming
-ublox = { version = "0.6", optional = true, features = ["std", "sfrbx-gps"] }
+# U-Blox
+# ublox = { version = "0.6", optional = true, features = ["std", "sfrbx-gps"] }
+ublox = { git = "https://github.com/ublox-rs/ublox", rev = "843f7fc69fda64896b74689d1fb2473b035ea111", optional = true, features = ["std", "sfrbx-gps"] }
 
 # TODO: see if we can get rid of FromPrimitive ?
 num-traits = "0.2.15"
