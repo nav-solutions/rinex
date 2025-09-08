@@ -1,11 +1,60 @@
 use crate::{
-    navigation::Ephemeris,
+    navigation::{Ephemeris, OrbitItem},
     prelude::{Constellation, Epoch, SV},
 };
+
+use std::collections::HashMap;
 
 use binex::prelude::{EphemerisFrame, GALEphemeris, GLOEphemeris, GPSEphemeris, SBASEphemeris};
 
 impl Ephemeris {
+    /// Converts this BINEX [EphemerisFrame] to [Ephemeris], ready to format.
+    /// We support GPS, QZSS, Galileo, Glonass and SBAS frames.
+    ///
+    /// ## Inputs
+    /// - now: usually the [Epoch] of message reception
+    pub fn from_binex(now: Epoch, message: EphemerisFrame) -> Option<(SV, Self)> {
+        match message {
+            EphemerisFrame::GPS(serialized) => Some((
+                SV::new(Constellation::GPS, serialized.sv_prn),
+                Self {
+                    clock_bias: 0.0,
+                    clock_drift: 0.0,
+                    clock_drift_rate: 0.0,
+                    orbits: HashMap::from_iter([("week".to_string(), OrbitItem::from(0.0f64))]),
+                },
+            )),
+            EphemerisFrame::SBAS(serialized) => Some((
+                SV::new(Constellation::SBAS, serialized.sbas_prn),
+                Self {
+                    clock_bias: 0.0,
+                    clock_drift: 0.0,
+                    clock_drift_rate: 0.0,
+                    orbits: HashMap::from_iter([("week".to_string(), OrbitItem::from(0.0f64))]),
+                },
+            )),
+            EphemerisFrame::GLO(serialized) => Some((
+                SV::new(Constellation::Glonass, serialized.slot),
+                Self {
+                    clock_bias: 0.0,
+                    clock_drift: 0.0,
+                    clock_drift_rate: 0.0,
+                    orbits: HashMap::from_iter([("week".to_string(), OrbitItem::from(0.0f64))]),
+                },
+            )),
+            EphemerisFrame::GAL(serialized) => Some((
+                SV::new(Constellation::Galileo, serialized.sv_prn),
+                Self {
+                    clock_bias: 0.0,
+                    clock_drift: 0.0,
+                    clock_drift_rate: 0.0,
+                    orbits: HashMap::from_iter([("week".to_string(), OrbitItem::from(0.0f64))]),
+                },
+            )),
+            _ => None,
+        }
+    }
+
     /// Encodes this [Ephemeris] to BINEX [EphemerisFrame], ready to encode.
     /// We currently support GPS, QZSS, SBAS, Galileo and Glonass.
     ///

@@ -20,6 +20,9 @@ mod merge;
 #[cfg(feature = "clock")]
 mod clock;
 
+#[cfg(feature = "binex")]
+mod binex;
+
 #[cfg(feature = "processing")]
 mod processing;
 
