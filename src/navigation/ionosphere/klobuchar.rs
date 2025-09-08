@@ -17,6 +17,7 @@ use std::{
 pub enum KbRegionCode {
     /// Worlwide (GPS) Orbits.
     Worldwide = 0,
+
     /// QZSS Japanese special Orbital plan.
     Japan = 1,
 }
@@ -35,9 +36,11 @@ pub struct KbModel {
     /// Alpha coefficients
     /// ((sec), (sec.semi-circle⁻¹), (sec.semi-circle⁻²), (sec.semi-circle⁻³))
     pub alpha: (f64, f64, f64, f64),
+
     /// Beta coefficients
     /// ((sec), (sec.semi-circle⁻¹), (sec.semi-circle⁻²), (sec.semi-circle⁻³))
     pub beta: (f64, f64, f64, f64),
+
     /// Region flag
     pub region: KbRegionCode,
 }
