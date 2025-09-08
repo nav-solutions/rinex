@@ -1,15 +1,107 @@
-use crate::navigation::Ephemeris;
-use crate::prelude::{Constellation, Epoch, SV};
+use std::collections::HashMap;
 
-use ublox::{MgaBdsEphBuilder, MgaGloEphBuilder, MgaGpsEphBuilder};
+use crate::{
+    navigation::{Ephemeris, OrbitItem},
+    prelude::{Constellation, Epoch, SV},
+};
+
+use ublox::{
+    MgaBdsEphBuilder, MgaBdsEphRef, MgaGloEphBuilder, MgaGloEphRef, MgaGpsEphBuilder, MgaGpsEphRef,
+};
 
 #[cfg(doc)]
 use crate::prelude::Rinex;
 
-#[cfg(doc)]
-use ublox::{MgaBdsEphRef, MgaGloEphRef, MgaGpsEphRef};
-
 impl Ephemeris {
+    /// Decodes this UBX [MgaGpsEphRef] frame as [Ephemeris] structure, ready to format.
+    ///
+    /// ## Inputs
+    /// - now: UBX message [Epoch] of reception
+    ///
+    /// ## Returns
+    /// - Identified [Constellation::GPS] message emitter
+    /// - [Ephemeris] structure ready to format.
+    pub fn from_ubx_mga_gps(&self, now: Epoch, ubx: MgaGpsEphRef) -> (SV, Self) {
+        (
+            SV {
+                prn: ubx.sv_id(),
+                constellation: Constellation::GPS,
+            },
+            Self {
+                clock_bias: ubx.af0(),
+                clock_drift: ubx.af1(),
+                clock_drift_rate: ubx.af2(),
+                orbits: HashMap::from_iter([
+                    ("week".to_string(), OrbitItem::F64(0.0)),
+                    ("toe".to_string(), OrbitItem::F64(ubx.toe())),
+                    ("e".to_string(), OrbitItem::F64(ubx.e())),
+                    ("cic".to_string(), OrbitItem::F64(ubx.cic())),
+                    ("cis".to_string(), OrbitItem::F64(ubx.cis())),
+                    ("cuc".to_string(), OrbitItem::F64(ubx.cuc())),
+                    ("cus".to_string(), OrbitItem::F64(ubx.cus())),
+                    ("crc".to_string(), OrbitItem::F64(ubx.crc())),
+                    ("crs".to_string(), OrbitItem::F64(ubx.crs_rad())),
+                    ("tgd".to_string(), OrbitItem::F64(ubx.tgd_s())),
+                    ("sqrta".to_string(), OrbitItem::F64(ubx.sqrt_a())),
+                    ("iodc".to_string(), OrbitItem::F64(ubx.iodc() as f64)),
+                    ("m0".to_string(), OrbitItem::F64(ubx.m0_semicircles())),
+                    ("deltaN".to_string(), OrbitItem::F64(ubx.dn_semicircles())),
+                    ("idot".to_string(), OrbitItem::F64(ubx.idot_semicircles())),
+                    ("omega".to_string(), OrbitItem::F64(ubx.omega_semicircles())),
+                    ("omegaDot".to_string(), OrbitItem::F64(ubx.omega_dot())),
+                    (
+                        "omega0".to_string(),
+                        OrbitItem::F64(ubx.omega0_semicircles()),
+                    ),
+                ]),
+            },
+        )
+    }
+
+    /// Decodes this UBX [MgaGpsEphRef] frame as [Ephemeris] structure, ready to format.
+    ///
+    /// ## Inputs
+    /// - now: UBX message [Epoch] of reception
+    ///
+    /// ## Returns
+    /// - Identified [Constellation::QZSS] message emitter
+    /// - [Ephemeris] structure ready to format.
+    pub fn from_ubx_mga_qzss(&self, now: Epoch, ubx: MgaGpsEphRef) -> (SV, Self) {
+        (
+            SV {
+                prn: ubx.sv_id(),
+                constellation: Constellation::QZSS,
+            },
+            Self {
+                clock_bias: ubx.af0(),
+                clock_drift: ubx.af1(),
+                clock_drift_rate: ubx.af2(),
+                orbits: HashMap::from_iter([
+                    ("week".to_string(), OrbitItem::F64(0.0)),
+                    ("toe".to_string(), OrbitItem::F64(ubx.toe())),
+                    ("e".to_string(), OrbitItem::F64(ubx.e())),
+                    ("cic".to_string(), OrbitItem::F64(ubx.cic())),
+                    ("cis".to_string(), OrbitItem::F64(ubx.cis())),
+                    ("cuc".to_string(), OrbitItem::F64(ubx.cuc())),
+                    ("cus".to_string(), OrbitItem::F64(ubx.cus())),
+                    ("crc".to_string(), OrbitItem::F64(ubx.crc())),
+                    ("crs".to_string(), OrbitItem::F64(ubx.crs_rad())),
+                    ("sqrta".to_string(), OrbitItem::F64(ubx.sqrt_a())),
+                    ("iodc".to_string(), OrbitItem::F64(ubx.iodc() as f64)),
+                    ("m0".to_string(), OrbitItem::F64(ubx.m0_semicircles())),
+                    ("deltaN".to_string(), OrbitItem::F64(ubx.dn_semicircles())),
+                    ("idot".to_string(), OrbitItem::F64(ubx.idot_semicircles())),
+                    ("omega".to_string(), OrbitItem::F64(ubx.omega_semicircles())),
+                    ("omegaDot".to_string(), OrbitItem::F64(ubx.omega_dot())),
+                    (
+                        "omega0".to_string(),
+                        OrbitItem::F64(ubx.omega0_semicircles()),
+                    ),
+                ]),
+            },
+        )
+    }
+
     /// Encodes this [Ephemeris] as UBX [MgaGpsEphRef] frame.
     ///
     /// ## Input
@@ -87,6 +179,54 @@ impl Ephemeris {
         };
 
         Some(builder.into_packet_bytes())
+    }
+
+    /// Decodes this UBX [MgaBdsEphRef] frame as [Ephemeris] structure, ready to format.
+    ///
+    /// ## Inputs
+    /// - now: UBX message [Epoch] of reception
+    ///
+    /// ## Returns
+    /// - Identified [Constellation::BeiDou] message emitter
+    /// - [Ephemeris] structure ready to format.
+    pub fn from_ubx_mga_bds(&self, now: Epoch, ubx: MgaBdsEphRef) -> (SV, Self) {
+        (
+            SV {
+                prn: ubx.sv_id(),
+                constellation: Constellation::BeiDou,
+            },
+            Self {
+                clock_bias: ubx.a0(),
+                clock_drift: ubx.a1(),
+                clock_drift_rate: ubx.a2(),
+                orbits: HashMap::from_iter([
+                    ("week".to_string(), OrbitItem::F64(0.0)),
+                    ("toe".to_string(), OrbitItem::F64(ubx.toe())),
+                    ("e".to_string(), OrbitItem::F64(ubx.e())),
+                    ("cic".to_string(), OrbitItem::F64(ubx.cic_rad())),
+                    ("cis".to_string(), OrbitItem::F64(ubx.cis_rad())),
+                    ("cuc".to_string(), OrbitItem::F64(ubx.cuc_rad())),
+                    ("cus".to_string(), OrbitItem::F64(ubx.cus_rad())),
+                    ("crc".to_string(), OrbitItem::F64(ubx.crc_rad())),
+                    ("crs".to_string(), OrbitItem::F64(ubx.crs_rad())),
+                    ("sqrta".to_string(), OrbitItem::F64(ubx.sqrt_a())),
+                    ("iodc".to_string(), OrbitItem::F64(ubx.iodc() as f64)),
+                    ("m0".to_string(), OrbitItem::F64(ubx.m0_semicircles())),
+                    ("tgd".to_string(), OrbitItem::F64(ubx.tgd_ns() * 1.0E-9)),
+                    ("deltaN".to_string(), OrbitItem::F64(ubx.dn_semicircles())),
+                    ("idot".to_string(), OrbitItem::F64(ubx.i_dot_semicircles())),
+                    ("omega".to_string(), OrbitItem::F64(ubx.omega_semicircles())),
+                    (
+                        "omega0".to_string(),
+                        OrbitItem::F64(ubx.omega0_semicircles()),
+                    ),
+                    (
+                        "omegaDot".to_string(),
+                        OrbitItem::F64(ubx.omega_dot_semicircles()),
+                    ),
+                ]),
+            },
+        )
     }
 
     /// Encodes this [Ephemeris] as UBX [MgaBdsEphRef] frame.
@@ -175,6 +315,41 @@ impl Ephemeris {
         };
 
         Some(builder.into_packet_bytes())
+    }
+
+    /// Decodes this UBX [MgaGloEphRef] frame as [Ephemeris] structure, ready to format.
+    ///
+    /// ## Inputs
+    /// - now: UBX message [Epoch] of reception
+    ///
+    /// ## Returns
+    /// - Identified [Constellation::Glonass] message emitter
+    /// - [Ephemeris] structure ready to format.
+    pub fn from_ubx_mga_glo(&self, now: Epoch, ubx: MgaGloEphRef) -> (SV, Self) {
+        (
+            SV {
+                prn: ubx.sv_id(),
+                constellation: Constellation::Glonass,
+            },
+            Self {
+                clock_bias: ubx.tau_s(),
+                clock_drift: 0.0,
+                clock_drift_rate: 0.0,
+                orbits: HashMap::from_iter([
+                    ("health".to_string(), OrbitItem::F64(0.0)),
+                    ("channel".to_string(), OrbitItem::F64(ubx.h() as f64)),
+                    ("satPosX".to_string(), OrbitItem::F64(ubx.x_km())),
+                    ("satPosY".to_string(), OrbitItem::F64(ubx.y_km())),
+                    ("satPosZ".to_string(), OrbitItem::F64(ubx.z_km())),
+                    ("velX".to_string(), OrbitItem::F64(ubx.dx_km_s())),
+                    ("velY".to_string(), OrbitItem::F64(ubx.dy_km_s())),
+                    ("velZ".to_string(), OrbitItem::F64(ubx.dz_km_s())),
+                    ("accelX".to_string(), OrbitItem::F64(ubx.ddx_km_s2())),
+                    ("accelY".to_string(), OrbitItem::F64(ubx.ddy_km_s2())),
+                    ("accelZ".to_string(), OrbitItem::F64(ubx.ddz_km_s2())),
+                ]),
+            },
+        )
     }
 
     /// Encodes this [Ephemeris] as UBX [MgaGloEphRef] frame.
