@@ -1,4 +1,7 @@
-use crate::prelude::{Constellation, Rinex};
+use crate::{
+    navigation::Ephemeris,
+    prelude::{Constellation, Rinex},
+};
 
 use ublox::{MgaBdsEphRef, MgaGloEphRef, MgaGpsEphRef, PacketRef, Parser};
 
@@ -27,8 +30,13 @@ fn nav_v3_to_ubx_mga() {
 
                     match ubx_frame {
                         Ok(PacketRef::MgaGpsEph(encoded)) => {
-                            // could go even further matching all data fields
+                            // run mirror OP
+                            let (decoded_sv, decoded_eph) =
+                                Ephemeris::from_ubx_mga_gps(k.epoch, encoded);
 
+                            // TODO: testbench
+                            // assert_eq!(decoded_sv, k.sv);
+                            // assert_eq!(decoded_eph, ephemeris.clone());
                             gps += 1;
                         },
                         _ => panic!("{}({}) did not encode a UBX-MGA-GPS frame", k.epoch, k.sv),
@@ -45,8 +53,13 @@ fn nav_v3_to_ubx_mga() {
 
                     match ubx_frame {
                         Ok(PacketRef::MgaGpsEph(encoded)) => {
-                            // could go even further matching all data fields
+                            // run mirror OP
+                            let (decoded_sv, decoded_eph) =
+                                Ephemeris::from_ubx_mga_qzss(k.epoch, encoded);
 
+                            // TODO: testbench
+                            // assert_eq!(decoded_sv, k.sv);
+                            // assert_eq!(decoded_eph, ephemeris.clone());
                             qzss += 1;
                         },
                         _ => panic!("{}({}) did not encode a UBX-MGA-QZSS frame", k.epoch, k.sv),
@@ -63,8 +76,13 @@ fn nav_v3_to_ubx_mga() {
 
                     match ubx_frame {
                         Ok(PacketRef::MgaBdsEph(encoded)) => {
-                            // could go even further matching all data fields
+                            // run mirror OP
+                            let (decoded_sv, decoded_eph) =
+                                Ephemeris::from_ubx_mga_bds(k.epoch, encoded);
 
+                            // TODO: testbench
+                            // assert_eq!(decoded_sv, k.sv);
+                            // assert_eq!(decoded_eph, ephemeris.clone());
                             bds += 1;
                         },
                         _ => panic!("{}({}) did not encode a UBX-MGA-BDS frame", k.epoch, k.sv),

@@ -21,7 +21,7 @@ impl Ephemeris {
     /// ## Returns
     /// - Identified [Constellation::GPS] message emitter
     /// - [Ephemeris] structure ready to format.
-    pub fn from_ubx_mga_gps(&self, now: Epoch, ubx: MgaGpsEphRef) -> (SV, Self) {
+    pub fn from_ubx_mga_gps(now: Epoch, ubx: MgaGpsEphRef) -> (SV, Self) {
         (
             SV {
                 prn: ubx.sv_id(),
@@ -66,7 +66,7 @@ impl Ephemeris {
     /// ## Returns
     /// - Identified [Constellation::QZSS] message emitter
     /// - [Ephemeris] structure ready to format.
-    pub fn from_ubx_mga_qzss(&self, now: Epoch, ubx: MgaGpsEphRef) -> (SV, Self) {
+    pub fn from_ubx_mga_qzss(now: Epoch, ubx: MgaGpsEphRef) -> (SV, Self) {
         (
             SV {
                 prn: ubx.sv_id(),
@@ -189,7 +189,7 @@ impl Ephemeris {
     /// ## Returns
     /// - Identified [Constellation::BeiDou] message emitter
     /// - [Ephemeris] structure ready to format.
-    pub fn from_ubx_mga_bds(&self, now: Epoch, ubx: MgaBdsEphRef) -> (SV, Self) {
+    pub fn from_ubx_mga_bds(now: Epoch, ubx: MgaBdsEphRef) -> (SV, Self) {
         (
             SV {
                 prn: ubx.sv_id(),
@@ -212,9 +212,16 @@ impl Ephemeris {
                     ("sqrta".to_string(), OrbitItem::F64(ubx.sqrt_a())),
                     ("iodc".to_string(), OrbitItem::F64(ubx.iodc() as f64)),
                     ("m0".to_string(), OrbitItem::F64(ubx.m0_semicircles())),
-                    ("tgd".to_string(), OrbitItem::F64(ubx.tgd_ns() * 1.0E-9)),
                     ("deltaN".to_string(), OrbitItem::F64(ubx.dn_semicircles())),
                     ("idot".to_string(), OrbitItem::F64(ubx.i_dot_semicircles())),
+                    (
+                        "tgd1b1b2".to_string(),
+                        OrbitItem::F64(ubx.tgd_ns() * 1.0E-9),
+                    ),
+                    (
+                        "tgd1b2b3".to_string(),
+                        OrbitItem::F64(ubx.tgd_ns() * 1.0E-9),
+                    ),
                     ("omega".to_string(), OrbitItem::F64(ubx.omega_semicircles())),
                     (
                         "omega0".to_string(),
@@ -325,7 +332,7 @@ impl Ephemeris {
     /// ## Returns
     /// - Identified [Constellation::Glonass] message emitter
     /// - [Ephemeris] structure ready to format.
-    pub fn from_ubx_mga_glo(&self, now: Epoch, ubx: MgaGloEphRef) -> (SV, Self) {
+    pub fn from_ubx_mga_glo(now: Epoch, ubx: MgaGloEphRef) -> (SV, Self) {
         (
             SV {
                 prn: ubx.sv_id(),
