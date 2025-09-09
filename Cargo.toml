@@ -127,7 +127,7 @@ strum = "0.26"
 thiserror = "2"
 lazy_static = "1.4"
 num-derive = "0.4"
-itertools = "0.13.0"
+itertools = "0.14.0"
 # dms-coordinates = "1.3.1"
 # geo = { version = "0.28", optional = true }
 flate2 = { version = "1", optional = true }
@@ -170,7 +170,7 @@ num-integer = "0.1.44"
 flate2 = "1"
 rand = "0.8.4"
 serde_json = "1"
-criterion = "0.6"
+criterion = "0.7"
 env_logger = "0.11"
 ublox = { git = "https://github.com/ublox-rs/ublox", rev = "d43c425ee2904d577d06e70d7fbd80d98132a8a6", features = ["std", "sfrbx-gps"] }
 
