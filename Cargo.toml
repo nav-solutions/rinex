@@ -172,6 +172,7 @@ rand = "0.8.4"
 serde_json = "1"
 criterion = "0.6"
 env_logger = "0.11"
+ublox = { git = "https://github.com/ublox-rs/ublox", rev = "d43c425ee2904d577d06e70d7fbd80d98132a8a6", features = ["std", "sfrbx-gps"] }
 
 [[bench]]
 name = "parsing"

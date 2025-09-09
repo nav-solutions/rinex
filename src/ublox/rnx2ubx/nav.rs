@@ -39,6 +39,7 @@ impl<'a> std::io::Read for Streamer<'a> {
             } else {
                 size += self.pending_size;
                 size_avail -= self.pending_size;
+                buffer[..self.pending_size].copy_from_slice(&self.buffer[..self.pending_size]);
                 self.pending_size = 0;
             }
         }
@@ -51,12 +52,12 @@ impl<'a> std::io::Read for Streamer<'a> {
                             let new_len = bytes.len();
 
                             if size_avail > new_len {
+                                buffer[size..size + new_len].copy_from_slice(&bytes);
                                 size += new_len;
                                 size_avail -= new_len;
-                                buffer.copy_from_slice(&bytes);
                             } else {
                                 self.pending_size = new_len;
-
+                                self.buffer[..new_len].copy_from_slice(&bytes);
                                 return Ok(size);
                             }
                         }
@@ -66,11 +67,12 @@ impl<'a> std::io::Read for Streamer<'a> {
                             let new_len = bytes.len();
 
                             if size_avail > new_len {
+                                buffer[size..size + new_len].copy_from_slice(&bytes);
                                 size += new_len;
                                 size_avail -= new_len;
-                                buffer.copy_from_slice(&bytes);
                             } else {
                                 self.pending_size = new_len;
+                                self.buffer[..new_len].copy_from_slice(&bytes);
                                 return Ok(size);
                             }
                         }
@@ -80,11 +82,12 @@ impl<'a> std::io::Read for Streamer<'a> {
                             let new_len = bytes.len();
 
                             if size_avail > new_len {
+                                buffer[size..size + new_len].copy_from_slice(&bytes);
                                 size += new_len;
                                 size_avail -= new_len;
-                                buffer.copy_from_slice(&bytes);
                             } else {
                                 self.pending_size = new_len;
+                                self.buffer[..new_len].copy_from_slice(&bytes);
                                 return Ok(size);
                             }
                         }
@@ -94,16 +97,19 @@ impl<'a> std::io::Read for Streamer<'a> {
                             let new_len = bytes.len();
 
                             if size_avail > new_len {
+                                buffer[size..size + new_len].copy_from_slice(&bytes);
                                 size += new_len;
                                 size_avail -= new_len;
-                                buffer.copy_from_slice(&bytes);
                             } else {
                                 self.pending_size = new_len;
+                                self.buffer[..new_len].copy_from_slice(&bytes);
                                 return Ok(size);
                             }
                         }
                     },
-                    _ => {},
+                    _ => {
+                        // frame not supported
+                    },
                 },
                 None => {
                     return Ok(size);

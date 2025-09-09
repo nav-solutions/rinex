@@ -25,10 +25,46 @@ impl Rinex {
     /// Obtain a [RNX2UBX] streamer to serialize this [Rinex] into a stream of U-Blox [PacketRef]s.
     /// You can then use the Iterator implementation to iterate each messages.
     /// The stream is RINEX format dependent, and we currently only truly support NAV RINEX.
-    pub fn rnx2ubx<'a>(&'a self) -> Option<RNX2UBX<'a>> {
-        Some(RNX2UBX {
+    ///
+    /// NAV RINEX example:
+    /// ```
+    /// use std::io::Read;
+    ///
+    /// // allocate
+    /// let mut buffer = [0; 1024];
+    ///
+    /// // NAV(V3) files will generate MGA-EPH frames
+    /// // and potentally one MGA-IONO per model.
+    /// let rinex = Rinex::from_gzip_file("data/NAV/V3/ESBC00DNK_R_20201770000_01D_MN.rnx.gz")
+    ///     .unwrap();
+    ///
+    /// // deploy
+    /// let mut streamer = rinex.rnx2ubx();
+    ///
+    /// // consume entirely
+    /// loop {
+    ///     match streamer.read(&mut buffer) {
+    ///         Ok(0) => {
+    ///             // end of stream
+    ///             break;
+    ///         },
+    ///         Ok(size) => {
+    ///             // example: decode all forwarded packets
+    ///             // "size" is the total number of bytes, not the number of UBX frames
+    ///             // note that we only encode complete frames, not partial frames.
+    ///         },
+    ///         Err(e) => {
+    ///             // we wind up here on buffering or system errors.
+    ///             // For example, the complete frame would not fit in the buffer.
+    ///             break;
+    ///         },
+    ///     }
+    /// }
+    /// ```
+    pub fn rnx2ubx<'a>(&'a self) -> RNX2UBX<'a> {
+        RNX2UBX {
             streamer: TypeDependentStreamer::new(self),
-        })
+        }
     }
 }
 
