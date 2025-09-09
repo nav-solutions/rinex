@@ -37,7 +37,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.82.0
+          toolchain: 1.83.0
           override: true
 
       - name: Bench
