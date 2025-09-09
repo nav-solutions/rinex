@@ -38,10 +38,10 @@ fn esbcdnk_ephv3_to_ubx_mga() {
                                 Ephemeris::from_ubx_mga_gps(k.epoch, encoded);
 
                             assert_eq!(decoded_sv, k.sv);
-                            
+
                             // TODO: testbench
                             // assert_eq!(decoded_eph, ephemeris.clone());
-                            
+
                             gps += 1;
                         },
                         _ => panic!("{}({}) did not encode a UBX-MGA-GPS frame", k.epoch, k.sv),
@@ -63,10 +63,10 @@ fn esbcdnk_ephv3_to_ubx_mga() {
                                 Ephemeris::from_ubx_mga_qzss(k.epoch, encoded);
 
                             assert_eq!(decoded_sv, k.sv);
-                            
+
                             // TODO: testbench
                             // assert_eq!(decoded_eph, ephemeris.clone());
-                            
+
                             qzss += 1;
                         },
                         _ => panic!("{}({}) did not encode a UBX-MGA-QZSS frame", k.epoch, k.sv),
@@ -88,10 +88,10 @@ fn esbcdnk_ephv3_to_ubx_mga() {
                                 Ephemeris::from_ubx_mga_bds(k.epoch, encoded);
 
                             assert_eq!(decoded_sv, k.sv);
-                            
+
                             // TODO: testbench
                             // assert_eq!(decoded_eph, ephemeris.clone());
-                            
+
                             bds += 1;
                         },
                         _ => panic!("{}({}) did not encode a UBX-MGA-BDS frame", k.epoch, k.sv),
@@ -245,8 +245,7 @@ fn esbcdnk_nav3_to_ubx() {
                     total_msg += 1;
                 }
             },
-            Err(_) => {
-            },
+            Err(_) => {},
         }
     }
 
