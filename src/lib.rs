@@ -70,6 +70,10 @@ mod binex;
 #[cfg_attr(docsrs, doc(cfg(feature = "rtcm")))]
 mod rtcm;
 
+#[cfg(feature = "ublox")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ublox")))]
+mod ublox;
+
 #[cfg(test)]
 mod tests;
 

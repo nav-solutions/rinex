@@ -5,42 +5,110 @@ use crate::{
 
 use ublox::PacketRef;
 
-/// NAV Record Streamer
+use std::io::{Error, ErrorKind};
+
 pub struct Streamer<'a> {
+    /// Pending bytes
+    pending_size: usize,
+
+    /// Pending frame
+    buffer: [u8; 1024],
+
+    /// Iterator
     ephemeris_iter: Box<dyn Iterator<Item = (&'a NavKey, &'a Ephemeris)> + 'a>,
 }
 
 impl<'a> Streamer<'a> {
     pub fn new(rinex: &'a Rinex) -> Self {
         Self {
+            pending_size: 0,
+            buffer: [0; 1024],
             ephemeris_iter: rinex.nav_ephemeris_frames_iter(),
         }
     }
 }
 
-impl<'a> Iterator for Streamer<'a> {
-    type Item = PacketRef<'a>;
-    fn next(&mut self) -> Option<Self::Item> {
-        let (key, ephemeris) = self.ephemeris_iter.next()?;
+impl<'a> std::io::Read for Streamer<'a> {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        let mut size = 0;
+        let mut size_avail = buffer.len();
 
-        match key.sv.constellation {
-            Constellation::GPS => {
-                let _ = ephemeris.to_ubx_mga_gps_qzss(key.epoch, key.sv)?;
-                None // TODO: UBX encapsulation
-            },
-            Constellation::QZSS => {
-                let _ = ephemeris.to_ubx_mga_gps_qzss(key.epoch, key.sv)?;
-                None // TODO: UBX encapsulation
-            },
-            Constellation::BeiDou => {
-                let _ = ephemeris.to_ubx_mga_bds(key.epoch, key.sv)?;
-                None // TODO: UBX encapsulation
-            },
-            Constellation::Glonass => {
-                let _ = ephemeris.to_ubx_mga_glo(key.sv)?;
-                None // TODO: UBX encapsulation
-            },
-            _ => None,
+        if self.pending_size > 0 {
+            if size_avail < self.pending_size {
+                return Err(Error::new(ErrorKind::StorageFull, "would not fit"));
+            } else {
+                size += self.pending_size;
+                size_avail -= self.pending_size;
+                self.pending_size = 0;
+            }
+        }
+
+        loop {
+            match self.ephemeris_iter.next() {
+                Some((key, ephemeris)) => match key.sv.constellation {
+                    Constellation::GPS => {
+                        if let Some(bytes) = ephemeris.to_ubx_mga_gps_qzss(key.epoch, key.sv) {
+                            let new_len = bytes.len();
+
+                            if size_avail > new_len {
+                                size += new_len;
+                                size_avail -= new_len;
+                                buffer.copy_from_slice(&bytes);
+                            } else {
+                                self.pending_size = new_len;
+
+                                return Ok(size);
+                            }
+                        }
+                    },
+                    Constellation::QZSS => {
+                        if let Some(bytes) = ephemeris.to_ubx_mga_gps_qzss(key.epoch, key.sv) {
+                            let new_len = bytes.len();
+
+                            if size_avail > new_len {
+                                size += new_len;
+                                size_avail -= new_len;
+                                buffer.copy_from_slice(&bytes);
+                            } else {
+                                self.pending_size = new_len;
+                                return Ok(size);
+                            }
+                        }
+                    },
+                    Constellation::BeiDou => {
+                        if let Some(bytes) = ephemeris.to_ubx_mga_bds(key.epoch, key.sv) {
+                            let new_len = bytes.len();
+
+                            if size_avail > new_len {
+                                size += new_len;
+                                size_avail -= new_len;
+                                buffer.copy_from_slice(&bytes);
+                            } else {
+                                self.pending_size = new_len;
+                                return Ok(size);
+                            }
+                        }
+                    },
+                    Constellation::Glonass => {
+                        if let Some(bytes) = ephemeris.to_ubx_mga_glo(key.sv) {
+                            let new_len = bytes.len();
+
+                            if size_avail > new_len {
+                                size += new_len;
+                                size_avail -= new_len;
+                                buffer.copy_from_slice(&bytes);
+                            } else {
+                                self.pending_size = new_len;
+                                return Ok(size);
+                            }
+                        }
+                    },
+                    _ => {},
+                },
+                None => {
+                    return Ok(size);
+                },
+            }
         }
     }
 }
