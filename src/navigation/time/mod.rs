@@ -9,6 +9,10 @@ use hifitime::{Duration, Polynomial};
 pub(crate) mod formatting;
 pub(crate) mod parsing;
 
+#[cfg(feature = "ublox")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ublox")))]
+pub mod ublox;
+
 /// System Time (offset) Message
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

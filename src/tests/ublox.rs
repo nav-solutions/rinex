@@ -276,14 +276,21 @@ fn esbcdnk_nav3_to_ubx() {
     );
 }
 
-// UBX2RINEX (OBS V3)
+// MGA-TIM-XXX
 #[test]
-fn esbcdnk_obs_v3_to_ubx() {
+fn esbcdnk_timv4_to_ubx_mga() {
     let mut total_msg = 0;
     let mut total_size = 0;
 
     let mut buffer = [0; 2048];
 
-    println!("ESCDNK-OBS (V3): {:8} bytes", total_size);
-    println!("ESCDNK-OBS (V3): {:8} messages", total_msg);
+    let rinex = Rinex::from_gzip_file("data/NAV/V4/BRD400DLR_S_20230710000_01D_MN.rnx.gz").unwrap();
+
+    for (k, time_offset) in rinex.nav_system_time_frames_iter() {
+        match k.sv.constellation {
+            Constellation::GPS => {},
+            Constellation::Galileo => {},
+            _ => {},
+        }
+    }
 }
