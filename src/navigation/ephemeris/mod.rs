@@ -28,7 +28,12 @@ pub mod binex;
 use crate::prelude::nav::Almanac;
 
 #[cfg(feature = "ublox")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ublox")))]
 mod ublox;
+
+#[cfg(feature = "rtcm")]
+#[cfg_attr(docsrs, doc(cfg(feature = "rtcm")))]
+mod rtcm;
 
 #[cfg(feature = "nav")]
 use anise::{
