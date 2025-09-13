@@ -8,8 +8,9 @@ use std::collections::HashMap;
 use binex::prelude::{EphemerisFrame, GALEphemeris, GLOEphemeris, GPSEphemeris, SBASEphemeris};
 
 impl Ephemeris {
-    /// Converts this BINEX [EphemerisFrame] to [Ephemeris], ready to format.
-    /// We support GPS, QZSS, Galileo, Glonass and SBAS frames.
+    /// Converts this BINEX [EphemerisFrame] to [Ephemeris], ready to format.  
+    /// We support [Constellation::GPS],
+    /// [Constellation::SBAS], [Constellation::Galileo] and [Constellation::Glonass].
     ///
     /// ## Inputs
     /// - now: usually the [Epoch] of message reception
@@ -18,17 +19,17 @@ impl Ephemeris {
             EphemerisFrame::GPS(serialized) => Some((
                 SV::new(Constellation::GPS, serialized.sv_prn),
                 Self {
-                    clock_bias: 0.0,
-                    clock_drift: 0.0,
-                    clock_drift_rate: 0.0,
+                    clock_bias: serialized.clock_offset as f64,
+                    clock_drift: serialized.clock_drift as f64,
+                    clock_drift_rate: serialized.clock_drift_rate as f64,
                     orbits: HashMap::from_iter([("week".to_string(), OrbitItem::from(0.0f64))]),
                 },
             )),
             EphemerisFrame::SBAS(serialized) => Some((
-                SV::new(Constellation::SBAS, serialized.sbas_prn),
+                SV::new(Constellation::SBAS, serialized.sbas_prn - 100),
                 Self {
-                    clock_bias: 0.0,
-                    clock_drift: 0.0,
+                    clock_bias: serialized.clock_offset as f64,
+                    clock_drift: serialized.clock_drift as f64,
                     clock_drift_rate: 0.0,
                     orbits: HashMap::from_iter([("week".to_string(), OrbitItem::from(0.0f64))]),
                 },
@@ -36,8 +37,8 @@ impl Ephemeris {
             EphemerisFrame::GLO(serialized) => Some((
                 SV::new(Constellation::Glonass, serialized.slot),
                 Self {
-                    clock_bias: 0.0,
-                    clock_drift: 0.0,
+                    clock_bias: serialized.clock_offset_s as f64,
+                    clock_drift: serialized.clock_rel_freq_bias as f64,
                     clock_drift_rate: 0.0,
                     orbits: HashMap::from_iter([("week".to_string(), OrbitItem::from(0.0f64))]),
                 },
@@ -45,9 +46,9 @@ impl Ephemeris {
             EphemerisFrame::GAL(serialized) => Some((
                 SV::new(Constellation::Galileo, serialized.sv_prn),
                 Self {
-                    clock_bias: 0.0,
-                    clock_drift: 0.0,
-                    clock_drift_rate: 0.0,
+                    clock_bias: serialized.clock_offset as f64,
+                    clock_drift: serialized.clock_drift as f64,
+                    clock_drift_rate: serialized.clock_drift_rate as f64,
                     orbits: HashMap::from_iter([("week".to_string(), OrbitItem::from(0.0f64))]),
                 },
             )),
@@ -55,8 +56,14 @@ impl Ephemeris {
         }
     }
 
-    /// Encodes this [Ephemeris] to BINEX [EphemerisFrame], ready to encode.
-    /// We currently support GPS, QZSS, SBAS, Galileo and Glonass.
+    /// Encodes this [Ephemeris] to BINEX [EphemerisFrame], ready to encode.  
+    /// We support [Constellation::GPS],
+    /// [Constellation::SBAS], [Constellation::Galileo] and [Constellation::Glonass].
+    ///
+    /// NB:: we tolerate null acceleration value
+    /// for both [Constellation::Glonass] and [Constellation::SBAS] vehicles
+    /// which may impact your final accuracy. You should post-correct that otherwise,
+    /// or potentially drop null values in this case.
     ///
     /// ## Inputs
     /// - toc: time of clock as [Epoch]
@@ -70,7 +77,7 @@ impl Ephemeris {
         let toc = toc.to_time_of_week().1 / 1_000_000_000;
 
         match sv.constellation {
-            Constellation::GPS | Constellation::QZSS => {
+            Constellation::GPS => {
                 let clock_offset = self.clock_bias as f32;
                 let clock_drift = self.clock_drift as f32;
                 let clock_drift_rate = self.clock_drift_rate as f32;
@@ -92,10 +99,10 @@ impl Ephemeris {
                 let sqrt_a = self.orbits.get("sqrta")?.as_f64();
                 let omega_rad = self.orbits.get("omega")?.as_f64();
                 let omega_0_rad = self.orbits.get("omega0")?.as_f64();
-                let omega_dot_rad_s = self.orbits.get("oemgaDot")?.as_f64() as f32;
+                let omega_dot_rad_s = self.orbits.get("omegaDot")?.as_f64() as f32;
 
                 let i_dot_rad_s = self.orbits.get("idot")?.as_f64() as f32;
-                let delta_n_rad_s = self.orbits.get("delta_n")?.as_f64() as f32;
+                let delta_n_rad_s = self.orbits.get("deltaN")?.as_f64() as f32;
 
                 let tgd = self.orbits.get("tgd")?.as_f64() as f32;
                 let iode = self.orbits.get("iode")?.as_u32() as i32;
@@ -139,17 +146,17 @@ impl Ephemeris {
                 // let slot = self.orbits.get("channel")?.as_u8();
                 let sv_health = self.orbits.get("health")?.as_u8();
 
-                let x_km = self.orbits.get("satPosX")?.as_f64();
-                let vel_x_km = self.orbits.get("velX")?.as_f64();
-                let acc_x_km = self.orbits.get("accelX")?.as_f64();
+                let x_km = self.get_orbit_f64("satPosX")?;
+                let y_km = self.get_orbit_f64("satPosY")?;
+                let z_km = self.get_orbit_f64("satPosZ")?;
 
-                let y_km = self.orbits.get("satPosX")?.as_f64();
-                let vel_y_km = self.orbits.get("velY")?.as_f64();
-                let acc_y_km = self.orbits.get("accelY")?.as_f64();
+                let vel_x_km = self.get_orbit_f64("velX")?;
+                let vel_y_km = self.get_orbit_f64("velY")?;
+                let vel_z_km = self.get_orbit_f64("velZ")?;
 
-                let z_km = self.orbits.get("satPosX")?.as_f64();
-                let vel_z_km = self.orbits.get("velZ")?.as_f64();
-                let acc_z_km = self.orbits.get("accelZ")?.as_f64();
+                let acc_x_km = self.get_orbit_f64("accelX").unwrap_or_default();
+                let acc_y_km = self.get_orbit_f64("accelY").unwrap_or_default();
+                let acc_z_km = self.get_orbit_f64("accelZ").unwrap_or_default();
 
                 Some(EphemerisFrame::GLO(GLOEphemeris {
                     slot: 0,  // TODO
@@ -180,12 +187,12 @@ impl Ephemeris {
                 let clock_drift = self.clock_drift as f32;
                 let clock_drift_rate = self.clock_drift_rate as f32;
 
-                let cic = self.orbits.get("cic")?.as_f64() as f32;
-                let crc = self.orbits.get("crc")?.as_f64() as f32;
-                let cis = self.orbits.get("cis")?.as_f64() as f32;
-                let crs = self.orbits.get("crs")?.as_f64() as f32;
-                let cuc = self.orbits.get("cuc")?.as_f64() as f32;
-                let cus = self.orbits.get("cus")?.as_f64() as f32;
+                let cic = self.get_orbit_f64("cic")? as f32;
+                let crc = self.get_orbit_f64("crc")? as f32;
+                let cis = self.get_orbit_f64("cis")? as f32;
+                let crs = self.get_orbit_f64("crs")? as f32;
+                let cuc = self.get_orbit_f64("cuc")? as f32;
+                let cus = self.get_orbit_f64("cus")? as f32;
 
                 let e = self.orbits.get("e")?.as_f64();
                 let m0_rad = self.orbits.get("m0")?.as_f64();
@@ -194,14 +201,14 @@ impl Ephemeris {
                 let omega_rad = self.orbits.get("omega")?.as_f64();
                 let omega_0_rad = self.orbits.get("omega0")?.as_f64();
 
-                let omega_dot_rad_s = self.orbits.get("oemgaDot")?.as_f64() as f32;
-                let omega_dot_semi_circles = omega_dot_rad_s;
+                let omega_dot_rad_s = self.orbits.get("omegaDot")?.as_f64() as f32;
+                let omega_dot_semi_circles = omega_dot_rad_s; // TODO double check (=binex testbench)
 
                 let i_dot_rad_s = self.orbits.get("idot")?.as_f64() as f32;
-                let idot_semi_circles_s = i_dot_rad_s;
+                let idot_semi_circles_s = i_dot_rad_s; // TODO double check (=binex testbench)
 
-                let delta_n_rad_s = self.orbits.get("delta_n")?.as_f64() as f32;
-                let delta_n_semi_circles_s = delta_n_rad_s;
+                let delta_n_rad_s = self.orbits.get("deltaN")?.as_f64() as f32;
+                let delta_n_semi_circles_s = delta_n_rad_s; // TODO double check (=binex testbench)
 
                 let sv_health = self.get_orbit_f64("health")? as u16;
                 let sisa = self.get_orbit_f64("sisa").unwrap_or_default() as f32; // TODO SISA issue?
@@ -246,22 +253,20 @@ impl Ephemeris {
                     let clock_offset = self.clock_bias;
                     let clock_drift = self.clock_drift;
 
-                    let x_km = self.orbits.get("satPosX")?.as_f64();
-                    let vel_x_km = self.orbits.get("velX")?.as_f64();
-                    let acc_x_km = self.orbits.get("accelX")?.as_f64();
+                    let x_km = self.get_orbit_f64("satPosX")?;
+                    let y_km = self.get_orbit_f64("satPosY")?;
+                    let z_km = self.get_orbit_f64("satPosZ")?;
 
-                    let y_km = self.orbits.get("satPosX")?.as_f64();
-                    let vel_y_km = self.orbits.get("velY")?.as_f64();
-                    let acc_y_km = self.orbits.get("accelY")?.as_f64();
+                    let vel_x_km = self.get_orbit_f64("velX")?;
+                    let vel_y_km = self.get_orbit_f64("velY")?;
+                    let vel_z_km = self.get_orbit_f64("velZ")?;
 
-                    let z_km = self.orbits.get("satPosX")?.as_f64();
-                    let vel_z_km = self.orbits.get("velZ")?.as_f64();
-                    let acc_z_km = self.orbits.get("accelZ")?.as_f64();
-
-                    let iodn = self.orbits.get("iodn")?.as_u8();
+                    let acc_x_km = self.get_orbit_f64("accelX").unwrap_or_default();
+                    let acc_y_km = self.get_orbit_f64("accelY").unwrap_or_default();
+                    let acc_z_km = self.get_orbit_f64("accelZ").unwrap_or_default();
 
                     Some(EphemerisFrame::SBAS(SBASEphemeris {
-                        sbas_prn: sv.prn,
+                        sbas_prn: sv.prn + 100,
                         toe: 0,
                         tow: 0,
                         clock_offset,
@@ -277,7 +282,7 @@ impl Ephemeris {
                         acc_z_km,
                         uint1: 0, // TODO
                         ura: 0,   // TODO
-                        iodn,
+                        iodn: 0,  // TODO
                     }))
                 } else {
                     None
