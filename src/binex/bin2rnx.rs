@@ -17,18 +17,25 @@ use log::{error, info};
 pub struct BIN2RNX<'a, R: Read> {
     /// True when collecting is feasible
     pub active: bool,
+
     /// Collected size, for postponing mechanism
     size: usize,
+
     /// Snapshot mode
     pub snapshot_mode: SnapshotMode,
+
     /// Postponing option
     pub postponing: Postponing,
+
     /// Deploy time
     deploy_t: Epoch,
+
     /// BINEX [Decoder]
     decoder: Decoder<'a, R>,
+
     /// Pending NAV [Rinex]
     nav_rinex: Rinex,
+
     /// Pending OBS [Rinex]
     obs_rinex: Rinex,
 }

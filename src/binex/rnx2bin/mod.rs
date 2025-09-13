@@ -30,16 +30,22 @@ impl<'a> Iterator for TypeDependentStreamer<'a> {
 pub struct RNX2BIN<'a> {
     /// First [Epoch] or [Epoch] of publication
     t0: Epoch,
+
     /// BINEX [Message] encoding [Meta]
     meta: Meta,
+
     /// Header consumption State machine
     state: State,
+
     /// RINEX [Header] snapshot
     header: &'a Header,
+
     /// RINEX [TypeDependentStreamer]
     streamer: TypeDependentStreamer<'a>,
+
     /// Assert (before deployment) whether the Header should not be serialized (no default!)
     pub skip_header: bool,
+
     /// Define (before deployment) a custom message to be included in the announcement.
     pub custom_announce: Option<String>,
 }

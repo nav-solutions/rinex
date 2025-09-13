@@ -20,6 +20,10 @@ use log::error;
 #[cfg_attr(docsrs, doc(cfg(feature = "nav")))]
 pub mod kepler;
 
+#[cfg(feature = "binex")]
+#[cfg_attr(docsrs, doc(cfg(feature = "binex")))]
+pub mod binex;
+
 #[cfg(feature = "nav")]
 use crate::prelude::nav::Almanac;
 
