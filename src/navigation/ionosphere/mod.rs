@@ -6,6 +6,10 @@ mod bdgim;
 mod klobuchar;
 mod nequick_g;
 
+#[cfg(feature = "ublox")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ublox")))]
+pub mod ublox;
+
 pub use bdgim::BdModel;
 pub use klobuchar::{KbModel, KbRegionCode};
 pub use nequick_g::{NgModel, NgRegionFlags};
@@ -14,11 +18,13 @@ pub use nequick_g::{NgModel, NgRegionFlags};
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum IonosphereModel {
-    /// Klobuchar Model
+    /// Klobuchar [KbModel] streamed by GPS
     Klobuchar(KbModel),
-    /// Nequick-G Model
+
+    /// Nequick-G [NgModel] streamed by GAL
     NequickG(NgModel),
-    /// BDGIM Model
+
+    /// BDGIM [BdModel] streamed by BDS
     Bdgim(BdModel),
 }
 

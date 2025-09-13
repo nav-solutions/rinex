@@ -29,6 +29,9 @@ mod meteo;
 #[cfg(feature = "nav")]
 mod nav;
 
+#[cfg(feature = "ublox")]
+mod ublox;
+
 #[cfg(all(feature = "flate2", feature = "nav"))]
 mod kepler;
 

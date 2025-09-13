@@ -23,7 +23,8 @@ pub mod kepler;
 #[cfg(feature = "nav")]
 use crate::prelude::nav::Almanac;
 
-use crate::prelude::{Constellation, Duration, Epoch, TimeScale, SV};
+#[cfg(feature = "ublox")]
+mod ublox;
 
 #[cfg(feature = "nav")]
 use anise::{
@@ -33,6 +34,8 @@ use anise::{
 };
 
 use std::collections::HashMap;
+
+use crate::prelude::{Constellation, Duration, Epoch, TimeScale, SV};
 
 /// Ephemeris Navigation message. May be found in all RINEX revisions.
 /// Describes the content of the radio message at publication time.

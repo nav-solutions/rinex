@@ -70,6 +70,10 @@ mod binex;
 #[cfg_attr(docsrs, doc(cfg(feature = "rtcm")))]
 mod rtcm;
 
+#[cfg(feature = "ublox")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ublox")))]
+mod ublox;
+
 #[cfg(test)]
 mod tests;
 
@@ -197,6 +201,10 @@ pub mod prelude {
     #[cfg(feature = "rtcm")]
     #[cfg_attr(docsrs, doc(cfg(feature = "rtcm")))]
     pub use crate::rtcm::RTCM2RNX;
+
+    #[cfg(feature = "ublox")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "ublox")))]
+    pub use crate::ublox::RNX2UBX;
 }
 
 /// Package dedicated to file production.
