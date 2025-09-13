@@ -3,8 +3,6 @@ use crate::{
     prelude::{Constellation, Rinex},
 };
 
-use ublox::PacketRef;
-
 use std::io::{Error, ErrorKind};
 
 pub struct Streamer<'a> {
