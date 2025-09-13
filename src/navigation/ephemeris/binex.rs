@@ -66,6 +66,9 @@ impl Ephemeris {
     /// - [EphemerisFrame]: all required fields must exist
     /// so we can forge a frame.
     pub fn to_binex(&self, toc: Epoch, sv: SV) -> Option<EphemerisFrame> {
+        let tow = toc.to_time_of_week().1 / 1_000_000_000;
+        let toc = toc.to_time_of_week().1 / 1_000_000_000;
+
         match sv.constellation {
             Constellation::GPS | Constellation::QZSS => {
                 let clock_offset = self.clock_bias as f32;
@@ -103,8 +106,8 @@ impl Ephemeris {
                     iode,
                     iodc,
                     toe,
-                    tow: 0, // TODO
-                    toc: 0, // TODO
+                    tow: tow as i32,
+                    toc: toc as i32,
                     tgd,
                     clock_offset,
                     clock_drift,
@@ -173,8 +176,6 @@ impl Ephemeris {
                 }))
             },
             Constellation::Galileo => {
-                let _sv_prn = sv.prn;
-
                 let clock_offset = self.clock_bias as f32;
                 let clock_drift = self.clock_drift as f32;
                 let clock_drift_rate = self.clock_drift_rate as f32;
@@ -202,16 +203,21 @@ impl Ephemeris {
                 let delta_n_rad_s = self.orbits.get("delta_n")?.as_f64() as f32;
                 let delta_n_semi_circles_s = delta_n_rad_s;
 
-                let sv_health = self.orbits.get("health")?.as_f64() as u16;
+                let sv_health = self.get_orbit_f64("health")? as u16;
+                let sisa = self.get_orbit_f64("sisa").unwrap_or_default() as f32; // TODO SISA issue?
+                let iodnav = self.get_orbit_f64("iodnav").unwrap_or_default() as i32; // TODO IODNAV issue?
+
+                let (toe_week, toe_nanos) = self.toe(sv)?.to_time_of_week();
+                let toe_s = (toe_nanos / 1_000_000_000) as i32;
 
                 Some(EphemerisFrame::GAL(GALEphemeris {
                     sv_prn: sv.prn,
-                    toe_week: 0,       // TODO
-                    tow: 0,            // TODO
-                    toe_s: 0,          // TODO
+                    tow: tow as i32,
+                    toe_week: toe_week as u16,
+                    toe_s,
                     bgd_e5a_e1_s: 0.0, // TODO
                     bgd_e5b_e1_s: 0.0, // TODO
-                    iodnav: 0,         // TODO
+                    iodnav,
                     clock_drift_rate,
                     clock_drift,
                     clock_offset,
@@ -230,7 +236,7 @@ impl Ephemeris {
                     i0_rad,
                     omega_dot_semi_circles,
                     idot_semi_circles_s,
-                    sisa: 0.0, // TODO
+                    sisa,
                     sv_health,
                     source: 0, // TODO
                 }))
