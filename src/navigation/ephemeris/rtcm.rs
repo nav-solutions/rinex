@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use hifitime::prelude::Unit;
+use hifitime::prelude::{Duration, Unit};
 
 use crate::{
     navigation::{Ephemeris, OrbitItem},
@@ -27,7 +27,7 @@ impl Ephemeris {
     ///
     /// ## Output
     /// - [Msg1019T] GPS ephemeris message.
-    pub fn to_rtcm_gps_msg1019(&self, toc: Epoch, sv: SV) -> Option<Msg1019T> {
+    pub fn to_rtcm_gps1019(&self, toc: Epoch, sv: SV) -> Option<Msg1019T> {
         if sv.constellation != Constellation::GPS {
             return None; // invalid API usage
         }
@@ -57,10 +57,10 @@ impl Ephemeris {
         let omega_sc = self.get_orbit_f64("omega")?;
         let omegadot_sc_s = self.get_orbit_f64("omegaDot")?;
         let omega0_sc = self.get_orbit_f64("omega0")?;
-        let tgd_s = self.tgd()?.to_unit(Unit::Second) as f32;
         let sv_health_ind = self.get_orbit_f64("health")? as u8;
         let l2_p_data_flag = self.get_orbit_f64("l2p")? as u8;
-        let fit_interval_ind = self.get_orbit_f64("fitInt")? as u8;
+        let fit_interval_ind = self.get_orbit_f64("fitInt").unwrap_or_default() as u8; // TODO fit int issue
+        let tgd_s = self.tgd().unwrap_or(Duration::ZERO).to_unit(Unit::Second) as f32;
 
         let code_on_l2_ind = 0; // TODO
 
@@ -105,7 +105,7 @@ impl Ephemeris {
     ///
     /// ## Output
     /// - [Msg1020T] Glonass ephemeris message.
-    pub fn to_rtcm_glo_msg1020(&self, toc: Epoch, sv: SV) -> Option<Msg1020T> {
+    pub fn to_rtcm_glo1020(&self, toc: Epoch, sv: SV) -> Option<Msg1020T> {
         if sv.constellation != Constellation::Glonass {
             return None; // invalid API usage
         }
@@ -210,7 +210,7 @@ impl Ephemeris {
     ///
     /// ## Output
     /// - [Msg1045T] Galileo ephemeris message.
-    pub fn to_rtcm_gal_msg1045(&self, toc: Epoch, sv: SV) -> Option<Msg1045T> {
+    pub fn to_rtcm_gal1045(&self, toc: Epoch, sv: SV) -> Option<Msg1045T> {
         if sv.constellation != Constellation::Galileo {
             return None; // invalid API usage
         }
@@ -235,13 +235,13 @@ impl Ephemeris {
         let omega_sc = self.get_orbit_f64("omega")?;
         let omegadot_sc_s = self.get_orbit_f64("omegaDot")?;
         let sqrt_a_sqrt_m = self.get_orbit_f64("sqrta")?;
+        let iodnav = self.get_orbit_f64("iodnav").unwrap_or_default() as u16; // TODO IODNAV issue?
+        let bgd_e1_e5a_s = self.get_orbit_f64("bgdE5aE1").unwrap_or_default() as f32; // TODO BGD_E1/E5A
+        let sisa_e1_e5a_index = self.get_orbit_f64("sisa").unwrap_or_default() as u8; // TODO SISA index
 
-        let iodnav = 0; // TODO
-        let bgd_e1_e5a_s = 0.0; // TODO
         let e5a_data_validity_flag = 0; // TODO
         let e5a_sig_health_ind = 0; // TODO
         let reserved_489_7 = 0; // TODO
-        let sisa_e1_e5a_index = 0; // TODO
 
         Some(Msg1045T {
             af0_s: self.clock_bias,
@@ -282,7 +282,7 @@ impl Ephemeris {
     ///
     /// ## Output
     /// - [Msg1045T] Galileo ephemeris message.
-    pub fn to_rtcm_gal_msg1046(&self, toc: Epoch, sv: SV) -> Option<Msg1046T> {
+    pub fn to_rtcm_gal1046(&self, toc: Epoch, sv: SV) -> Option<Msg1046T> {
         if sv.constellation != Constellation::Galileo {
             return None; // invalid API usage
         }
@@ -361,7 +361,7 @@ impl Ephemeris {
     ///
     /// ## Output
     /// - [Msg1042T] BDS ephemeris message.
-    pub fn to_rtcm_bds_msg1042(&self, toc: Epoch, sv: SV) -> Option<Msg1042T> {
+    pub fn to_rtcm_bds1042(&self, toc: Epoch, sv: SV) -> Option<Msg1042T> {
         if sv.constellation != Constellation::BeiDou {
             return None; // invalid API usage
         }
@@ -391,9 +391,10 @@ impl Ephemeris {
         let sqrt_a_sqrt_m = self.get_orbit_f64("sqrta")?;
 
         let sv_health_flag = 0; // TODO
-        let tgd1_s = self.tgd()?.to_unit(Unit::Second) as f32;
-        let tgd2_s = tgd1_s; // TODO
         let ura_index = 0; // TODO
+
+        let tgd1_s = self.tgd().unwrap_or(Duration::ZERO).to_unit(Unit::Second) as f32;
+        let tgd2_s = tgd1_s; // TODO
 
         Some(Msg1042T {
             a0_s: self.clock_bias,
@@ -434,14 +435,14 @@ impl Ephemeris {
     ///
     /// ## Output
     /// - [Msg1044T] QZSS ephemeris message.
-    pub fn to_rtcm_qzss_msg1044(&self, epoch: Epoch, sv: SV) -> Option<Msg1044T> {
-        if sv.constellation != Constellation::GPS {
+    pub fn to_rtcm_qzss1044(&self, epoch: Epoch, sv: SV) -> Option<Msg1044T> {
+        if sv.constellation != Constellation::QZSS {
             return None; // invalid API usage
         }
 
         let (toc_week, toc_week_nanos) = epoch.to_time_of_week();
-        let toc_s = (toc_week_nanos as f32) * 1.0E-9;
 
+        let toc_s = (toc_week_nanos as f32) * 1.0E-9;
         let toe_s = self.toe(sv)?.duration.to_unit(Unit::Second) as f32;
 
         let idot_sc_s = self.get_orbit_f64("idot")?;
@@ -464,7 +465,7 @@ impl Ephemeris {
         let tgd_s = self.tgd()?.to_unit(Unit::Second) as f32;
         let sv_health_ind = self.get_orbit_f64("health")? as u8;
         let l2_p_data_flag = self.get_orbit_f64("l2p")? as u8;
-        let fit_interval_ind = self.get_orbit_f64("fitInt")? as u8;
+        let fit_interval_ind = self.get_orbit_f64("fitInt").unwrap_or_default() as u8; // TODO fitInt issue
 
         let code_on_l2_ind = 0; // TODO
         let ura_index = 0; // TODO
