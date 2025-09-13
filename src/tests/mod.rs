@@ -29,6 +29,9 @@ mod meteo;
 #[cfg(feature = "nav")]
 mod nav;
 
+#[cfg(feature = "rtcm")]
+mod rtcm;
+
 #[cfg(feature = "ublox")]
 mod ublox;
 
