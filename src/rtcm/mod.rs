@@ -48,12 +48,14 @@ impl Rinex {
     /// loop {
     ///     match streamer.next() {
     ///         Some(message) => {
+    ///             // TODO
     ///         },
     ///         None => {
     ///             // end of stream
     ///             // RINEX file has been consumed entirely
     ///             break;
     ///         },
+    ///     }
     /// }
     pub fn rnx2rtcm<'a>(rinex: &'a Rinex) -> Option<RNX2RTCM<'a>> {
         let type_dependent = match rinex.header.rinex_type {
