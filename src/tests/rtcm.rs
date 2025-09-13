@@ -47,13 +47,13 @@ fn esbcdnk_ephv3_to_rtcm() {
     }
 
     assert!(gps1019 > 0);
-    // assert!(glo1020 > 0); // TODO
+    assert!(glo1020 > 0);
     assert!(bds1042 > 0);
     assert!(qzss1044 > 0);
     assert!(gal1045 > 0);
 
     assert_eq!(gps1019, 253);
-    // assert_eq!(glo1020, 0);
+    assert_eq!(glo1020, 510);
     assert_eq!(gal1045, 806);
     assert_eq!(bds1042, 353);
     assert_eq!(qzss1044, 15);

@@ -99,6 +99,11 @@ impl Ephemeris {
     }
 
     /// Converts this [Ephemeris] to [Msg1020T] [Constellation::Glonass] ephemeris message.
+    ///
+    /// NB: we tolerate null secondary derivative terms (acceleration terms), which may
+    /// impact the accuracy of your navigation. Double check the output value and possibly
+    /// post-correct them.
+    ///
     /// ## Input
     /// - toc: Time of Clock as [Epoch]
     /// - sv: attached satellite as [SV] which must a [Constellation::Glonass] vehicle.
@@ -110,13 +115,11 @@ impl Ephemeris {
             return None; // invalid API usage
         }
 
-        let toe = self.toe(sv)?;
+        let toc_nanos = Duration::from_nanoseconds(toc.to_time_of_week().1 as f64);
 
-        let tweek_seconds = toe.to_time_of_week().1 * 1_000_000_000;
-
-        let tk_h = 0; // TODO
-        let tk_min = 0; // TODO
-        let tk_s = 0; // TODO
+        let tk_h = toc_nanos.to_unit(Unit::Hour).round() as u8;
+        let tk_min = (toc_nanos.to_unit(Unit::Hour) / 60.0).round() as u8;
+        let tk_s = toc_nanos.to_unit(Unit::Second).round() as u8;
 
         let glo_satellite_freq_chan_number = 0; // TODO
         let glo_alm_health_flag = 0; // TODO
@@ -133,17 +136,17 @@ impl Ephemeris {
         let tau_c_s = 0.0; // TODO
         let tau_n_s = 0.0; // TODO
 
-        let xn_km = 0.0; // TODO
-        let yn_km = 0.0; // TODO
-        let zn_km = 0.0; // TODO
+        let xn_km = self.get_orbit_f64("satPosX")?;
+        let yn_km = self.get_orbit_f64("satPosY")?;
+        let zn_km = self.get_orbit_f64("satPosZ")?;
 
-        let xn_first_deriv_km_s = 0.0; // TODO
-        let yn_first_deriv_km_s = 0.0; // TODO
-        let zn_first_deriv_km_s = 0.0; // TODO
+        let xn_first_deriv_km_s = self.get_orbit_f64("velX")?;
+        let yn_first_deriv_km_s = self.get_orbit_f64("velY")?;
+        let zn_first_deriv_km_s = self.get_orbit_f64("velZ")?;
 
-        let xn_second_deriv_km_s2 = 0.0; // TODO
-        let yn_second_deriv_km_s2 = 0.0; // TODO
-        let zn_second_deriv_km_s2 = 0.0; // TODO
+        let xn_second_deriv_km_s2 = self.get_orbit_f64("accelX").unwrap_or_default() as f32;
+        let yn_second_deriv_km_s2 = self.get_orbit_f64("accelY").unwrap_or_default() as f32;
+        let zn_second_deriv_km_s2 = self.get_orbit_f64("accelZ").unwrap_or_default() as f32;
 
         let en_d = 0; // TODO
         let na_d = 0; // TODO
@@ -167,9 +170,9 @@ impl Ephemeris {
             glo_alm_health_flag,
             glo_alm_health_avail_flag,
             p1_ind,
-            tk_h,
-            tk_min,
-            tk_s,
+            tk_h: tk_h as u8,
+            tk_min: tk_min as u8,
+            tk_s: tk_s as u8,
             glo_eph_health_flag,
             p2_flag,
             tb_min,
