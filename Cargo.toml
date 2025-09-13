@@ -123,7 +123,7 @@ serde = { version = "1.0", default-features = false, features = ["derive"] }
 [dependencies]
 num = "0.4"
 regex = "1"
-strum = "0.26"
+strum = "0.27"
 thiserror = "2"
 lazy_static = "1.4"
 num-derive = "0.4"
