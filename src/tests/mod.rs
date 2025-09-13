@@ -20,6 +20,9 @@ mod merge;
 #[cfg(feature = "clock")]
 mod clock;
 
+#[cfg(feature = "binex")]
+mod binex;
+
 #[cfg(feature = "processing")]
 mod processing;
 
@@ -28,6 +31,9 @@ mod meteo;
 
 #[cfg(feature = "nav")]
 mod nav;
+
+#[cfg(feature = "rtcm")]
+mod rtcm;
 
 #[cfg(feature = "ublox")]
 mod ublox;
