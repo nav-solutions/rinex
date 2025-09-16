@@ -138,7 +138,7 @@ anise = { version = "0.6", optional = true }
 hifitime = { version = "4.1", features = ["serde", "std"] }
 wkt = { version = "0.14.0", default-features = false, optional = true }
 gnss-rs = { version = "2.4", features = ["serde", "domes", "cospar"] }
-gnss-qc-traits = { version = "0.3.2", features = ["html"], optional = true }
+gnss-qc-traits = { version = "0.4.0", features = ["html"], optional = true }
 serde = { version = "1.0", optional = true, default-features = false, features = ["derive"] }
 
 # Log is optional and our "debug" feature: use this if you're a dev.
