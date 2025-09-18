@@ -20,11 +20,20 @@ use log::error;
 #[cfg_attr(docsrs, doc(cfg(feature = "nav")))]
 pub mod kepler;
 
+#[cfg(feature = "binex")]
+#[cfg_attr(docsrs, doc(cfg(feature = "binex")))]
+pub mod binex;
+
 #[cfg(feature = "nav")]
 use crate::prelude::nav::Almanac;
 
 #[cfg(feature = "ublox")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ublox")))]
 mod ublox;
+
+#[cfg(feature = "rtcm")]
+#[cfg_attr(docsrs, doc(cfg(feature = "rtcm")))]
+mod rtcm;
 
 #[cfg(feature = "nav")]
 use anise::{
@@ -401,5 +410,54 @@ impl Ephemeris {
                 }
             },
         }
+    }
+}
+
+impl std::fmt::Display for Ephemeris {
+    /// Format and Displays this [Ephemeris] conveniently
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if let Some(t_tm) = self.get_orbit_f64("t_tm") {
+            write!(f, "T_tm={}s, ", t_tm as u32)?;
+        }
+
+        if let Some(iode) = self.get_orbit_f64("iode") {
+            write!(f, "IODE={}, ", iode as u8)?;
+        }
+
+        if let Some(crc) = self.get_orbit_f64("crc") {
+            if let Some(crs) = self.get_orbit_f64("crs") {
+                write!(f, "Cr=(cos={:.5E}m sin={:.5E}m), ", crc, crs)?;
+            }
+        }
+
+        if let Some(cic) = self.get_orbit_f64("cic") {
+            if let Some(cis) = self.get_orbit_f64("cis") {
+                write!(f, "Ci=(cos={:.5E}rad sin={:.5E}rad), ", cic, cis)?;
+            }
+        }
+
+        if let Some(cuc) = self.get_orbit_f64("cuc") {
+            if let Some(cus) = self.get_orbit_f64("cus") {
+                write!(f, "Cu=(cos={:.5E}rad sin={:.5E}rad), ", cuc, cus)?;
+            }
+        }
+
+        if let Some(omega) = self.get_orbit_f64("omega") {
+            if let Some(omega_dot) = self.get_orbit_f64("omegaDot") {
+                if let Some(omega0) = self.get_orbit_f64("omega0") {
+                    write!(
+                        f,
+                        "Omega=({:.5E}cs {:.5E}cs/s), Omega0={:.5E}, ",
+                        omega, omega_dot, omega0
+                    )?;
+                }
+            }
+        }
+
+        if let Some(ura) = self.get_orbit_f64("accuracy") {
+            write!(f, "URA={}, ", ura as u8)?;
+        }
+
+        Ok(())
     }
 }

@@ -124,7 +124,6 @@ fn esbcdnk_ephv3_to_ubx_mga() {
                 }
             },
             _ => {}, // not supported yet
-            _ => {}, // not supported yet
         }
     }
 
@@ -188,7 +187,7 @@ fn glo_v2_to_ubx_mga() {
     println!("UBX-MGA-EPH: {:4} GLO frames", glo);
 }
 
-// UBX2RINEX (NAV V3)
+// RNX2UBX (NAV V3)
 #[test]
 #[ignore]
 fn esbcdnk_nav3_to_ubx() {
