@@ -36,6 +36,9 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.89.0
+          override: true
 
       - name: Bench
         run: cargo bench --bench ${{ matrix.bench }} -- --sample-size ${{ matrix.sample_size }}  > ${{ matrix.bench }}.txt
