@@ -83,7 +83,7 @@ impl NgModel {
         constellation: &Constellation,
     ) -> Result<(), FormattingError> {
         let formatted = format!(
-            "{:X}   {} {} {} {}",
+            "{:x}   {} {} {} {}",
             constellation,
             NavFormatter::new_iono_alpha_beta(self.a.0),
             NavFormatter::new_iono_alpha_beta(self.a.1),
