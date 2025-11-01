@@ -22,8 +22,9 @@ all-features = true
 rustdoc-args = ["--cfg", "docrs", "--generate-link-to-definition"]
 
 [features]
+# serde by default
 # gzip files are supported by default
-default = ["flate2"]
+default = ["flate2", "serde"]
 
 # unlock objects serialization
 serde = [
@@ -39,8 +40,8 @@ obs = []
 # NAVIGATION RINEX (decoded radio messages) Iterators & methods.
 # Unlocks navigation calculations including Kepler solver and Ut1Provider.
 nav = [
-    "nalgebra",
     "anise",
+    "nalgebra",
 ]
 
 # Provides the special UT1-TAI methods
@@ -80,8 +81,8 @@ ublox = [
 
 # Unlock Quality Check and TEQC like methods & traits.
 qc = [
-    "dep:gnss-qc-traits", 
     "dep:maud",
+    "dep:gnss-qc-traits", 
 ] 
 
 # Unlocks the Filter designer, pre and post processing algorithms.
@@ -129,10 +130,11 @@ lazy_static = "1.4"
 itertools = "0.14.0"
 flate2 = { version = "1", optional = true }
 maud = { version = "0.26", optional = true }
-nalgebra = { version = "0.33.0", optional = true }
-anise = { version = "0.6.9", optional = true }
 hifitime = { version = "4.1", features = ["std"] }
 serde = { version = "1.0", optional = true, default-features = false, features = ["derive"] }
+
+anise = { version = "0.6.9", optional = true }
+nalgebra = { version = "0.33.0", optional = true }
 
 # Log is optional and our "debug" feature: use this if you're a dev.
 # Turn this on to obtain debug traces during parsing, formatting and calculations

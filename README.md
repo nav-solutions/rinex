@@ -48,12 +48,47 @@ If you need to reference this work, please use the following model:
 
 `Nav-solutions (2025), RINEX: analysis and processing (MPLv2), https://github.com/nav-solutions`
 
+## Library features
+
+All RINEX formats [described in the following table](#RINEX_formats_&_applications) are supported natively, we do not
+hide a specific format under compilation options. The parser is smart enough to adapt to the file
+revision, you don't need specific options to work with RINEX V2 or RINEX V4, and you may work with both at the same
+time conveniently.
+
+We offer one compilation option
+per format, to provide more detail and "enhance" the capabilities for that format.
+For example:
+- `obs` relates to the Observation RINEX format and provides
+special iterators and processing feature for this file format.
+- `nav`: is the heaviest amongst all options, because it relies on heavy external libraries like `nalgebra` 
+and `anise`. 
+
+Note that this library requires std library at all times, it is not planed to make it no-std compatible.
+
+We offer many serialization (and deserialization) options:
+
+- `serde` for standard serdes, usually to JSON
+- `ublox`: to serialize RINEX structures to UBX messages
+and construct RINEX structures from UBX messages
+- `binex`: same thing for BINEX protocol
+- `rtcm`: same thing for RTCM protocol
+- `gnss-protos`: to serialize RINEX structures to raw GNSS navigation messages,
+for example GPS messages, or collecting a RINEX structure from GPS messages.
+For example, this could be the high level entrypoint to a GNSS simulator.
+
+`GNSS-QC` (Quality check) relates to complex geodesic processing workflows, usually starting
+from RINEX files, by means of this library. To support demanding `GNSS-QC` operations, we provide two options:
+
+- The `qc` option is the entry point, it provides means to manipulate thos files.
+For example, merging two files into one.
+- The `processing` features builds on top `qc` and is expected to provide all requirements
+to complex GNSS-QC workflows.
+
 Formats & revisions
 ===================
 
 The parser supports RINEX V4.0, that includes RINEX V4 Navigation files.   
-We support the latest revisions for both IONEX and Clock RINEX.  
-We support the latest (rev D) SP3 format.  
+All revisions are supported by default and without compilation options: the parser automatically adapts.
 
 RINEX formats & applications
 ============================
