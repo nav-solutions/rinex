@@ -93,21 +93,20 @@ All revisions are supported by default and without compilation options: the pars
 RINEX formats & applications
 ============================
 
-| Type                       | Parser            | Writer              |  CLI                 |      Content         | Record Iteration     | Timescale  |
-|----------------------------|-------------------|---------------------|----------------------|----------------------|----------------------| -----------|
-| Navigation  (NAV)          | :heavy_check_mark:| :construction:      |  :heavy_check_mark: :chart_with_upwards_trend:  | Ephemerides, Ionosphere models | Epoch | SV System time broadcasting this message |
-| Observation (OBS)          | :heavy_check_mark:| :heavy_check_mark: | :heavy_check_mark:  :chart_with_upwards_trend: | Phase, Pseudo Range, Doppler, SSI | Epoch | GNSS (any) |
-|  CRINEX  (Compressed OBS)  | :heavy_check_mark:| RNX2CRX1 :heavy_check_mark: RNX2CRX3 :construction:  | :heavy_check_mark:  :chart_with_upwards_trend:  |  Phase, Pseudo Range, Doppler, SSI | Epoch | GNSS (any) |
-|  Meteorological data (MET) | :heavy_check_mark:| :heavy_check_mark:  | :heavy_check_mark: :chart_with_upwards_trend:  | Meteo sensors data (Temperature, Moisture..) | Epoch | UTC | 
-|  Clocks (CLK)              | :heavy_check_mark:| :construction:      | :heavy_check_mark: :chart_with_upwards_trend:  | Precise SV and Reference Clock states |  Epoch | GNSS (any) |
-|  Antenna (ATX)             | :heavy_check_mark:| :construction:      | :construction:   | Precise RX/SV Antenna calibration | `antex::Antenna` | :heavy_minus_sign: |
-|  Ionosphere Maps  (IONEX)  | :heavy_check_mark:|  :construction:     | :heavy_check_mark:  :chart_with_upwards_trend: | Ionosphere Electron density | Epoch | UTC |
-|  DORIS RINEX               | :heavy_check_mark:|  :construction:     | :heavy_check_mark:   | Temperature, Moisture, Pseudo Range and Phase observations | Epoch | TAI |
+| Type                       | Parser            | Writer              |      Content                                  | Record Indexing                                                                  | Timescale  |
+|----------------------------|-------------------|---------------------|-----------------------------------------------|----------------------------------------------------------------------------------| -----------|
+| Navigation  (NAV)          | :heavy_check_mark:| :heavy_check_mark:  | Ephemerides, Ionosphere models                | [NavKey](https://docs.rs/rinex/latest/rinex/navigation/struct.NavKey.html)       | SV System time broadcasting this message |
+| Observation (OBS)          | :heavy_check_mark:| :heavy_check_mark:  | Phase, Pseudo Range, Doppler, SSI             | [ObsKey](https://docs.rs/rinex/latest/rinex/observation/struct.ObsKey.html)      | GNSS (any) |
+|  CRINEX  (Compressed OBS)  | :heavy_check_mark:| :heavy_check_mark:  | Phase, Pseudo Range, Doppler, SSI             | [ObsKey](https://docs.rs/rinex/latest/rinex/observation/struct.ObsKey.html)      | GNSS (any) |
+|  Meteorological data (MET) | :heavy_check_mark:| :heavy_check_mark:  | Meteo sensors data (Temperature, Moisture..)  | [MeteoKey](https://docs.rs/rinex/latest/rinex/meteo/struct.MeteoKey.html)        | UTC | 
+|  Clocks (CLK)              | :heavy_check_mark:| :construction:      | Precise temporal states                       | [ClockKey](https://docs.rs/rinex/latest/rinex/clock/record/struct.ClockKey.html) | GNSS (any) |
+|  Antenna (ATX)             | :heavy_check_mark:| :construction:      | Precise RX/SV Antenna calibration | `antex::Antenna` | :heavy_minus_sign: |
+|  Ionosphere Maps  (IONEX)  | [Moved to dedicated parser](https://github.com/nav-solutions/ionex) |  :heavy_check_mark:     | Ionosphere Electron density | [Record Key](https://docs.rs/ionex/latest/ionex/key/struct.Key.html) | UTC |
+|  DORIS RINEX               | [Moved to dedicated parser](https://github.com/nav-solutions/doris) |  :heavy_check_mark:     | Temperature, Moisture, Pseudo Range and Phase observations | [Record Key](https://docs.rs/doris-rs/latest/doris_rs/record/struct.Key.html) | TAI / "DORIS" timescale |
 
 Contributions
 =============
 
-Contributions are welcomed, do not hesitate to open new issues
-and submit Pull Requests through Github.
-
-If you want to take part in active developments, check out our [contribution guidelines and hints](CONTRIBUTING.md) to navigate this library quicker.
+Contributions are welcomed, we still have a lot to accomplish, any help is always appreciated.   
+[We wrote these few lines](CONTRIBUTING.md) to help you understand the inner workings.    
+Join us on [Discord](https://discord.gg/EqhEBXBmJh) to discuss ongoing and future developments.
