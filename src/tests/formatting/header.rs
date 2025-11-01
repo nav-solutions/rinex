@@ -109,3 +109,189 @@ fn crinex_mixed_header_formatting() {
         ]),
     );
 }
+
+#[test]
+fn crinex_gps_v2_header_formatting() {
+    let mut buf = BufWriter::new(Utf8Buffer::new(1024));
+
+    let header = Header::basic_crinex()
+        .with_version(Version::new(2, 0))
+        .with_constellation(Constellation::GPS);
+
+    header.format(&mut buf).unwrap();
+
+    let content = buf.into_inner().unwrap().to_ascii_utf8();
+
+    generic_formatted_lines_test(
+        &content,
+        HashMap::from_iter([
+            (
+                0,
+                "1.0                 COMPACT RINEX FORMAT                    CRINEX VERS   / TYPE",
+            ),
+            (
+                2,
+                "     2.00           OBSERVATION DATA    GPS                 RINEX VERSION / TYPE",
+            ),
+            (
+                4,
+                "                                                            END OF HEADER",
+            ),
+        ]),
+    );
+}
+
+#[test]
+fn crinex_gps_v3_header_formatting() {
+    let mut buf = BufWriter::new(Utf8Buffer::new(1024));
+
+    let header = Header::basic_crinex()
+        .with_version(Version::new(3, 0))
+        .with_constellation(Constellation::GPS);
+
+    header.format(&mut buf).unwrap();
+
+    let content = buf.into_inner().unwrap().to_ascii_utf8();
+
+    generic_formatted_lines_test(
+        &content,
+        HashMap::from_iter([
+            (
+                0,
+                "3.0                 COMPACT RINEX FORMAT                    CRINEX VERS   / TYPE",
+            ),
+            (
+                2,
+                "     3.00           OBSERVATION DATA    GPS                 RINEX VERSION / TYPE",
+            ),
+            (
+                4,
+                "                                                            END OF HEADER",
+            ),
+        ]),
+    );
+}
+
+#[test]
+fn crinex_gps_v4_header_formatting() {
+    let mut buf = BufWriter::new(Utf8Buffer::new(1024));
+
+    let header = Header::basic_crinex()
+        .with_version(Version::new(4, 0))
+        .with_constellation(Constellation::GPS);
+
+    header.format(&mut buf).unwrap();
+
+    let content = buf.into_inner().unwrap().to_ascii_utf8();
+
+    generic_formatted_lines_test(
+        &content,
+        HashMap::from_iter([
+            (
+                0,
+                "3.0                 COMPACT RINEX FORMAT                    CRINEX VERS   / TYPE",
+            ),
+            (
+                2,
+                "     4.00           OBSERVATION DATA    GPS                 RINEX VERSION / TYPE",
+            ),
+            (
+                4,
+                "                                                            END OF HEADER",
+            ),
+        ]),
+    );
+}
+
+#[test]
+fn crinex_gal_v2_header_formatting() {
+    let mut buf = BufWriter::new(Utf8Buffer::new(1024));
+
+    let header = Header::basic_crinex()
+        .with_version(Version::new(2, 0))
+        .with_constellation(Constellation::Galileo);
+
+    header.format(&mut buf).unwrap();
+
+    let content = buf.into_inner().unwrap().to_ascii_utf8();
+
+    generic_formatted_lines_test(
+        &content,
+        HashMap::from_iter([
+            (
+                0,
+                "1.0                 COMPACT RINEX FORMAT                    CRINEX VERS   / TYPE",
+            ),
+            (
+                2,
+                "     2.00           OBSERVATION DATA    GAL                 RINEX VERSION / TYPE",
+            ),
+            (
+                4,
+                "                                                            END OF HEADER",
+            ),
+        ]),
+    );
+}
+
+#[test]
+fn crinex_gal_v3_header_formatting() {
+    let mut buf = BufWriter::new(Utf8Buffer::new(1024));
+
+    let header = Header::basic_crinex()
+        .with_version(Version::new(3, 0))
+        .with_constellation(Constellation::Galileo);
+
+    header.format(&mut buf).unwrap();
+
+    let content = buf.into_inner().unwrap().to_ascii_utf8();
+
+    generic_formatted_lines_test(
+        &content,
+        HashMap::from_iter([
+            (
+                0,
+                "3.0                 COMPACT RINEX FORMAT                    CRINEX VERS   / TYPE",
+            ),
+            (
+                2,
+                "     3.00           OBSERVATION DATA    GAL                 RINEX VERSION / TYPE",
+            ),
+            (
+                4,
+                "                                                            END OF HEADER",
+            ),
+        ]),
+    );
+}
+
+#[test]
+fn crinex_gal_v4_header_formatting() {
+    let mut buf = BufWriter::new(Utf8Buffer::new(1024));
+
+    let header = Header::basic_crinex()
+        .with_version(Version::new(4, 0))
+        .with_constellation(Constellation::Galileo);
+
+    header.format(&mut buf).unwrap();
+
+    let content = buf.into_inner().unwrap().to_ascii_utf8();
+
+    generic_formatted_lines_test(
+        &content,
+        HashMap::from_iter([
+            (
+                0,
+                "3.0                 COMPACT RINEX FORMAT                    CRINEX VERS   / TYPE",
+            ),
+            (
+                2,
+                "     4.00           OBSERVATION DATA    GAL                 RINEX VERSION / TYPE",
+            ),
+            (
+                4,
+                "                                                            END OF HEADER",
+            ),
+        ]),
+    );
+}

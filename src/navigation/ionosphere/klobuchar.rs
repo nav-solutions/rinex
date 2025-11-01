@@ -227,7 +227,7 @@ impl KbModel {
             )
         } else {
             format!(
-                "{:x}A  {} {} {} {}",
+                "{:E}A  {} {} {} {}",
                 constellation,
                 NavFormatter::new_iono_alpha_beta(self.alpha.0),
                 NavFormatter::new_iono_alpha_beta(self.alpha.1),
@@ -257,7 +257,7 @@ impl KbModel {
             )
         } else {
             format!(
-                "{:x}B  {} {} {} {}",
+                "{:E}B  {} {} {} {}",
                 constellation,
                 NavFormatter::new_iono_alpha_beta(self.beta.0),
                 NavFormatter::new_iono_alpha_beta(self.beta.1),

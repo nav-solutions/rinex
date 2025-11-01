@@ -16,8 +16,10 @@ use serde::{Deserialize, Serialize};
 pub struct CRINEX {
     /// Compression program version
     pub version: Version,
+
     /// Compression program name
     pub prog: String,
+
     /// Date of compression
     pub date: Epoch,
 }

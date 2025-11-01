@@ -33,6 +33,7 @@ pub struct NgModel {
     /// a_i coefficients
     /// (sfu, (sfu.semi-circle⁻¹), (sfu.semi-circle⁻²))
     pub a: (f64, f64, f64),
+
     /// Region flags
     pub region: NgRegionFlags,
 }
@@ -83,7 +84,7 @@ impl NgModel {
         constellation: &Constellation,
     ) -> Result<(), FormattingError> {
         let formatted = format!(
-            "{:x}   {} {} {} {}",
+            "{:E}   {} {} {} {}",
             constellation,
             NavFormatter::new_iono_alpha_beta(self.a.0),
             NavFormatter::new_iono_alpha_beta(self.a.1),
