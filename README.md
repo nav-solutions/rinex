@@ -19,8 +19,9 @@ To contribute to either of our project or join our community, you way
 
 ## Advantages :rocket: 
 
-- Fast
+- Fast and powerful parser
 - Open sources: read and access all the code
+- Seamless Gzip decompression (on `flate2` feature)
 - All modern GNSS constellations, codes and signals
   - GPS, Galileo, BeiDou and QZSS
 - Time scales: GPST, QZSST, BDT, GST, UTC, TAI

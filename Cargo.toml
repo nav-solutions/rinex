@@ -139,6 +139,14 @@ rev = "d43c425ee2904d577d06e70d7fbd80d98132a8a6"
 optional = true
 features = ["std", "sfrbx-gps"]
 
+[dependencies.hifitime]
+version = "4.1"
+features = ["std"]
+
+[dependencies.anise]
+version = "0.6.9"
+optional = true
+
 [dependencies]
 thiserror = "2"
 bitflags = "2"
@@ -147,11 +155,9 @@ itertools = "0.14"
 flate2 = { version = "1", optional = true }
 maud = { version = "0.26", optional = true }
 rtcm-rs = { version = "0.11", optional = true }
-hifitime = { version = "4.1", features = ["std"] }
 serde = { version = "1.0", optional = true, default-features = false, features = ["derive"] }
 
-anise = { version = "0.6.9", optional = true }
-nalgebra = { version = "0.33.0", optional = true }
+nalgebra = { version = "0.33", optional = true }
 
 # Log is optional and our "debug" feature: use this if you're a dev.
 # Turn this on to obtain debug traces during parsing, formatting and calculations
