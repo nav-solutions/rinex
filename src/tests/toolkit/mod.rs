@@ -1,5 +1,5 @@
 use crate::*;
-use rand::{distributions::Alphanumeric, Rng};
+use rand::{distr::Alphanumeric, Rng};
 
 use crate::hardware::Antenna;
 

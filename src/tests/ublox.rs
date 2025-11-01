@@ -124,7 +124,6 @@ fn esbcdnk_ephv3_to_ubx_mga() {
                 }
             },
             _ => {}, // not supported yet
-            _ => {}, // not supported yet
         }
     }
 

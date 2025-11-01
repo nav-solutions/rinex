@@ -291,11 +291,24 @@ impl Header {
         )
     }
 
-    /// Copies and returns [Header] with specific RINEX [Version]
-    pub fn with_version(&self, version: Version) -> Self {
-        let mut s = self.clone();
-        s.version = version;
-        s
+    /// Copies and returns [Header] with specific RINEX [Version].
+    /// If this is part of a CRINEX (Compact RINEX) file, the specificities are automatically
+    /// adapted.
+    pub fn with_version(mut self, version: Version) -> Self {
+        self.version = version;
+
+        // automatically generates a correct CRINEX header
+        if let Some(obs_specifics) = &mut self.obs {
+            if let Some(crinex) = &mut obs_specifics.crinex {
+                if version.major > 2 {
+                    crinex.version.major = 3;
+                } else {
+                    crinex.version.major = 1;
+                }
+            }
+        }
+
+        self
     }
 
     /// Copies and returns [Header] with specific RINEX [Type]
