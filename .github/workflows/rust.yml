@@ -49,6 +49,12 @@ jobs:
         args: --all-features
     
     - uses: actions-rs/cargo@v1
+      name: Build (SERDES)
+      with:
+        command: build
+        args: --features serde
+
+    - uses: actions-rs/cargo@v1
       name: Build (Observation)
       with:
         command: build
