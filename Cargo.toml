@@ -161,12 +161,9 @@ log = { version = "0.4", optional = true }
 
 # TODO see if we can get rid of those
 num = "0.4"
-regex = "1"
-strum = "0.26"
 num-derive = "0.4"
 num-traits = "0.2.15"
 num-integer = "0.1.44"
-# wkt = { version = "0.14", default-features = false, optional = true }
 
 [dev-dependencies]
 flate2 = "1"
