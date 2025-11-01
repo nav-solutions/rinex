@@ -124,6 +124,21 @@ rev = "63200d41bab2efa7d10082ae43a113d360722342"
 optional = true
 features = ["html"]
 
+[dependencies.binex]
+version = "0.5"
+optional = true
+
+[dependencies.gnss-protos]
+version = "0.0.2"
+optional = true
+features = ["gps"]
+
+[dependencies.ublox]
+git = "https://github.com/ublox-rs/ublox"
+rev = "d43c425ee2904d577d06e70d7fbd80d98132a8a6"
+optional = true
+features = ["std", "sfrbx-gps"]
+
 [dependencies]
 thiserror = "2"
 bitflags = "2.3"
@@ -131,6 +146,7 @@ lazy_static = "1.4"
 itertools = "0.14.0"
 flate2 = { version = "1", optional = true }
 maud = { version = "0.26", optional = true }
+rtcm-rs = { version = "0.11", optional = true }
 hifitime = { version = "4.1", features = ["std"] }
 serde = { version = "1.0", optional = true, default-features = false, features = ["derive"] }
 
@@ -143,19 +159,6 @@ nalgebra = { version = "0.33.0", optional = true }
 # Use normal sensitivy for error / warning traces.
 log = { version = "0.4", optional = true }
 
-# BINEX
-binex = { version = "0.5", optional = true }
-
-# RTCM
-rtcm-rs = { version = "0.11", optional = true }
-
-# RINEX to GNSS protos
-gnss-protos = { version = "0.0.2", optional = true, features = ["gps"] }
-
-# U-Blox
-# ublox = { version = "0.6", optional = true, features = ["std", "sfrbx-gps"] }
-ublox = { git = "https://github.com/ublox-rs/ublox", rev = "d43c425ee2904d577d06e70d7fbd80d98132a8a6", optional = true, features = ["std", "sfrbx-gps"] }
-
 # TODO see if we can get rid of those
 num = "0.4"
 regex = "1"
@@ -167,11 +170,10 @@ num-integer = "0.1.44"
 
 [dev-dependencies]
 flate2 = "1"
-rand = "0.8.4"
+rand = "0.9"
 serde_json = "1"
 criterion = "0.7"
 env_logger = "0.11"
-ublox = { git = "https://github.com/ublox-rs/ublox", rev = "d43c425ee2904d577d06e70d7fbd80d98132a8a6", features = ["std", "sfrbx-gps"] }
 
 [[bench]]
 name = "parsing"
