@@ -29,6 +29,7 @@ default = ["flate2", "serde"]
 # unlock objects serialization
 serde = [
     "dep:serde",
+    "gnss-rs/serde",
     "hifitime/serde",
     "bitflags/serde",
     "ublox/serde",
@@ -119,7 +120,7 @@ features = ["std", "domes", "cospar", "sbas"]
 
 [dependencies.gnss-qc-traits]
 git = "https://github.com/nav-solutions/qc-traits"
-rev = "dae9a359dcdba712c2f64a256e2280c5dd2345cc"
+rev = "63200d41bab2efa7d10082ae43a113d360722342"
 optional = true
 features = ["html"]
 
@@ -162,7 +163,7 @@ strum = "0.26"
 num-derive = "0.4"
 num-traits = "0.2.15"
 num-integer = "0.1.44"
-wkt = { version = "0.14", default-features = false, optional = true }
+# wkt = { version = "0.14", default-features = false, optional = true }
 
 [dev-dependencies]
 flate2 = "1"
