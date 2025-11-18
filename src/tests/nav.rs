@@ -1382,3 +1382,62 @@ fn nav_v2_iono_alphabeta_and_toe() {
     //     // }
     // }
 }
+
+#[test]
+fn gh_395_kepler_nav3() {
+    let rinex = Rinex::from_gzip_file("data/NAV/V3/BRDM00DLR_S_20241310000_01D_MN.rnx.gz")
+        .unwrap();
+
+    // C20@ 2024-05-10T17:00:00BDT is said to work
+    // C21@ 2024-05-10T17:00:00BDT is said corrupt
+    let t0 = Epoch::from_str("2024-05-10T17:00:00 BDT").unwrap();
+
+    let (c20, mut c20_passed) = (SV::from_str("C20").unwrap(), false);
+    let (c21, mut c21_passed) = (SV::from_str("C21").unwrap(), false);
+
+    for (key, ephemeris) in rinex.nav_ephemeris_frames_iter() {
+        if key.epoch == t0 {
+            if key.sv == c20 {
+                // check all fields
+                assert!(ephemeris.get_orbit_f64("toe").is_some());
+                assert!(ephemeris.get_orbit_f64("omega").is_some());
+                assert!(ephemeris.get_orbit_f64("sqrta").is_some());
+                assert!(ephemeris.get_orbit_f64("cis").is_some());
+                assert!(ephemeris.get_orbit_f64("cic").is_some());
+                
+                // demonstrate we may proceed
+                assert!(ephemeris.kepler().is_some());
+                assert!(ephemeris.perturbations().is_some());
+
+                // calculate kepler equations
+                let position = ephemeris.kepler2position(c20, t0).unwrap();
+                println!("C20: {position}");
+
+                // test passed
+                c20_passed = true;
+
+            } else if key.sv == c21 {
+                // check all fields
+                assert!(ephemeris.get_orbit_f64("toe").is_some());
+                assert!(ephemeris.get_orbit_f64("omega").is_some());
+                assert!(ephemeris.get_orbit_f64("sqrta").is_some());
+                assert!(ephemeris.get_orbit_f64("cis").is_some());
+                assert!(ephemeris.get_orbit_f64("cic").is_some());
+                
+                // demonstrate we may proceed
+                assert!(ephemeris.kepler().is_some());
+                assert!(ephemeris.perturbations().is_some());
+                
+                // calculate kepler equations
+                let position = ephemeris.kepler2position(c21, t0).unwrap();
+                println!("C21: {position}");
+                
+                // test passed
+                c21_passed = true;
+            }
+        }
+    }
+
+    assert!(c20_passed);
+    assert!(c21_passed);
+}
