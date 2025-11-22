@@ -183,8 +183,18 @@ impl Record {
                             line_buf.push('\n');
                         }
                     },
+                    #[cfg(not(feature = "log"))]
                     Err(_) => {
-                        crinex_error = true;
+                        // CRINEX decompressor in failure,
+                        // clear pending buffer, will resynchronize on next valid content
+                        line_buf.clear();
+                    },
+                    #[cfg(feature = "log")]
+                    Err(e) => {
+                        error!("hatanaka: decompression error: {}", e);
+                        // CRINEX decompressor in failure,
+                        // clear pending buffer, will resynchronize on next valid content
+                        line_buf.clear();
                     },
                 }
             }
@@ -277,7 +287,7 @@ impl Record {
             // always stack new content
             epoch_buf.push_str(&line_buf);
 
-            if eos || crinex_error {
+            if eos {
                 break;
             }
 
