@@ -39,7 +39,10 @@ fn v2_amel0010_21g() {
 
         match k.sv.prn {
             1 => {
-                assert_eq!(eph.clock_bias_drift_driftrate(), (7.282570004460E-5, 0.0, 7.380000000000E+04));
+                assert_eq!(
+                    eph.clock_bias_drift_driftrate(),
+                    (7.282570004460E-5, 0.0, 7.380000000000E+04)
+                );
                 //TODO
                 //assert_eq!(v.sv_position((-1.488799804690E+03, 1.292880712890E+04, 2.193169775390E+04)))
 

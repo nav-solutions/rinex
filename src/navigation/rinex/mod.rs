@@ -129,7 +129,7 @@ impl Rinex {
     /// - self: Navigation [Rinex]
     /// ## Output
     /// - offset (s), drift (s.s⁻¹), drift rate (s.s⁻²)  triplet iterator
-    pub fn nav_satellite_clock_iter(
+    pub fn nav_satellite_clock_bias_drift_rate_iter(
         &self,
     ) -> Box<dyn Iterator<Item = (NavKey, (f64, f64, f64))> + '_> {
         Box::new(

@@ -6,38 +6,88 @@ use crate::{
     },
 };
 
+use anise::math::Vector6;
+
 impl Rinex {
-    /// [SV] orbital state vector determination attempt, that only applies
-    /// to Navigation [Rinex].
+    /// Macro to resolve the [Orbit]al state of given satellite [SV] at specificied [Epoch] easily.
+    /// This applies to Navigation RINEX files only, the specified [Epoch] and satellite must exist in the record,
+    /// and we perform the initial requirements. While this is okay for very few satellites and Epochs, this is quite inefficient
+    /// and should not be used to process a complete temporal frame and group of satellites. For a real processing pipeline,
+    /// you should:
+    ///
+    /// - browse the RINEX record and manage the [Ephemeris] pool yourself, a pipelined manner, and use the solver provided
+    /// by the [Ephemeris] object.
+    /// - operate at a high lever, through our [GNSS-Qc](https://github.com/nav-solutions/gnss-qc) which will wrap the
+    /// RINEX library and provide processing pipelines.
+    ///
     /// ## Inputs
-    /// - sv: desired [SV]
-    /// - t: desired [Epoch] to express the [Orbit]al state
+    /// - satellite: selected [SV] (which must exist)
+    /// - epoch: [Epoch] of navigation, which must be within the timeframe of this record.
+    /// - max_iteration: maximal number of iteration allowed to reasonnably converge.
+    ///
     /// ## Returns
     /// - orbital state: expressed as ECEF [Orbit]
-    pub fn sv_orbit(&self, sv: SV, t: Epoch) -> Option<Orbit> {
-        let (_, _, eph) = self.nav_ephemeris_selection(sv, t)?;
-        eph.kepler2position(sv, t)
+    pub fn nav_satellite_orbital_state(
+        &self,
+        satellite: SV,
+        epoch: Epoch,
+        max_iteration: usize,
+    ) -> Option<Orbit> {
+        let (_, _, eph) = self.nav_ephemeris_selection(satellite, epoch)?;
+        eph.resolve_orbital_state(satellite, epoch, max_iteration)
     }
 
-    /// [SV] (azimuth, elevation, slant range) triplet determination,
-    /// that only applies to Navigation [Rinex].
+    /// Macro to resolve the [Orbit]al state of given satellite [SV] at specificied [Epoch] easily.
+    /// Refer to [Self::nav_satellite_orbital_state].
+    ///
     /// ## Inputs
-    /// - sv: target [SV]
-    /// - t: target [Epoch]
-    /// - rx_orbit: RX position expressed as an [Orbit]
+    /// - satellite: selected [SV] (which must exist)
+    /// - epoch: [Epoch] of navigation, which must be within the timeframe of this record.
+    /// - max_iteration: maximal number of iteration allowed to reasonnably converge.
+    ///
+    /// ## Returns
+    /// - ECEF position and velocity in kilometer, as [Vector6].
+    pub fn nav_satellite_position_velocity_km(
+        &self,
+        satellite: SV,
+        epoch: Epoch,
+        max_iteration: usize,
+    ) -> Option<Vector6> {
+        let (_, _, eph) = self.nav_ephemeris_selection(satellite, epoch)?;
+        eph.resolve_position_velocity_km(satellite, epoch, max_iteration)
+    }
+
+    /// Macro to resolve azimuth, elevation and slant range of desired satellite at desired [Epoch].
+    /// This applies to Navigation RINEX files only, the specified [Epoch] and satellite must exist in the record,
+    /// and we perform the initial requirements. While this is okay for very few satellites and Epochs, this is quite inefficient
+    /// and should not be used to process a complete temporal frame and group of satellites. For a real processing pipeline,
+    /// you should:
+    ///
+    /// - browse the RINEX record and manage the [Ephemeris] pool yourself, a pipelined manner, and use the solver provided
+    /// by the [Ephemeris] object.
+    /// - operate at a high lever, through our [GNSS-Qc](https://github.com/nav-solutions/gnss-qc) which will wrap the
+    /// RINEX library and provide processing pipelines.
+    ///
+    /// ## Inputs
+    /// - satellite: selected [SV] (must exist)
+    /// - epoch: [Epoch] of navigation, which must be within the timeframe of this record.
+    /// - observer: state of the observer, expressed as an [Orbit]
     /// - almanac: [Almanac] context
+    /// - max_iteration: maximal number of iteration allowed to reasonnably converge.
+    ///
     /// ## Returns
     /// - [AzElRange] on calculations success
-    pub fn nav_azimuth_elevation_range(
+    pub fn nav_satellite_azimuth_elevation_range(
         &self,
-        sv: SV,
-        t: Epoch,
-        rx_orbit: Orbit,
+        satellite: SV,
+        epoch: Epoch,
+        observer: Orbit,
         almanac: &Almanac,
+        max_iteration: usize,
     ) -> Option<AzElRange> {
-        let sv_orbit = self.sv_orbit(sv, t)?;
+        let state = self.nav_satellite_orbital_state(satellite, epoch, max_iteration)?;
         let azelrange = almanac
-            .azimuth_elevation_range_sez(sv_orbit, rx_orbit, None, None)
+            .azimuth_elevation_range_sez(state, observer, None, None)
             .ok()?;
         Some(azelrange)
     }

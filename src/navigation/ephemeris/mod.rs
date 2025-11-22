@@ -166,8 +166,9 @@ pub struct Ephemeris {
     /// Clock drift rate (s.s⁻²)).   
     pub clock_drift_rate: f64,
 
-    /// Orbits are revision and constellation dependent,
-    /// sorted by key and content, described in navigation::database
+    /// Data fields depend on the [Constellation] and the RINEX revision
+    /// we are dealing with. This structure stores all fields and value
+    /// as described by our database, which is an image of the RINEX specs.
     pub orbits: HashMap<String, OrbitItem>,
 }
 
@@ -180,7 +181,7 @@ impl Ephemeris {
 
     /// Returns abstract orbital data as [f64], for this particular
     /// data field (if it exists in the RINEX specs and was provided by this message).
-    pub fn get_orbit_f64(&self, field: &str) -> Option<f64> {
+    pub(crate) fn get_orbit_f64(&self, field: &str) -> Option<f64> {
         let value = self.orbits.get(field)?;
         Some(value.as_f64())
     }
@@ -206,7 +207,7 @@ impl Ephemeris {
         Some(Duration::from_seconds(tgd_s))
     }
 
-    /// Returns true if this [Ephemeris] (radio message snapshot) declares 
+    /// Returns true if this [Ephemeris] (radio message snapshot) declares
     /// the attached satellite as suitable for navigation.
     pub fn satellite_is_healthy(&self) -> bool {
         let health = self.orbits.get("health");
@@ -245,7 +246,7 @@ impl Ephemeris {
         }
     }
 
-    /// Returns true if this [Ephemeris] (radio message snapshot) declares 
+    /// Returns true if this [Ephemeris] (radio message snapshot) declares
     /// the attached satellite as being tested (not suitable for navigation).
     pub fn satellite_under_test(&self) -> bool {
         let health = self.orbits.get("health");
@@ -274,27 +275,28 @@ impl Ephemeris {
     }
 
     /// Return Time of [Ephemeris] (`ToE`) expressed as [Epoch].
-    pub fn toe(&self, sv: SV) -> Option<Epoch> {
+    pub fn toe(&self, satellite: SV) -> Option<Epoch> {
         // TODO: in CNAV V4 TOC is said to be TOE... ...
         let (week, seconds) = (self.week_number()?, self.get_orbit_f64("toe")?);
         let nanos = (seconds * 1.0E9).round() as u64;
 
-        match sv.constellation {
+        match satellite.constellation {
             Constellation::GPS | Constellation::QZSS | Constellation::Galileo => {
                 Some(Epoch::from_time_of_week(week, nanos, TimeScale::GPST))
             },
             Constellation::BeiDou => Some(Epoch::from_time_of_week(week, nanos, TimeScale::BDT)),
             _ => {
                 #[cfg(feature = "log")]
-                error!("{} is not supported", sv.constellation);
+                error!("{} is not supported", satellite.constellation);
                 None
             },
         }
     }
 
-    /// Returns Adot parameter from a CNAV ephemeris
-    pub(crate) fn a_dot(&self) -> Option<f64> {
-        self.get_orbit_f64("a_dot")
+    /// Returns the derivative correction to the semi-major axis,
+    /// in meters.s⁻¹, as provided by V4 messages.
+    pub fn cnav_adot_m_s(&self) -> Option<f64> {
+        self.get_orbit_f64("adot")
     }
 }
 

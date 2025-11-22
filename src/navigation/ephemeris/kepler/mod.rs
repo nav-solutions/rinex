@@ -1,4 +1,4 @@
-use crate::prelude::{nav::Orbit, Constellation, Epoch, SV, Duration};
+use crate::prelude::{nav::Orbit, Constellation, Duration, Epoch, SV};
 
 use crate::navigation::Ephemeris;
 
@@ -8,29 +8,28 @@ use anise::{
 };
 
 mod solver;
-pub use helper::Helper;
-
-#[cfg(doc)]
-use crate::bibliography::Bibliography;
 
 /// [Keplerian] stores and describes all keplerian parameters needed
-/// for satellite based navigation, described by 
+/// for satellite based navigation, described by
 /// GPS, QZSS, Galileo and BDS radio messages.
 /// This structure does not apply to Glonass nor SBAS navigation.
 #[derive(Default, Copy, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Keplerian {
-    /// Semi major axis, in kilometers.
-    pub sma_km: f64,
+    /// Reference [Epoch].
+    pub epoch: Epoch,
 
-    /// Eccentricity (n.a)
+    /// Semi major axis, in meters.
+    pub sma_m: f64,
+
+    /// Eccentricity.
     pub ecc: f64,
 
-    /// Inclination at reference time,  (in radians.
+    /// Inclination at reference time, in radians.
     pub inc_rad: f64,
 
     /// Longitude of ascending node at reference time, in radians.
-    pub lan_rad: f64,
+    pub longan_rad: f64,
 
     /// Mean anomaly at reference time, in radians.
     pub ma_rad: f64,
@@ -38,33 +37,6 @@ pub struct Keplerian {
     /// Argument of perigee, in radians.
     pub aop_rad: f64,
 
-    /// Reference [Epoch].
-    pub epoch: f64,
-
-    /// Earth orbit [Perturbations], due to gravity and tidal effects.
-    pub perturbations: Perturbations,
-}
-    
-impl Keplerian {
-    /// Returns [Duration] between provided [Epoch] and reference [Epoch], as required
-    /// by keplerian calculations.
-    pub(crate) fn t_k(&self, epoch: Epoch) -> Duration {
-        // convert to correct timescale (if need be)
-        let epoch = if epoch.timescale != self.epoch.timescale {
-            epoch.to_time_scale(self.epoch.timescale) 
-        } else {
-            epoch
-        };
-
-        epoch - self.epoch
-    }
-}
-
-/// Earth orbit [Perturbations], as described by radio messages,
-/// to correct the [Keplerian] model to realitiy (gravity effects, tidal effects..).
-#[derive(Default, Copy, Clone, Debug)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct Perturbations {
     /// Mean motion difference, in radians.
     pub dn_rad: f64,
 
@@ -72,7 +44,7 @@ pub struct Perturbations {
     pub i_dot_rad_s: f64,
 
     /// Right ascension rate of change (in radians.s⁻¹)
-    pub raomega_dot: f64,
+    pub omega_dot_rad_s: f64,
 
     /// Amplitude of sine harmonic correction term of the argument
     /// of latitude (in radians)
@@ -95,72 +67,90 @@ pub struct Perturbations {
     pub crc_m: f64,
 }
 
+impl Keplerian {
+    /// Returns [Duration] between provided [Epoch] and reference [Epoch], as required
+    /// by keplerian calculations.
+    pub(crate) fn dt(&self, epoch: Epoch) -> Duration {
+        // convert to correct timescale, if need be
+        let epoch = if epoch.time_scale != self.epoch.time_scale {
+            epoch.to_time_scale(self.epoch.time_scale)
+        } else {
+            epoch
+        };
+
+        epoch - self.epoch
+    }
+}
+
 impl Ephemeris {
     /// Groups all keplerian parameters as [Keplerian], ready to
     /// be used in radio based navigation. This does not apply to Glonass
     /// nor SBAS satellites.
-    pub fn to_keplerian(&self) -> Option<Keplerian> {
+    pub fn to_keplerian(&self, satellite: SV) -> Option<Keplerian> {
         Some(Keplerian {
-            sma_km: {
-                let sma_m = self.get_orbit_f64("sqrta")?.powf(2.0);
-                sma_m * 1.0e-3
-            },
+            epoch: self.toe(satellite)?,
             ecc: self.get_orbit_f64("e")?,
+            ma_rad: self.get_orbit_f64("m0")?,
             inc_rad: self.get_orbit_f64("i0")?,
-            omega: self.get_orbit_f64("omega")?,
-            omega_0: self.get_orbit_f64("omega0")?,
-            m_0: self.get_orbit_f64("m0")?,
-            epoch: self.get_orbit_f64("toe")?,
-            perturbations: self.perturbations()?,
+            aop_rad: self.get_orbit_f64("omega")?,
+            longan_rad: self.get_orbit_f64("omega0")?,
+            cic_rad: self.get_orbit_f64("cic")?,
+            cis_rad: self.get_orbit_f64("cis")?,
+            cuc_rad: self.get_orbit_f64("cuc")?,
+            cus_rad: self.get_orbit_f64("cus")?,
+            crc_m: self.get_orbit_f64("crc")?,
+            crs_m: self.get_orbit_f64("crs")?,
+            dn_rad: self.get_orbit_f64("deltaN")?,
+            i_dot_rad_s: self.get_orbit_f64("idot")?,
+            sma_m: self.get_orbit_f64("sqrta")?.powf(2.0),
+            omega_dot_rad_s: self.get_orbit_f64("omegaDot")?,
         })
     }
 
     /// Copies and returns an [Ephemeris] with updated [Keplerian] parameters.
-    pub fn with_keplerian(mut self,     keplerian: Keplerian) -> Self {
-        self.set_orbit_f64("sqrta",     keplerian.a.sqrt());
-        self.set_orbit_f64("e",         keplerian.ecc);
-        self.set_orbit_f64("i0",        keplerian.inc_rad);
-        self.set_orbit_f64("omega",     keplerian.omega);
-        self.set_orbit_f64("omega0",    keplerian.omega_0);
-        self.set_orbit_f64("m0",        keplerian.m_0);
-        self.set_orbit_f64("toe",       keplerian.epoch);
-        self.set_orbit_f64("cuc",       keplerian.perturbations.cuc_rad);
-        self.set_orbit_f64("cus",       keplerian.perturbations.cus_rad);
-        self.set_orbit_f64("cic",       keplerian.perturbations.cic_rad);
-        self.set_orbit_f64("cis",       keplerian.perturbations.cis_rad);
-        self.set_orbit_f64("crc",       keplerian.perturbations.crc_m);
-        self.set_orbit_f64("crs",       keplerian.perturbations.crs_m);
-        self.set_orbit_f64("deltaN",    keplerian.perturbations.dn_rad);
-        self.set_orbit_f64("idot",      keplerian.perturbations.i_dot_rad_s);
-        self.set_orbit_f64("omegaDot",  keplerian.perturbations.omega_dot_rad_s);
-        self
-    }
+    pub fn with_keplerian(&self, keplerian: Keplerian) -> Self {
+        let mut s = self.clone();
+        s.set_orbit_f64("sqrta", keplerian.sma_m.sqrt());
+        s.set_orbit_f64("e", keplerian.ecc);
+        s.set_orbit_f64("i0", keplerian.inc_rad);
+        s.set_orbit_f64("omega", keplerian.aop_rad);
+        s.set_orbit_f64("omega0", keplerian.longan_rad);
+        s.set_orbit_f64("m0", keplerian.ma_rad);
 
-    /// Retrieves keplerian orbit [Perturbations] for Earth model.
-    fn perturbations(&self) -> Option<Perturbations> {
-        Some(Perturbations {
-            cuc_rad: self.get_orbit_f64("cuc")?,
-            cus_rad: self.get_orbit_f64("cus")?,
-            cic_rad: self.get_orbit_f64("cic")?,
-            cis_rad: self.get_orbit_f64("cis")?,
-            crc_m: self.get_orbit_f64("crc")?,
-            crs_m: self.get_orbit_f64("crs")?,
-            dn_rad: self.get_orbit_f64("deltaN")?,
-            omega_dot: self.get_orbit_f64("omegaDot")?,
-            i_dot_rad_s: self.get_orbit_f64("idot")?,
-        })
+        let toe = keplerian.epoch.to_time_of_week().1 as f64;
+        s.set_orbit_f64("toe", toe);
+
+        s.set_orbit_f64("cuc", keplerian.cuc_rad);
+        s.set_orbit_f64("cus", keplerian.cus_rad);
+        s.set_orbit_f64("cic", keplerian.cic_rad);
+        s.set_orbit_f64("cis", keplerian.cis_rad);
+        s.set_orbit_f64("crc", keplerian.crc_m);
+        s.set_orbit_f64("crs", keplerian.crs_m);
+        s.set_orbit_f64("deltaN", keplerian.dn_rad);
+        s.set_orbit_f64("idot", keplerian.i_dot_rad_s);
+        s.set_orbit_f64("omegaDot", keplerian.omega_dot_rad_s);
+        s
     }
 
     /// Resolves satellite orbital state, expressed at [Orbit] at desired [Epoch].
+    /// Depending on the constellation, this involves two strategies:
+    /// - deploying the kepler solver for GPS, QZSS, BDS and Galileo constellations
+    /// - deploying the satellite position integrator for Glonass and SBAS satellites.
     ///
     /// ## Input
-    /// - satellite: [SV] 
+    /// - satellite: [SV]
     /// - epoch: [Epoch] of navigation
+    /// - max_iteration: maximal number of iteration allowed to reasonnably converge.
     ///
     /// ## Output
     /// - state expressed as [Orbit].
-    pub fn orbital_state(&self, satellite: SV, epoch: Epoch) -> Option<Orbit> {
-        let pos_vel_km = self.position_velocity_ecef_km()?;
+    pub fn resolve_orbital_state(
+        &self,
+        satellite: SV,
+        epoch: Epoch,
+        max_iteration: usize,
+    ) -> Option<Orbit> {
+        let pos_vel_km = self.resolve_position_velocity_km(satellite, epoch, max_iteration)?;
         Some(Orbit::from_cartesian_pos_vel(
             pos_vel_km,
             epoch,
@@ -169,13 +159,46 @@ impl Ephemeris {
     }
 
     /// Resolves satellite position at desired [Epoch], expressed as ECEF coordinates in kilometers.
-    pub fn position_ecef_km(&self, satellite: SV, epoch: Epoch) -> Option<Vector3> {
-        let pos_vel_km = self.to_position_velocity_ecef_km(satellite, epoch)?;
-        Vector3::new(pos_vel_km[0], pos_vel_km[1], pos_vel_km[2])
+    /// Depending on the constellation, this involves two strategies:
+    /// - deploying the kepler solver for GPS, QZSS, BDS and Galileo constellations
+    /// - deploying the satellite position integrator for Glonass and SBAS satellites.
+    /// - max_iteration: maximal number of iteration allowed to reasonnably converge.
+    ///
+    /// ## Input
+    /// - satellite: [SV]
+    /// - epoch: [Epoch] of navigation
+    /// - max_iteration: maximal number of iteration allowed to reasonnably converge.
+    ///
+    /// ## Output
+    /// - ECEF position as [Vector3].
+    pub fn resolve_position_km(
+        &self,
+        satellite: SV,
+        epoch: Epoch,
+        max_iteration: usize,
+    ) -> Option<Vector3> {
+        let pos_vel_km = self.resolve_position_velocity_km(satellite, epoch, max_iteration)?;
+        Some(Vector3::new(pos_vel_km[0], pos_vel_km[1], pos_vel_km[2]))
     }
-    
+
     /// Resolves satellite position and velocityn at desired [Epoch], expressed as ECEF coordinates in kilometers.
-    pub fn position_velocity_ecef_km(&self, satellite: SV, epoch: Epoch) -> Option<Vector6> {
+    /// Depending on the constellation, this involves two strategies:
+    /// - deploying the kepler solver for GPS, QZSS, BDS and Galileo constellations
+    /// - deploying the satellite position integrator for Glonass and SBAS satellites.
+    ///
+    /// ## Input
+    /// - satellite: [SV]
+    /// - epoch: [Epoch] of navigation
+    /// - max_iteration: maximal number of iteration allowed to reasonnably converge.
+    ///
+    /// ## Output
+    /// - ECEF position and velocity as [Vector6].
+    pub fn resolve_position_velocity_km(
+        &self,
+        satellite: SV,
+        epoch: Epoch,
+        max_iteration: usize,
+    ) -> Option<Vector6> {
         if satellite.constellation.is_sbas() || satellite.constellation == Constellation::Glonass {
             let (x_km, y_km, z_km) = (
                 self.get_orbit_f64("satPosX")?,
@@ -187,10 +210,10 @@ impl Ephemeris {
                 self.get_orbit_f64("velY")?,
                 self.get_orbit_f64("velZ")?,
             );
+            Some(Vector6::new(x_km, y_km, z_km, velx_km, vely_km, velz_km)) // TODO: wrong
         } else {
-            let solver = self.solver(satellite, epoch)?;
-            let (pos, vel) = (solver.ecef_position(), solver.ecef_velocity());
-            Vector6::new(pos[0], pos[1], pos[2], vel[0], vel[1], vel[2])
+            let solver = self.solver(satellite, epoch, max_iteration)?;
+            solver.position_velocity_km()
         }
     }
 }

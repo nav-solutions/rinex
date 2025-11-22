@@ -46,7 +46,6 @@ pub mod types;
 pub mod version;
 
 mod bibliography;
-mod constants;
 mod epoch;
 mod iterators;
 mod leap;
@@ -1007,7 +1006,7 @@ impl Rinex {
     }
 
     /// Returns a [SV] iterator, from all satellites encountered in this [Rinex].
-    pub fn sv_iter(&self) -> Box<dyn Iterator<Item = SV> + '_> {
+    pub fn satellite_iter(&self) -> Box<dyn Iterator<Item = SV> + '_> {
         if self.is_observation_rinex() {
             Box::new(
                 self.signal_observations_iter()
@@ -1128,7 +1127,12 @@ impl Rinex {
     /// ```
     pub fn constellations_iter(&self) -> Box<dyn Iterator<Item = Constellation> + '_> {
         // Creates a unique list from .sv_iter()
-        Box::new(self.sv_iter().map(|sv| sv.constellation).unique().sorted())
+        Box::new(
+            self.satellite_iter()
+                .map(|sv| sv.constellation)
+                .unique()
+                .sorted(),
+        )
     }
 
     // /// Returns an Iterator over Unique Constellations, per Epoch
