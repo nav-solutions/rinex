@@ -66,6 +66,15 @@ and `anise`.
 
 Note that this library requires std library at all times, it is not planed to make it no-std compatible.
 
+Our `log` feature unlocks debug traces. Please avoid using the `trace` level, as it is dedicated to debugging our
+file decompressor and is _very_ verbose. In a complex processing pipeline, you can adjust the verbosity for each
+library, for example, this command line would define a default `trace` level, but increase that level to `debug` for the RINEX library
+only:
+
+```bash
+export RUST_LOG=trace,rinex=debug
+```
+
 We offer many serialization (and deserialization) options:
 
 - `serde` for standard serdes, usually to JSON
