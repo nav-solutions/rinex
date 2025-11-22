@@ -11,13 +11,10 @@ pub mod io;
 use num_integer::div_ceil;
 
 #[cfg(feature = "log")]
-use log::{trace, error};
+use log::{error, trace};
 
 #[cfg(doc)]
-use crate::{
-    hatanaka::Compressor,
-    prelude::Header,
-};
+use crate::{hatanaka::Compressor, prelude::Header};
 
 /// [Decompressor] is a structure to decompress CRINEX (compressed compacted RINEX)
 /// into readable RINEX. It is scaled to operate according to the historical CRX2RNX tool,
@@ -64,7 +61,7 @@ impl State {
     /// - Timestamp: Year uses 4 digits
     /// - Flag
     /// - Numsat
-    const MIN_COMPRESSED_EPOCH_SIZE_V3: usize = 20;
+    const MIN_COMPRESSED_EPOCH_SIZE_V3: usize = 19;
     const MIN_DECOMPRESSED_EPOCH_SIZE_V3: usize = 35;
 
     /// Calculates number of bytes this state will forward to user
@@ -217,9 +214,7 @@ impl<const M: usize> DecompressorExpert<M> {
             // we need to parse the digits and rely on the header specs
             if !self.v3 {
                 match self.constellation {
-                    Constellation::Mixed => {
-                        None
-                    },
+                    Constellation::Mixed => None,
                     constellation => {
                         // PRN# parsing attempt
                         if let Ok(prn) = &self.epoch_descriptor[start..end].trim().parse::<u8>() {
@@ -322,13 +317,12 @@ impl<const M: usize> DecompressorExpert<M> {
     /// Process the given line, during [State::Epoch] state.
     fn run_epoch(&mut self, line: &str, len: usize) -> Result<usize, Error> {
         let min_len = if self.v3 {
-            State::MIN_COMPRESSED_EPOCH_SIZE_V3 -1
+            State::MIN_COMPRESSED_EPOCH_SIZE_V3
         } else {
             State::MIN_COMPRESSED_EPOCH_SIZE_V1
         };
 
         if len < min_len {
-            panic!("proposed line is \"{}\" (len={}, minimum={})", line, len, min_len);
             return Err(Error::EpochFormat);
         }
 
@@ -344,18 +338,16 @@ impl<const M: usize> DecompressorExpert<M> {
             self.epoch_diff.force_init(trimmed);
             self.epoch_descriptor = trimmed.to_string();
             self.epoch_desc_len = trimmed.len();
-            
         } else if line.starts_with('>') {
             if !self.v3 {
                 #[cfg(feature = "log")]
                 error!("CRINEX-V1: illegal start of line");
                 return Err(Error::BadV1Format);
             }
-                
+
             self.epoch_diff.force_init(trimmed);
             self.epoch_descriptor = trimmed.to_string();
             self.epoch_desc_len = trimmed.len();
-
         } else {
             self.epoch_descriptor = self.epoch_diff.decompress(trimmed).to_string();
             self.epoch_desc_len = self.epoch_descriptor.len();
@@ -367,14 +359,15 @@ impl<const M: usize> DecompressorExpert<M> {
             #[cfg(feature = "log")]
             trace!(
                 "recovered epoch: \"{}\" [size={}, numsat={}]",
-                self.epoch_descriptor, self.epoch_desc_len, self.numsat,
+                self.epoch_descriptor,
+                self.epoch_desc_len,
+                self.numsat,
             );
 
             // proceed
             self.numsat = numsat;
             self.state = State::Clock;
             Ok(0)
-                
         } else {
             // corrupt epoch numsat
             #[cfg(feature = "log")]
@@ -817,19 +810,15 @@ impl<const M: usize> DecompressorExpert<M> {
                 trace!("[{:x} CONCLUDED {}/{}]", self.sv, self.sv_ptr, self.numsat);
 
                 if self.sv_ptr == self.numsat {
-
                     #[cfg(feature = "log")]
                     trace!("[END OF EPOCH]");
 
                     self.state = State::Epoch;
                     return Ok(produced);
-
                 } else {
-
                     // identify next satellite
                     if let Some(sat) = self.next_satellite() {
-                        self.sv = sat; 
-
+                        self.sv = sat;
                     } else {
                         // failed to grab next satellite
 
@@ -838,7 +827,7 @@ impl<const M: usize> DecompressorExpert<M> {
                         self.state = State::Epoch;
                         return Ok(produced);
                     }
-                    
+
                     // identify next number of physics
                     let constellation = if self.sv.constellation.is_sbas() {
                         Constellation::SBAS
@@ -847,14 +836,12 @@ impl<const M: usize> DecompressorExpert<M> {
                     };
 
                     if let Some(observables) = self.get_observables(&constellation) {
-                        
                         self.numobs = observables.len();
 
                         // proceed
                         self.state = State::Observation;
                         return Ok(produced);
                     } else {
-                        
                         #[cfg(feature = "log")]
                         error!("failed to identify next physics: forced reset");
 
@@ -879,7 +866,7 @@ impl<const M: usize> DecompressorExpert<M> {
             if let Some(kernel) = self.flags_diff.get_mut(&self.sv) {
                 let flags = kernel.decompress(flags);
                 let flags_len = flags.len();
-                
+
                 self.flags_buf = flags.to_string();
 
                 // blank flags for which observation is blanked
@@ -901,7 +888,9 @@ impl<const M: usize> DecompressorExpert<M> {
                 #[cfg(feature = "log")]
                 trace!(
                     "recovered flags \"{}\" (len={}, numobs={})",
-                    &self.flags_buf, flags_len, self.numobs
+                    &self.flags_buf,
+                    flags_len,
+                    self.numobs
                 );
 
                 // copy all flags to user
@@ -925,15 +914,14 @@ impl<const M: usize> DecompressorExpert<M> {
             trace!("[END OF EPOCH]");
 
             // proceed to normal reset
-            self.state = State::Epoch; 
+            self.state = State::Epoch;
             Ok(produced)
-
         } else {
             // identify next sat
             if let Some(sat) = self.next_satellite() {
                 // process next satellite
                 self.sv = sat;
-                
+
                 // identify next physics
                 let constellation = if self.sv.constellation.is_sbas() {
                     Constellation::SBAS
@@ -950,11 +938,10 @@ impl<const M: usize> DecompressorExpert<M> {
                 } else {
                     #[cfg(feature = "log")]
                     error!("failed to identify next physics: forced reset");
-                        
+
                     self.state = State::Epoch;
                     Ok(produced) // we have streamed data
                 }
-
             } else {
                 // failed to grab next sat: should never happen here in current impl
                 // force reset

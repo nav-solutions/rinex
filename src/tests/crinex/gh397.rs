@@ -1,13 +1,11 @@
-use crate::{
-    prelude::Rinex,
-    tests::init_logger,
-};
+use crate::{prelude::Rinex, tests::init_logger};
 
 #[test]
 fn gh397_issue() {
     init_logger();
 
-    let rnx = Rinex::from_gzip_file("data/CRNX/V3/CIBG00IDN_R_20240100000_01D_30S_MO.crx.gz").unwrap();
+    let rnx =
+        Rinex::from_gzip_file("data/CRNX/V3/CIBG00IDN_R_20240100000_01D_30S_MO.crx.gz").unwrap();
 
     let epochs: Vec<_> = rnx
         .signal_observations_iter()

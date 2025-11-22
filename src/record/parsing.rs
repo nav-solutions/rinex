@@ -43,6 +43,7 @@ impl Record {
     ) -> Result<(Self, Comments), ParsingError> {
         // eos reached: process pending buffer & exit
         let mut eos = false;
+        let mut crinex_error = false;
 
         // current line storage
         let mut line_buf = String::with_capacity(128);
@@ -180,22 +181,16 @@ impl Record {
                             line_buf.push('\n');
                         }
                     },
-                    #[cfg(not(feature = "log"))]
                     Err(_) => {
-                        // Hatanaka decompression cannot recover from corrupt content 
+                        // We wind up here on the final line which is empty
+                        // and the decompressor reports that the next epoch is too short,
+                        // which is normal. But will not help create a resynchronizable decompressor.
+                        //
+                        // Hatanaka decompression cannot recover from corrupt content
                         // in either revisions. It would be possible to recover if we
                         // modified the Epoch synchronization __but__ develop a very
                         // smart epoch detector, which does not seem easy to do.
-                        return Err(ParsingError::CRINEX(e));
-                    },
-                    #[cfg(feature = "log")]
-                    Err(e) => {
-                        // Hatanaka decompression cannot recover from corrupt content 
-                        // in either revisions. It would be possible to recover if we
-                        // modified the Epoch synchronization __but__ develop a very
-                        // smart epoch detector, which does not seem easy to do.
-                        error!("hatanaka error: {}", e);
-                        return Err(ParsingError::CRINEX(e));
+                        crinex_error = true;
                     },
                 }
             }
@@ -288,7 +283,7 @@ impl Record {
             // always stack new content
             epoch_buf.push_str(&line_buf);
 
-            if eos {
+            if eos || crinex_error {
                 break;
             }
 
