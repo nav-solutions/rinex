@@ -11,11 +11,11 @@ use nalgebra::{Matrix3, Rotation, Rotation3, SMatrix, Vector4};
 
 use anise::math::Vector3;
 
-/// [Helper] helps calcualte satellite orbital state from Keplerian elements.
+/// Kepler [Solver] to calculate satellite orbital states from radio messages.
 #[derive(Debug, Clone, Copy)]
-pub struct Helper {
-    /// [SV] satellite identity
-    pub sv: SV,
+pub(crate) struct Solver {
+    /// Satellite identity as [SV].
+    pub satellite: SV,
 
     /// The difference between the calculated time and the ephemeris reference time
     pub t_k: f64,
@@ -70,7 +70,7 @@ impl Helper {
         rotation_z * rotation_x
     }
 
-    /// Returns ẍ and ÿ temporal derivative
+    /// Returns ẍ and ÿ temporal derivatives.
     fn orbit_velocity(&self) -> (f64, f64) {
         let (sin_u_k, cos_u_k) = self.u_k.sin_cos();
         let fd_x = self.fd_r_k * cos_u_k - self.r_k * self.fd_u_k * sin_u_k;
@@ -79,7 +79,7 @@ impl Helper {
     }
 
     /// Calculate ecef position [km].
-    pub fn ecef_position(&self) -> Vector3 {
+    pub fn ecef_position_vec3(&self) -> Vector3 {
         if self.sv.is_beidou_geo() {
             self.beidou_geo_ecef_position()
         } else {
@@ -91,7 +91,7 @@ impl Helper {
     }
 
     /// Returns ECEF velocity [Vector3] in km/s.
-    pub fn ecef_velocity(&self) -> Vector3 {
+    pub fn ecef_velocity_vec3(&self) -> Vector3 {
         if self.sv.is_beidou_geo() {
             self.beidou_geo_ecef_velocity()
         } else {
@@ -234,10 +234,17 @@ impl Helper {
 }
 
 impl Ephemeris {
-    /// Try to form obtain a [Helper] for Keplerian equations solving.
-    /// This will fail on Glonass and SBAS constellations.
-    pub fn helper(&self, sv: SV, t: Epoch) -> Option<Helper> {
-        // const
+    /// Deploy a keplerian [Solver] to resolve navigation equations.
+    /// This applies to all but Glonass and SBAS satellites.
+    ///
+    /// ## Input
+    /// - satellite: [SV] 
+    /// - epoch: navigation [Epoch]
+    ///
+    /// ## Output
+    /// - [Solver]
+    pub(crate) fn solver(&self, satellite: SV, epoch: Epoch) -> Option<Solver> {
+        // constants
         let gm_m3_s2 = Constants::gm(sv);
         let omega = Constants::omega(sv);
         let dtr_f = Constants::dtr_f(sv);

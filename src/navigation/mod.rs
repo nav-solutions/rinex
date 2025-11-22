@@ -26,7 +26,7 @@ pub use crate::navigation::{
 };
 
 #[cfg(feature = "nav")]
-pub use crate::navigation::ephemeris::kepler::{Helper, Kepler, Perturbations};
+pub use crate::navigation::ephemeris::kepler::{Keplerian, Perturbations};
 
 #[cfg(feature = "processing")]
 pub(crate) mod mask; // mask Trait implementation

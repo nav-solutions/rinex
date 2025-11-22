@@ -39,7 +39,7 @@ fn v2_amel0010_21g() {
 
         match k.sv.prn {
             1 => {
-                assert_eq!(eph.sv_clock(), (7.282570004460E-5, 0.0, 7.380000000000E+04));
+                assert_eq!(eph.clock_bias_drift_driftrate(), (7.282570004460E-5, 0.0, 7.380000000000E+04));
                 //TODO
                 //assert_eq!(v.sv_position((-1.488799804690E+03, 1.292880712890E+04, 2.193169775390E+04)))
 
@@ -177,7 +177,8 @@ fn v2_cbw10010_21n() {
                     );
                 }
 
-                assert_eq!(eph.get_week(), Some(2138));
+                assert_eq!(eph.week_number(), Some(2138));
+
                 assert!(
                     eph.get_orbit_f64("fitInt").is_none(),
                     "parsed fitInt unexpectedly"
@@ -216,7 +217,7 @@ fn v2_cbw10010_21n() {
                     let orbit = eph.get_orbit_f64(field);
                     assert_eq!(orbit, value, "parsed wrong \"{}\" value for G30 T1", field);
                 }
-                assert_eq!(eph.get_week(), Some(2138));
+                assert_eq!(eph.week_number(), Some(2138));
                 assert!(
                     eph.get_orbit_f64("fitInt").is_none(),
                     "parsed fitInt unexpectedly"
@@ -473,7 +474,7 @@ fn v3_esbc00dnk_r2020() {
     for (k, eph) in dut.nav_ephemeris_frames_iter() {
         if k.epoch == t0 && k.sv == g30 {
             assert_eq!(
-                eph.sv_clock(),
+                eph.clock_bias_drift_driftrate(),
                 (-2.486067824066e-04, -7.844391802792e-12, 0.000000000000e+00)
             );
             tests_passed += 1;

@@ -323,7 +323,7 @@ mod test {
 
         assert_eq!(ephemeris.get_orbit_f64("idot"), Some(1.839362331110e-10));
         assert_eq!(ephemeris.get_orbit_f64("source"), Some(2.580000000000e+02));
-        assert_eq!(ephemeris.get_week(), Some(2111));
+        assert_eq!(ephemeris.week_number(), Some(2111));
 
         assert_eq!(ephemeris.get_orbit_f64("sisa"), Some(3.120000000000e+00));
         //assert_eq!(ephemeris.get_orbit_f64("health"), Some(0.000000000000e+00));
@@ -388,7 +388,7 @@ mod test {
         );
 
         assert_eq!(ephemeris.get_orbit_f64("idot"), Some(-0.940753471872e-09));
-        assert_eq!(ephemeris.get_week(), Some(782));
+        assert_eq!(ephemeris.week_number(), Some(782));
         assert_eq!(
             ephemeris.get_orbit_f64("accuracy"),
             Some(0.200000000000e+01)

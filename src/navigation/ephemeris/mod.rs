@@ -92,13 +92,13 @@ use crate::prelude::{Constellation, Duration, Epoch, TimeScale, SV};
 ///     
 ///     }
 ///
-///     if let Some(tgd) = ephemeris.tgd() {
+///     if let Some(tgd) = ephemeris.total_group_delay() {
 ///         // TGD was found & interpreted as duration
 ///         let tgd = tgd.total_nanoseconds();
 ///     }
 ///
 ///     // SV Health highest interpretation level: as simple boolean
-///     if !ephemeris.sv_healthy() {
+///     if !ephemeris.satellite_is_healthy() {
 ///         // should most likely be ignored in navigation processing
 ///     }
 ///
@@ -172,13 +172,14 @@ pub struct Ephemeris {
 }
 
 impl Ephemeris {
-    /// Returns [SV] onboard clock (bias [s], drift [s/s], drift rate [s/s]).
-    pub fn sv_clock(&self) -> (f64, f64, f64) {
+    /// Grab the satellite clock bias (s), drift (s.s⁻¹) and
+    /// drift rate (s.s⁻²)), which is attached to all [Ephemeris].
+    pub fn clock_bias_drift_driftrate(&self) -> (f64, f64, f64) {
         (self.clock_bias, self.clock_drift, self.clock_drift_rate)
     }
 
-    /// Returns abstract orbital parameter from readable description and
-    /// interprated as f64.
+    /// Returns abstract orbital data as [f64], for this particular
+    /// data field (if it exists in the RINEX specs and was provided by this message).
     pub fn get_orbit_f64(&self, field: &str) -> Option<f64> {
         let value = self.orbits.get(field)?;
         Some(value.as_f64())
@@ -190,22 +191,24 @@ impl Ephemeris {
             .insert(field.to_string(), OrbitItem::from(value));
     }
 
-    /// Try to retrieve week counter. This exists
-    /// for all Constellations expect [Constellation::Glonass].
-    pub(crate) fn get_week(&self) -> Option<u32> {
+    /// Grab the week number, which is described by all but
+    /// Glonass and SBAS [Ephemeris].
+    pub fn week_number(&self) -> Option<u32> {
         self.orbits
             .get("week")
             .and_then(|value| Some(value.as_u32()))
     }
 
-    /// Returns TGD (if value exists) as [Duration]
-    pub fn tgd(&self) -> Option<Duration> {
+    /// Grab the Total Group Delay (TGD) value, expressed as [Duration], which is expressed
+    /// for all but Glonass and SBAS [Ephemeris].
+    pub fn total_group_delay(&self) -> Option<Duration> {
         let tgd_s = self.get_orbit_f64("tgd")?;
         Some(Duration::from_seconds(tgd_s))
     }
 
-    /// Returns true if this [Ephemeris] declares attached SV as suitable for navigation.
-    pub fn sv_healthy(&self) -> bool {
+    /// Returns true if this [Ephemeris] (radio message snapshot) declares 
+    /// the attached satellite as suitable for navigation.
+    pub fn satellite_is_healthy(&self) -> bool {
         let health = self.orbits.get("health");
 
         if health.is_none() {
@@ -242,8 +245,9 @@ impl Ephemeris {
         }
     }
 
-    /// Returns true if this [Ephemeris] message declares this satellite in testing mode.
-    pub fn sv_in_testing(&self) -> bool {
+    /// Returns true if this [Ephemeris] (radio message snapshot) declares 
+    /// the attached satellite as being tested (not suitable for navigation).
+    pub fn satellite_under_test(&self) -> bool {
         let health = self.orbits.get("health");
 
         if health.is_none() {
@@ -260,8 +264,7 @@ impl Ephemeris {
         }
     }
 
-    /// Returns glonass frequency channel, in case this is a Glonass [Ephemeris] message,
-    /// with described channel.
+    /// Returns FDMA channel index (Glonass [Ephemeris] specific).
     pub fn glonass_freq_channel(&self) -> Option<i8> {
         if let Some(value) = self.orbits.get("channel") {
             Some(value.as_i8())
@@ -270,10 +273,10 @@ impl Ephemeris {
         }
     }
 
-    /// Return Time of [Ephemeris] (ToE) expressed as [Epoch]
+    /// Return Time of [Ephemeris] (`ToE`) expressed as [Epoch].
     pub fn toe(&self, sv: SV) -> Option<Epoch> {
         // TODO: in CNAV V4 TOC is said to be TOE... ...
-        let (week, seconds) = (self.get_week()?, self.get_orbit_f64("toe")?);
+        let (week, seconds) = (self.week_number()?, self.get_orbit_f64("toe")?);
         let nanos = (seconds * 1.0E9).round() as u64;
 
         match sv.constellation {
