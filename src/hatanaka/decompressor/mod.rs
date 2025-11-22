@@ -28,11 +28,13 @@ use crate::{
 /// the specifications written by Y. Hatanaka. Like RINEX, CRINEX (compact) RINEX
 /// is a line based format (\n termination), this structures works on a line basis.
 ///
-/// Although [Decompressor] is flexible, it currently does not tolerate critical
-/// format issues, specifically:
-///  - numsat incorrectly encoded in Epoch description
-///  - missing or bad observable specifications
-///  - missing or bad constellation specifications
+/// Although [Decompressor] is flexible and powerful, yet the CRINEX specifications
+/// makes it hard to recover fatal stream corruption, currently this decompressor
+/// does not tolerate them and would require further development and severe testing.
+/// This is summarized in 3 cases:
+/// - corruption of the number of satellites described in the epoch
+/// - missing or invalid observable specifications
+/// - missing or invalid constellation specifications
 pub type Decompressor = DecompressorExpert<5>;
 
 /// [State] of the Hatanaka decompression process.
@@ -139,11 +141,14 @@ pub struct DecompressorExpert<const M: usize> {
     blanking_indexes: Vec<usize>,
     /// Cleaned up flags buffer (single malloc)
     flags_buf: String,
-    /// [TextDiff] for observation flags
+
+    /// [TextDiff] decompression kernel for observation flags
     flags_diff: HashMap<SV, TextDiff>,
-    /// Clock offset differentiator
+
+    /// Numerical decompression kernel for clock data specifically.
     clock_diff: NumDiff<M>,
-    /// Observation differentiators
+
+    /// Numerical decompression kernels, per SV and physics.
     obs_diff: HashMap<(SV, usize), NumDiff<M>>,
 
     /// [Observable]s specs for each [Constellation]
@@ -317,36 +322,40 @@ impl<const M: usize> DecompressorExpert<M> {
     /// Process the given line, during [State::Epoch] state.
     fn run_epoch(&mut self, line: &str, len: usize) -> Result<usize, Error> {
         let min_len = if self.v3 {
-            State::MIN_COMPRESSED_EPOCH_SIZE_V3
+            State::MIN_COMPRESSED_EPOCH_SIZE_V3 -1
         } else {
             State::MIN_COMPRESSED_EPOCH_SIZE_V1
         };
 
         if len < min_len {
+            panic!("proposed line is \"{}\" (len={}, minimum={})", line, len, min_len);
             return Err(Error::EpochFormat);
         }
 
         let trimmed = &line[1..].trim_end();
+
         if line.starts_with('&') {
             if self.v3 {
                 #[cfg(feature = "log")]
-                error!("CRINEX-V3: line does not start with '&'");
+                error!("CRINEX-V3: illegal start of line");
                 return Err(Error::BadV3Format);
             }
 
             self.epoch_diff.force_init(trimmed);
             self.epoch_descriptor = trimmed.to_string();
             self.epoch_desc_len = trimmed.len();
+            
         } else if line.starts_with('>') {
             if !self.v3 {
                 #[cfg(feature = "log")]
-                error!("CRINEX-V1: illegal '>' marker");
+                error!("CRINEX-V1: illegal start of line");
                 return Err(Error::BadV1Format);
             }
-
+                
             self.epoch_diff.force_init(trimmed);
             self.epoch_descriptor = trimmed.to_string();
             self.epoch_desc_len = trimmed.len();
+
         } else {
             self.epoch_descriptor = self.epoch_diff.decompress(trimmed).to_string();
             self.epoch_desc_len = self.epoch_descriptor.len();
@@ -360,18 +369,16 @@ impl<const M: usize> DecompressorExpert<M> {
                 "recovered epoch: \"{}\" [size={}, numsat={}]",
                 self.epoch_descriptor, self.epoch_desc_len, self.numsat,
             );
-            
+
+            // proceed
+            self.numsat = numsat;
             self.state = State::Clock;
             Ok(0)
                 
         } else {
-            // corrupt epoch numsat: forced reset
-            // will flush till next epoch descriptor
-            self.state = State::Epoch;
-            
+            // corrupt epoch numsat
             #[cfg(feature = "log")]
-            error!("corrupt numsat: forced reset");
-
+            error!("corrupt numsat");
             Err(Error::CorruptNumsat)
         }
     }
@@ -390,8 +397,7 @@ impl<const M: usize> DecompressorExpert<M> {
         // V3 format is much simpler
         // all we need to do is extract SV `XXY` to append in each following lines
         let mut produced = 1;
-
-        buf[produced] = b'>'; // special marker
+        buf[0] = b'>'; // special marker
 
         let bytes = self.epoch_descriptor.as_bytes();
 
@@ -415,7 +421,7 @@ impl<const M: usize> DecompressorExpert<M> {
     /// Fills user buffer with recovered epoch, following V1 standards
     fn format_epoch_v1(&self, clock_data: Option<i64>, buf: &mut [u8]) -> usize {
         let mut produced = 1;
-        buf[produced] = b' '; // single whitespace
+        buf[0] = b' '; // single whitespace
 
         let bytes = self.epoch_descriptor.as_bytes();
 
@@ -442,7 +448,7 @@ impl<const M: usize> DecompressorExpert<M> {
         let nb_extra = (self.epoch_desc_len - Self::V1_NUMSAT_OFFSET) / 36;
 
         for _ in 0..nb_extra {
-            // extra padding (TODO: improve this process)
+            // extra padding (TODO: improve this blanking)
             buf[produced..produced + 32].copy_from_slice(&[
                 b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ',
                 b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ',
@@ -517,11 +523,8 @@ impl<const M: usize> DecompressorExpert<M> {
             self.sv = sv;
         } else {
             // failed to grab one: corrupt content.
-            // force reset
             #[cfg(feature = "log")]
-            error!("failed to grab 1st sat: forced reset");
-
-            self.state = State::Epoch;
+            error!("failed to grab 1st sat");
             return Err(Error::SatelliteIdentification);
         }
 
@@ -553,16 +556,12 @@ impl<const M: usize> DecompressorExpert<M> {
                             }
                         } else {
                             #[cfg(feature = "log")]
-                            error!("corrupt satellite identified: not-going further, forced reset");
-
-                            self.state = State::Epoch;
+                            error!("corrupt satellite identified");
                             return Err(Error::SatelliteIdentification);
                         }
                     } else {
                         #[cfg(feature = "log")]
-                        error!("corrupt satellite identified: not-going further, forced reset");
-
-                        self.state = State::Epoch;
+                        error!("corrupt satellite identified");
                         return Err(Error::SatelliteIdentification);
                     }
                 },
@@ -594,7 +593,7 @@ impl<const M: usize> DecompressorExpert<M> {
         self.blanking_indexes.clear(); // new run
 
         #[cfg(feature = "log")]
-        trace!("[{}] LINE \"{}\"", self.sv, line);
+        trace!("[{:x}] LINE \"{}\"", self.sv, line);
 
         if self.v3 {
             // prepend SVNN identity
@@ -815,7 +814,7 @@ impl<const M: usize> DecompressorExpert<M> {
                 self.sv_ptr += 1;
 
                 #[cfg(feature = "log")]
-                trace!("[{} CONCLUDED {}/{}]", self.sv, self.sv_ptr, self.numsat);
+                trace!("[{:x} CONCLUDED {}/{}]", self.sv, self.sv_ptr, self.numsat);
 
                 if self.sv_ptr == self.numsat {
 
@@ -823,14 +822,21 @@ impl<const M: usize> DecompressorExpert<M> {
                     trace!("[END OF EPOCH]");
 
                     self.state = State::Epoch;
+                    return Ok(produced);
+
                 } else {
 
                     // identify next satellite
                     if let Some(sat) = self.next_satellite() {
                         self.sv = sat; 
+
                     } else {
                         // failed to grab next satellite
 
+                        #[cfg(feature = "log")]
+                        error!("failed to determine next sat");
+                        self.state = State::Epoch;
+                        return Ok(produced);
                     }
                     
                     // identify next number of physics
@@ -855,7 +861,6 @@ impl<const M: usize> DecompressorExpert<M> {
                         self.state = State::Epoch;
                         return Ok(produced);
                     }
-                    
                 }
             }
         } // for
@@ -913,7 +918,7 @@ impl<const M: usize> DecompressorExpert<M> {
         self.sv_ptr += 1;
 
         #[cfg(feature = "log")]
-        trace!("[{} CONCLUDED {}/{}]", self.sv, self.sv_ptr, self.numsat);
+        trace!("[{:x} CONCLUDED {}/{}]", self.sv, self.sv_ptr, self.numsat);
 
         if self.sv_ptr == self.numsat {
             #[cfg(feature = "log")]
@@ -957,6 +962,7 @@ impl<const M: usize> DecompressorExpert<M> {
                 error!("failed to determine next sat: forced reset");
 
                 self.state = State::Epoch;
+                self.epoch_descriptor.clear();
 
                 Ok(produced)
             }

@@ -44,9 +44,6 @@ impl Record {
         // eos reached: process pending buffer & exit
         let mut eos = false;
 
-        // crinex decompression in failure: process pending buffer & exit
-        let mut crinex_error = false;
-
         // current line storage
         let mut line_buf = String::with_capacity(128);
 
@@ -185,16 +182,20 @@ impl Record {
                     },
                     #[cfg(not(feature = "log"))]
                     Err(_) => {
-                        // CRINEX decompressor in failure,
-                        // clear pending buffer, will resynchronize on next valid content
-                        line_buf.clear();
+                        // Hatanaka decompression cannot recover from corrupt content 
+                        // in either revisions. It would be possible to recover if we
+                        // modified the Epoch synchronization __but__ develop a very
+                        // smart epoch detector, which does not seem easy to do.
+                        return Err(ParsingError::CRINEX(e));
                     },
                     #[cfg(feature = "log")]
                     Err(e) => {
-                        error!("hatanaka: decompression error: {}", e);
-                        // CRINEX decompressor in failure,
-                        // clear pending buffer, will resynchronize on next valid content
-                        line_buf.clear();
+                        // Hatanaka decompression cannot recover from corrupt content 
+                        // in either revisions. It would be possible to recover if we
+                        // modified the Epoch synchronization __but__ develop a very
+                        // smart epoch detector, which does not seem easy to do.
+                        error!("hatanaka error: {}", e);
+                        return Err(ParsingError::CRINEX(e));
                     },
                 }
             }
