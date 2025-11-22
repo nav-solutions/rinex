@@ -52,7 +52,7 @@ fn v3_kepler() {
 
         let (_, _, eph) = dut.nav_ephemeris_selection(g10, t_gpst).unwrap();
 
-        let orbit = eph.kepler2position(g10, t_gpst).unwrap();
+        let orbit = eph.resolve_orbital_state(g10, t_gpst, 10).unwrap();
 
         let pos_vel = orbit.to_cartesian_pos_vel();
 
@@ -106,7 +106,7 @@ fn v3_kepler() {
 
         let (_, _, eph) = dut.nav_ephemeris_selection(e30, t_gpst).unwrap();
 
-        let orbit = eph.kepler2position(e30, t_gpst).unwrap();
+        let orbit = eph.resolve_orbital_state(e30, t_gpst, 10).unwrap();
 
         let pos_vel = orbit.to_cartesian_pos_vel();
 
@@ -172,7 +172,7 @@ fn v3_kepler() {
 
         let (_, _, eph) = dut.nav_ephemeris_selection(c10, t_gpst).unwrap();
 
-        let orbit = eph.kepler2position(c10, t_gpst).unwrap();
+        let orbit = eph.resolve_orbital_state(c10, t_gpst, 10).unwrap();
 
         let pos_vel = orbit.to_cartesian_pos_vel();
 

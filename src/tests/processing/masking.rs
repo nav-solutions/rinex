@@ -18,7 +18,11 @@ mod test {
 
         let dut = rnx.filter(&mask);
         assert_eq!(dut.constellations_iter().count(), 1, "mask:constel failed");
-        assert_eq!(dut.sv_iter().count(), 31, "mask:constel - wrong # of SV");
+        assert_eq!(
+            dut.satellite_iter().count(),
+            31,
+            "mask:constel - wrong # of SV"
+        );
 
         let mask = Filter::mask(
             MaskOperand::Equals,
@@ -31,7 +35,11 @@ mod test {
             3,
             "mask:constell(SBAS) failed"
         );
-        assert_eq!(dut.sv_iter().count(), 5, "mask:constell(SBAS) failed");
+        assert_eq!(
+            dut.satellite_iter().count(),
+            5,
+            "mask:constell(SBAS) failed"
+        );
     }
 
     #[test]
@@ -45,7 +53,7 @@ mod test {
             ]),
         );
         let rnx = rnx.filter(&mask);
-        assert_eq!(rnx.sv_iter().count(), 2);
+        assert_eq!(rnx.satellite_iter().count(), 2);
     }
 
     #[test]
@@ -56,7 +64,7 @@ mod test {
             FilterItem::ConstellationItem(vec![Constellation::GPS]),
         );
         rnx.filter_mut(&mask);
-        assert_eq!(rnx.sv_iter().count(), 12);
+        assert_eq!(rnx.satellite_iter().count(), 12);
     }
     #[test]
     fn meteo_obsrv_v2_clar0020() {
@@ -186,26 +194,26 @@ mod test {
         let dut = rinex.filter(&second);
         assert_eq!(dut.epoch_iter().count(), 1);
 
-        let numsat = rinex.sv_iter().collect::<Vec<_>>().len();
+        let numsat = rinex.satellite_iter().collect::<Vec<_>>().len();
 
         let g01_eq = Filter::equals("G01").unwrap();
         let dut = rinex.filter(&g01_eq);
-        let num_dut = dut.sv_iter().collect::<Vec<_>>().len();
+        let num_dut = dut.satellite_iter().collect::<Vec<_>>().len();
         assert_eq!(num_dut, 1);
 
         let g01_ineq = Filter::not_equals("G01").unwrap();
         let dut = rinex.filter(&g01_ineq);
-        let num_dut = dut.sv_iter().collect::<Vec<_>>().len();
+        let num_dut = dut.satellite_iter().collect::<Vec<_>>().len();
         assert_eq!(num_dut, numsat - 1);
 
         let num_gps_sat = rinex
-            .sv_iter()
+            .satellite_iter()
             .filter(|sv| sv.constellation == Constellation::GPS)
             .collect::<Vec<_>>()
             .len();
 
         let num_glo_sat = rinex
-            .sv_iter()
+            .satellite_iter()
             .filter(|sv| sv.constellation == Constellation::Glonass)
             .collect::<Vec<_>>()
             .len();
@@ -214,28 +222,28 @@ mod test {
         let dut = rinex.filter(&gps_eq);
         let constells = dut.constellations_iter().collect::<Vec<_>>();
         assert_eq!(constells, vec![Constellation::GPS]);
-        let num_dut = dut.sv_iter().collect::<Vec<_>>().len();
+        let num_dut = dut.satellite_iter().collect::<Vec<_>>().len();
         assert_eq!(num_dut, num_gps_sat);
 
         let glo_eq = Filter::equals("GLO").unwrap();
         let dut = rinex.filter(&glo_eq);
         let constells = dut.constellations_iter().collect::<Vec<_>>();
         assert_eq!(constells, vec![Constellation::Glonass]);
-        let num_dut = dut.sv_iter().collect::<Vec<_>>().len();
+        let num_dut = dut.satellite_iter().collect::<Vec<_>>().len();
         assert_eq!(num_dut, num_glo_sat);
 
         let above_r01 = Filter::greater_than("R01").unwrap();
         let dut = rinex.filter(&above_r01);
         let constells = dut.constellations_iter().collect::<Vec<_>>();
         assert_eq!(constells, vec![Constellation::GPS, Constellation::Glonass]);
-        let num_dut = dut.sv_iter().collect::<Vec<_>>().len();
+        let num_dut = dut.satellite_iter().collect::<Vec<_>>().len();
         assert_eq!(num_dut, num_gps_sat + num_glo_sat - 1);
 
         let above_eq_r02 = Filter::greater_equals("R02").unwrap();
         let dut = rinex.filter(&above_eq_r02);
         let constells = dut.constellations_iter().collect::<Vec<_>>();
         assert_eq!(constells, vec![Constellation::GPS, Constellation::Glonass]);
-        let num_dut = dut.sv_iter().collect::<Vec<_>>().len();
+        let num_dut = dut.satellite_iter().collect::<Vec<_>>().len();
         assert_eq!(num_dut, num_gps_sat + num_glo_sat - 1);
     }
 
@@ -269,7 +277,7 @@ mod test {
             .filter(&bds_meo_top);
         let constell = dut.constellations_iter().collect::<Vec<_>>();
         assert_eq!(constell, vec![Constellation::BeiDou]);
-        for sv in dut.sv_iter() {
+        for sv in dut.satellite_iter() {
             assert!(sv.prn >= 7);
             assert!(sv.prn <= 54);
             assert!(!sv.is_beidou_geo());
@@ -284,7 +292,7 @@ mod test {
         let dut = rinex.filter(&bds_eq).filter(&bds_geo_bot);
         let constell = dut.constellations_iter().collect::<Vec<_>>();
         assert_eq!(constell, vec![Constellation::BeiDou]);
-        for sv in dut.sv_iter() {
+        for sv in dut.satellite_iter() {
             assert!(sv.prn < 6);
             assert!(sv.is_beidou_geo());
         }
