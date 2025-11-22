@@ -896,6 +896,7 @@ impl<const M: usize> DecompressorExpert<M> {
                 // copy all flags to user
                 Self::write_flags(&self.flags_buf, flags_len, self.numobs, self.v3, buf);
             } else {
+                #[cfg(feature = "log")]
                 error!("internal error: no kernel found for sat={}", self.sv);
                 self.state = State::Epoch; // forced reset
             }
