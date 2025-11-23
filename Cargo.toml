@@ -59,22 +59,22 @@ clock = []
 # ANTEX for accurate antenna characteristics: dedicated Iterators & methods.
 antex = []
 
-# BINEX RNX2BIN and BIN2RNX serdes
+# RINEX2BIN serializer
 binex = [
     "dep:binex"
 ]
 
-# RTCM RTCM2RNX and RNX2RTCM serdes
+# RINEX2RTCM serializer
 rtcm = [
     "dep:rtcm-rs",
 ]
 
-# RINEX to GNSS protos
+# RINEX to GNSS binary protos serializer
 protos = [
     "dep:gnss-protos",
 ]
 
-# RINEX to UBX serializer and UBX helpers
+# RINEX to UBX serializer and other UBX helpers
 ublox = [
     "dep:ublox",
     "dep:gnss-protos",

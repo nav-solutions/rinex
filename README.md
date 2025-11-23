@@ -37,6 +37,10 @@ other RINEX-like formats have their own parser:
   - [DORIS (special observations)](https://github.com/nav-solutions/doris)
 - Many pre-processing algorithms including Filter Designer
 - Several file operations: merging, splitting, time binning (batch)
+- Several conversion methods (serdes operations)
+  - BINEX protocol (on `binex` feature)
+  - U-Blox protocol (on `ublox` feature)
+  - RTCM protocol (on `rtcm` feature)
 
 ## Warnings :warning:
 
