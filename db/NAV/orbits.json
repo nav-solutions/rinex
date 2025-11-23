@@ -792,7 +792,7 @@
         }
     },
     {
-        "constellation": "GEO",
+        "constellation": "SBAS",
         "version": {
             "major": 3
         },
@@ -812,7 +812,7 @@
         }
     },
     {
-        "constellation": "GEO",
+        "constellation": "SBAS",
         "version": {
             "major": 4
         },

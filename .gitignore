@@ -17,6 +17,7 @@ Cargo.lock
 .DS_Store
 *.rnx
 *.crx
+*.rs~
 
 rinex/merge.rnx
 rinex/test.crx

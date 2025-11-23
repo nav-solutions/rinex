@@ -183,16 +183,22 @@ pub enum ParsingError {
 pub enum FormattingError {
     #[error("i/o: output error")]
     OutputError(#[from] IoError),
+
     #[error("missing constellation information")]
-    NoConstellationDefinition,
+    UndefinedConstellation,
+
     #[error("missing navigation standard specs")]
     MissingNavigationStandards,
+
     #[error("undefined observables")]
     UndefinedObservables,
+
     #[error("missing observable definition")]
     MissingObservableDefinition,
+
     #[error("nav: unknown radio message")]
     NoNavigationDefinition,
+
     #[error("nav: missing grid defs")]
     NoGridDefinition,
 }

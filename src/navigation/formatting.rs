@@ -164,7 +164,7 @@ pub fn format<W: Write>(
 
     let file_constell = header
         .constellation
-        .ok_or(FormattingError::NoConstellationDefinition)?;
+        .ok_or(FormattingError::UndefinedConstellation)?;
 
     // in chronological order
     for epoch in rec.iter().map(|(k, _v)| k.epoch).unique().sorted() {

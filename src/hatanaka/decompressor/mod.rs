@@ -10,8 +10,11 @@ pub mod io;
 
 use num_integer::div_ceil;
 
-#[cfg(docsrs)]
-use crate::hatanaka::Compressor;
+#[cfg(feature = "log")]
+use log::{error, trace};
+
+#[cfg(doc)]
+use crate::{hatanaka::Compressor, prelude::Header};
 
 /// [Decompressor] is a structure to decompress CRINEX (compressed compacted RINEX)
 /// into readable RINEX. It is scaled to operate according to the historical CRX2RNX tool,
@@ -22,20 +25,25 @@ use crate::hatanaka::Compressor;
 /// the specifications written by Y. Hatanaka. Like RINEX, CRINEX (compact) RINEX
 /// is a line based format (\n termination), this structures works on a line basis.
 ///
-/// Although [Decompressor] is flexible, it currently does not tolerate critical
-/// format issues, specifically:
-///  - numsat incorrectly encoded in Epoch description
-///  - missing or bad observable specifications
-///  - missing or bad constellation specifications
+/// Although [Decompressor] is flexible and powerful, yet the CRINEX specifications
+/// makes it hard to recover fatal stream corruption, currently this decompressor
+/// does not tolerate them and would require further development and severe testing.
+/// This is summarized in 3 cases:
+/// - corruption of the number of satellites described in the epoch
+/// - missing or invalid observable specifications
+/// - missing or invalid constellation specifications
 pub type Decompressor = DecompressorExpert<5>;
 
+/// [State] of the Hatanaka decompression process.
 #[derive(Default, Debug, Copy, Clone, PartialEq)]
 pub enum State {
     #[default]
     /// Gathering Epoch descriptor.
     Epoch,
+
     /// Gathering Clock offset, recovering complete epoch description.
     Clock,
+
     /// Observations gathering and recovering.
     Observation,
 }
@@ -53,7 +61,7 @@ impl State {
     /// - Timestamp: Year uses 4 digits
     /// - Flag
     /// - Numsat
-    const MIN_COMPRESSED_EPOCH_SIZE_V3: usize = 20;
+    const MIN_COMPRESSED_EPOCH_SIZE_V3: usize = 19;
     const MIN_DECOMPRESSED_EPOCH_SIZE_V3: usize = 35;
 
     /// Calculates number of bytes this state will forward to user
@@ -101,34 +109,45 @@ impl State {
 pub struct DecompressorExpert<const M: usize> {
     /// Whether this is a V3 parser or not
     v3: bool,
+
     /// Constellation described by [Header]
     constellation: Constellation,
+
     /// Internal Finite [State] Machine.
     state: State,
+
     /// For internal logic: remains true until one epoch descriptor has been recovered.
     first_epoch: bool,
+
     /// pointers
     sv: SV,
     numsat: usize,  // total
     sv_ptr: usize,  // inside epoch
     numobs: usize,  // total
     obs_ptr: usize, // inside epoch
+
     /// [TextDiff] that works on entire Epoch line
     epoch_diff: TextDiff,
+
     /// Epoch descriptor, for single allocation
     epoch_descriptor: String,
     epoch_desc_len: usize, // for internal logic
+
     /// Stored index of current BLANKS
     /// for correct flags omition in this case
     blanking_indexes: Vec<usize>,
     /// Cleaned up flags buffer (single malloc)
     flags_buf: String,
-    /// [TextDiff] for observation flags
+
+    /// [TextDiff] decompression kernel for observation flags
     flags_diff: HashMap<SV, TextDiff>,
-    /// Clock offset differentiator
+
+    /// Numerical decompression kernel for clock data specifically.
     clock_diff: NumDiff<M>,
-    /// Observation differentiators
+
+    /// Numerical decompression kernels, per SV and physics.
     obs_diff: HashMap<(SV, usize), NumDiff<M>>,
+
     /// [Observable]s specs for each [Constellation]
     gnss_observables: HashMap<Constellation, Vec<Observable>>,
 }
@@ -162,38 +181,40 @@ impl<const M: usize> DecompressorExpert<M> {
     /// Minimal timestamp length in V1 revision
     const V1_TIMESTAMP_SIZE: usize = 24;
     const V1_NUMSAT_OFFSET: usize = Self::V1_TIMESTAMP_SIZE + 4;
-    const V1_SV_OFFSET: usize = Self::V1_NUMSAT_OFFSET + 3;
+    const V1_SAT_OFFSET: usize = Self::V1_NUMSAT_OFFSET + 3;
 
     /// Minimal timestamp length in V3 revision
     const V3_TIMESTAMP_SIZE: usize = 26;
     const V3_NUMSAT_OFFSET: usize = Self::V3_TIMESTAMP_SIZE + 1 + 4;
-    const V3_SV_OFFSET: usize = Self::V3_NUMSAT_OFFSET + 9;
+    const V3_SAT_OFFSET: usize = Self::V3_NUMSAT_OFFSET + 9;
 
-    /// Returns pointer offset to parse this sv
-    fn sv_slice_start(v3: bool, sv_index: usize) -> usize {
+    /// Returns pointer offset to parse the i-th satellite in the epoch descriptor
+    fn sv_slice_start(v3: bool, sat_index: usize) -> usize {
         let offset = if v3 {
-            Self::V3_SV_OFFSET
+            Self::V3_SAT_OFFSET
         } else {
-            Self::V1_SV_OFFSET
+            Self::V1_SAT_OFFSET
         };
-        offset + sv_index * 3
+
+        offset + sat_index * 3
     }
 
-    /// Returns next [SV]
-    fn next_sv(&self) -> Option<SV> {
+    /// Tries to return next satellite from epoch descriptor.
+    fn next_satellite(&self) -> Option<SV> {
         let start = Self::sv_slice_start(self.v3, self.sv_ptr);
         let end = (start + 3).min(self.epoch_desc_len);
 
-        if let Ok(sv) = SV::from_str(&self.epoch_descriptor[start..end].trim()) {
+        let content = &self.epoch_descriptor[start..end].trim();
+
+        // satellite parsing
+        if let Ok(sv) = SV::from_str(content) {
             Some(sv)
         } else {
-            // May fail on old revisions that have a mono GNSS system
-            // that have tendency to omit the constellation description (leaving only the PRN#)
+            // in old RINEX, single satellite system may omit the constellation,
+            // we need to parse the digits and rely on the header specs
             if !self.v3 {
                 match self.constellation {
-                    Constellation::Mixed => {
-                        None // incorrect description, will rapidly panic
-                    },
+                    Constellation::Mixed => None,
                     constellation => {
                         // PRN# parsing attempt
                         if let Ok(prn) = &self.epoch_descriptor[start..end].trim().parse::<u8>() {
@@ -202,7 +223,7 @@ impl<const M: usize> DecompressorExpert<M> {
                                 constellation,
                             })
                         } else {
-                            None // incorrect description, will rapidly panic
+                            None
                         }
                     },
                 }
@@ -230,8 +251,8 @@ impl<const M: usize> DecompressorExpert<M> {
     /// Builds new CRINEX decompressor.
     /// Inputs
     /// - v3: whether this CRINEX V1 or V3 content will follow
-    /// - constellation: [Constellation] as defined in header
-    /// - gnss_observables: [Observable]s per [Constellation] as defined in header.
+    /// - constellation: file [Constellation] as defined in file [Header]
+    /// - gnss_observables: [Observable]s per [Constellation] as defined in [Header].
     pub fn new(
         v3: bool,
         constellation: Constellation,
@@ -286,7 +307,6 @@ impl<const M: usize> DecompressorExpert<M> {
             return Err(Error::BufferOverflow);
         }
 
-        // println!("STATE={:?}", self.state); //DEBUG
         match self.state {
             State::Epoch => self.run_epoch(line, len),
             State::Clock => self.run_clock(line, len, buf),
@@ -294,7 +314,7 @@ impl<const M: usize> DecompressorExpert<M> {
         }
     }
 
-    /// Process following line, in [State::Epoch]
+    /// Process the given line, during [State::Epoch] state.
     fn run_epoch(&mut self, line: &str, len: usize) -> Result<usize, Error> {
         let min_len = if self.v3 {
             State::MIN_COMPRESSED_EPOCH_SIZE_V3
@@ -307,8 +327,11 @@ impl<const M: usize> DecompressorExpert<M> {
         }
 
         let trimmed = &line[1..].trim_end();
+
         if line.starts_with('&') {
             if self.v3 {
+                #[cfg(feature = "log")]
+                error!("CRINEX-V3: illegal start of line");
                 return Err(Error::BadV3Format);
             }
 
@@ -317,6 +340,8 @@ impl<const M: usize> DecompressorExpert<M> {
             self.epoch_desc_len = trimmed.len();
         } else if line.starts_with('>') {
             if !self.v3 {
+                #[cfg(feature = "log")]
+                error!("CRINEX-V1: illegal start of line");
                 return Err(Error::BadV1Format);
             }
 
@@ -328,17 +353,27 @@ impl<const M: usize> DecompressorExpert<M> {
             self.epoch_desc_len = self.epoch_descriptor.len();
         }
 
-        // println!(
-        //     "RECOVERED \"{}\" [{}]",
-        //     self.epoch_descriptor, self.epoch_desc_len
-        // ); // DEBUG
-
         // numsat needs to be recovered right away,
         // because it is used to determine the next production size
-        self.numsat = self.epoch_numsat().expect("bad recovered content (numsat)");
+        if let Some(numsat) = self.epoch_numsat() {
+            #[cfg(feature = "log")]
+            trace!(
+                "recovered epoch: \"{}\" [size={}, numsat={}]",
+                self.epoch_descriptor,
+                self.epoch_desc_len,
+                self.numsat,
+            );
 
-        self.state = State::Clock;
-        Ok(0)
+            // proceed
+            self.numsat = numsat;
+            self.state = State::Clock;
+            Ok(0)
+        } else {
+            // corrupt epoch numsat
+            #[cfg(feature = "log")]
+            error!("corrupt numsat");
+            Err(Error::CorruptNumsat)
+        }
     }
 
     /// Fills user buffer with recovered epoch, following either V1 or V3 standards
@@ -354,10 +389,8 @@ impl<const M: usize> DecompressorExpert<M> {
     fn format_epoch_v3(&self, clock_data: Option<i64>, buf: &mut [u8]) -> usize {
         // V3 format is much simpler
         // all we need to do is extract SV `XXY` to append in each following lines
-
-        let mut produced = 0;
-        buf[produced] = b'>'; // special marker
-        produced += 1;
+        let mut produced = 1;
+        buf[0] = b'>'; // special marker
 
         let bytes = self.epoch_descriptor.as_bytes();
 
@@ -380,10 +413,8 @@ impl<const M: usize> DecompressorExpert<M> {
 
     /// Fills user buffer with recovered epoch, following V1 standards
     fn format_epoch_v1(&self, clock_data: Option<i64>, buf: &mut [u8]) -> usize {
-        let mut produced = 0;
-
-        buf[produced] = b' '; // single whitespace
-        produced += 1;
+        let mut produced = 1;
+        buf[0] = b' '; // single whitespace
 
         let bytes = self.epoch_descriptor.as_bytes();
 
@@ -410,7 +441,7 @@ impl<const M: usize> DecompressorExpert<M> {
         let nb_extra = (self.epoch_desc_len - Self::V1_NUMSAT_OFFSET) / 36;
 
         for _ in 0..nb_extra {
-            // extra padding
+            // extra padding (TODO: improve this blanking)
             buf[produced..produced + 32].copy_from_slice(&[
                 b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ',
                 b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ',
@@ -442,6 +473,7 @@ impl<const M: usize> DecompressorExpert<M> {
 
         // attempts to recover clock data (if it exists)
         if len > 2 {
+            // data may exist
             if line[1..].starts_with('&') {
                 if let Ok(order) = line[..1].parse::<usize>() {
                     if let Ok(val) = line[2..].parse::<i64>() {
@@ -450,9 +482,16 @@ impl<const M: usize> DecompressorExpert<M> {
                         clock_data = Some(val);
                     }
                 }
+            } else {
+                match line.trim().parse::<i64>() {
+                    Ok(val) => {
+                        let val = self.clock_diff.decompress(val);
+                        clock_data = Some(val);
+                    },
+                    Err(_) => {},
+                }
             }
-        }
-        if len == 1 {
+        } else if len == 1 {
             // highly compressed clock data
             match line.trim().parse::<i64>() {
                 Ok(val) => {
@@ -472,11 +511,23 @@ impl<const M: usize> DecompressorExpert<M> {
         self.sv_ptr = 0;
         self.first_epoch = false;
 
-        // grab first sv
-        self.sv = self.next_sv().expect("bad recovered content (sv)");
+        // this actually grabs the first satellite
+        if let Some(sv) = self.next_satellite() {
+            self.sv = sv;
+        } else {
+            // failed to grab one: corrupt content.
+            #[cfg(feature = "log")]
+            error!("failed to grab 1st sat");
+            return Err(Error::SatelliteIdentification);
+        }
 
-        // cross check recovered content
-        // &, at the same time, make sure we are ready to process any new SV
+        // This prepares the compression kernel for new rising satellites.
+        //
+        // We also verify that all satellites being described are sane & valid.
+        // On any corrupt content, we decided to abort in order to avoid possibly
+        // complex resynchronization scenario. But that also means we are not able
+        // to partly decompress the first valid data fields. In otherwords, we are
+        // very sensitive to valid satellites description.
         for i in 0..self.numsat {
             let start = Self::sv_slice_start(self.v3, i);
 
@@ -497,17 +548,21 @@ impl<const M: usize> DecompressorExpert<M> {
                                 constellation: self.constellation,
                             }
                         } else {
-                            return Err(Error::SVParsing);
+                            #[cfg(feature = "log")]
+                            error!("corrupt satellite identified");
+                            return Err(Error::SatelliteIdentification);
                         }
                     } else {
-                        return Err(Error::SVParsing);
+                        #[cfg(feature = "log")]
+                        error!("corrupt satellite identified");
+                        return Err(Error::SatelliteIdentification);
                     }
                 },
             };
 
-            // initialize on first encounter
+            // initialize compression kernel on first satellite encounter
             if self.flags_diff.get(&sv).is_none() {
-                // initializes the internal buffer with some capacity..
+                // Initializes with a little bit of capacity to improve performances.
                 let textdiff = TextDiff::new("               ");
                 self.flags_diff.insert(sv, textdiff);
             }
@@ -530,7 +585,8 @@ impl<const M: usize> DecompressorExpert<M> {
 
         self.blanking_indexes.clear(); // new run
 
-        // println!("[{}] LINE \"{}\"", self.sv, line); // DEBUG
+        #[cfg(feature = "log")]
+        trace!("[{:x}] LINE \"{}\"", self.sv, line);
 
         if self.v3 {
             // prepend SVNN identity
@@ -547,13 +603,13 @@ impl<const M: usize> DecompressorExpert<M> {
         // Since data flags are text compressed, it can create some weird situations.
         for ptr in 0..self.numobs {
             // We must output something for each expected data points (whatever happens).
-            // So we default to a BLANK, which simplifies the following code:
-            // we only implement successful cases.
+            // So we default to a BLANK, which simplifies the code to follow vastly.
+            // In otherwords, the following code only implements successfull cases (mostly).
             let mut formatted = "                ".to_string();
 
-            // Try to locate next '_', which is either
-            //  . normal/expected line progression
-            //  . or a blanking
+            // Tries to locate a '_': to locate next '_', which is either
+            // - when found, this is normal line progression
+            // - when not found, this is a blanking
             let offset = line[consumed..].find(' ');
 
             if let Some(offset) = offset {
@@ -563,7 +619,7 @@ impl<const M: usize> DecompressorExpert<M> {
 
                     let slice = line[consumed..consumed + offset].trim();
 
-                    //#[cfg(feature = "log")]
+                    //#[tracecfg(feature = "log")]
                     //debug!("slice \"{}\" [{}/{}]", &slice, ptr + 1, self.numobs);
 
                     if let Some(offset) = slice.find('&') {
@@ -750,75 +806,100 @@ impl<const M: usize> DecompressorExpert<M> {
                 // conclude this SV
                 self.sv_ptr += 1;
 
-                //#[cfg(feature = "log")]
-                //debug!("[{} CONCLUDED {}/{}]", self.sv, self.sv_ptr, self.numsat);
+                #[cfg(feature = "log")]
+                trace!("[{:x} CONCLUDED {}/{}]", self.sv, self.sv_ptr, self.numsat);
 
                 if self.sv_ptr == self.numsat {
-                    //#[cfg(feature = "log")]
-                    //debug!("[END OF EPOCH]");
+                    #[cfg(feature = "log")]
+                    trace!("[END OF EPOCH]");
 
                     self.state = State::Epoch;
+                    return Ok(produced);
                 } else {
-                    self.sv = self.next_sv().expect("failed to determine next sv");
+                    // identify next satellite
+                    if let Some(sat) = self.next_satellite() {
+                        self.sv = sat;
+                    } else {
+                        // failed to grab next satellite
 
+                        #[cfg(feature = "log")]
+                        error!("failed to determine next sat");
+                        self.state = State::Epoch;
+                        return Ok(produced);
+                    }
+
+                    // identify next number of physics
                     let constellation = if self.sv.constellation.is_sbas() {
                         Constellation::SBAS
                     } else {
                         self.sv.constellation
                     };
 
-                    self.numobs = self
-                        .get_observables(&constellation)
-                        .expect("internal error")
-                        .len();
+                    if let Some(observables) = self.get_observables(&constellation) {
+                        self.numobs = observables.len();
 
-                    self.state = State::Observation;
+                        // proceed
+                        self.state = State::Observation;
+                        return Ok(produced);
+                    } else {
+                        #[cfg(feature = "log")]
+                        error!("failed to identify next physics: forced reset");
+
+                        self.state = State::Epoch;
+                        return Ok(produced);
+                    }
                 }
-
-                return Ok(produced);
             }
         } // for
 
-        // at this point, we should be left with "data flags" in the buffer.
-        // That may not be the case. We may have consumed everything when
-        // the line was trimmed at production time, meaning flags should be preserved
-
+        // at this point, we're either left with two cases
+        // - "data flags" in the buffer
+        // - empty buffer, which is the case when all flags should be preserved
+        // and the compressor trimmed the lines entirely
         if consumed < len {
-            // proceed to flags recovering
+            // flags recovering
             let flags = &line[consumed..].trim_end();
 
-            // println!("FLAGS \"{}\"", flags); // DEBUG
+            #[cfg(feature = "log")]
+            trace!("flags buffer=\"{}\"", flags);
 
-            let kernel = self.flags_diff.get_mut(&self.sv).expect("internal error");
+            if let Some(kernel) = self.flags_diff.get_mut(&self.sv) {
+                let flags = kernel.decompress(flags);
+                let flags_len = flags.len();
 
-            let flags = kernel.decompress(flags);
-            let flags_len = flags.len();
+                self.flags_buf = flags.to_string();
 
-            self.flags_buf = flags.to_string();
-
-            // blank flags for which observation is blanked
-            // otherwise, .decompress("") will return past value
-            for index in &self.blanking_indexes {
-                if flags_len > (index * 2) {
-                    self.flags_buf
-                        .replace_range(2 * index..(2 * index + 1), " ");
+                // blank flags for which observation is blanked
+                // otherwise, .decompress("") will return past value
+                for index in &self.blanking_indexes {
+                    if flags_len > (index * 2) {
+                        self.flags_buf
+                            .replace_range(2 * index..(2 * index + 1), " ");
+                    }
+                    if flags_len > index * 2 + 1 {
+                        self.flags_buf
+                            .replace_range(2 * index + 1..(2 * index + 2), " ");
+                    }
                 }
-                if flags_len > index * 2 + 1 {
-                    self.flags_buf
-                        .replace_range(2 * index + 1..(2 * index + 2), " ");
-                }
+
+                // update len
+                let flags_len = self.flags_buf.len();
+
+                #[cfg(feature = "log")]
+                trace!(
+                    "recovered flags \"{}\" (len={}, numobs={})",
+                    &self.flags_buf,
+                    flags_len,
+                    self.numobs
+                );
+
+                // copy all flags to user
+                Self::write_flags(&self.flags_buf, flags_len, self.numobs, self.v3, buf);
+            } else {
+                #[cfg(feature = "log")]
+                error!("internal error: no kernel found for sat={}", self.sv);
+                self.state = State::Epoch; // forced reset
             }
-
-            // update len
-            let flags_len = self.flags_buf.len();
-
-            // copy all flags to user
-            // println!(
-            //     "RECOVERED \"{}\" (len={},numobs={})",
-            //     &self.flags_buf, flags_len, self.numobs
-            // ); // DEBUG
-
-            Self::write_flags(&self.flags_buf, flags_len, self.numobs, self.v3, buf);
         }
 
         self.obs_ptr = 0;
@@ -826,44 +907,68 @@ impl<const M: usize> DecompressorExpert<M> {
         // move on to next state
         self.sv_ptr += 1;
 
-        //#[cfg(feature = "log")]
-        //debug!("[{} CONCLUDED {}/{}]", self.sv, self.sv_ptr, self.numsat);
+        #[cfg(feature = "log")]
+        trace!("[{:x} CONCLUDED {}/{}]", self.sv, self.sv_ptr, self.numsat);
 
         if self.sv_ptr == self.numsat {
-            //#[cfg(feature = "log")]
-            //debug!("[END OF EPOCH]");
+            #[cfg(feature = "log")]
+            trace!("[END OF EPOCH]");
 
-            new_state = State::Epoch;
+            // proceed to normal reset
+            self.state = State::Epoch;
+            Ok(produced)
         } else {
-            self.sv = self.next_sv().expect("failed to determine next sv");
+            // identify next sat
+            if let Some(sat) = self.next_satellite() {
+                // process next satellite
+                self.sv = sat;
 
-            let constellation = if self.sv.constellation.is_sbas() {
-                Constellation::SBAS
+                // identify next physics
+                let constellation = if self.sv.constellation.is_sbas() {
+                    Constellation::SBAS
+                } else {
+                    self.sv.constellation
+                };
+
+                if let Some(observables) = self.get_observables(&constellation) {
+                    self.numobs = observables.len();
+
+                    // proceed
+                    self.state = State::Observation;
+                    Ok(produced)
+                } else {
+                    #[cfg(feature = "log")]
+                    error!("failed to identify next physics: forced reset");
+
+                    self.state = State::Epoch;
+                    Ok(produced) // we have streamed data
+                }
             } else {
-                self.sv.constellation
-            };
+                // failed to grab next sat: should never happen here in current impl
+                // force reset
+                #[cfg(feature = "log")]
+                error!("failed to determine next sat: forced reset");
 
-            self.numobs = self
-                .get_observables(&constellation)
-                .expect("internal error")
-                .len();
+                self.state = State::Epoch;
+                self.epoch_descriptor.clear();
+
+                Ok(produced)
+            }
         }
-
-        self.state = new_state;
-        Ok(produced)
     }
 
-    /// Helper to retrieve observable for given system
-    fn get_observables(&self, constell: &Constellation) -> Option<&Vec<Observable>> {
-        // We use mixed to store a single value for single definitions
+    /// Retrieves reference to GNSS observables for said [Constellation].
+    fn get_observables(&self, constellation: &Constellation) -> Option<&Vec<Observable>> {
+        // in case of (multi-gnss) "mixed" files,
+        // we only stored one description using "mixed"
         if let Some(mixed) = self.gnss_observables.get(&Constellation::Mixed) {
             Some(mixed)
         } else {
             // SBAS special case
-            if constell.is_sbas() {
+            if constellation.is_sbas() {
                 self.gnss_observables.get(&Constellation::SBAS)
             } else {
-                self.gnss_observables.get(constell)
+                self.gnss_observables.get(constellation)
             }
         }
     }
@@ -887,7 +992,6 @@ impl<const M: usize> DecompressorExpert<M> {
             let lli_idx = i * 2;
             if flags_len > lli_idx {
                 if !flags[lli_idx..lli_idx + 1].eq(" ") {
-                    // buf[offset] = b'x';
                     buf[offset] = bytes[i * 2];
                 }
             }
@@ -895,7 +999,6 @@ impl<const M: usize> DecompressorExpert<M> {
             let snr_idx = lli_idx + 1;
             if flags_len > snr_idx {
                 if !flags[snr_idx..snr_idx + 1].eq(" ") {
-                    // buf[offset + 1] = b'y';
                     buf[offset + 1] = bytes[(i * 2) + 1];
                 }
             }
@@ -916,14 +1019,12 @@ impl<const M: usize> DecompressorExpert<M> {
             let lli_idx = i * 2;
             if flags_len > lli_idx {
                 if !flags[lli_idx..lli_idx + 1].eq(" ") {
-                    //buf[offset] = b'x';
                     buf[offset] = bytes[i * 2];
                 }
             }
             let snr_idx = lli_idx + 1;
             if flags_len > snr_idx {
                 if !flags[snr_idx..snr_idx + 1].eq(" ") {
-                    //buf[offset + 1] = b'y';
                     buf[offset + 1] = bytes[(i * 2) + 1];
                 }
             }

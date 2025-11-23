@@ -24,16 +24,21 @@ use qc_traits::{FilterItem, MaskFilter, MaskOperand};
 pub struct HeaderFields {
     /// Optional CRINEX information
     pub crinex: Option<CRINEX>,
+
     /// [Epoch] of first observation. Following content should match.
     /// Defines [TimeScale] of following content.
     pub timeof_first_obs: Option<Epoch>,
+
     /// [Epoch] of last observation. Following content should match.
     /// Defines [TimeScale] of following content.
     pub timeof_last_obs: Option<Epoch>,
+
     /// Observables per constellation basis
     pub codes: HashMap<Constellation, Vec<Observable>>,
+
     /// True if local clock drift is compensated for
     pub clock_offset_applied: bool,
+
     /// Possible observation scaling, used in high precision
     /// OBS RINEX (down to nano radians precision).
     pub scaling: HashMap<(Constellation, Observable), u16>,

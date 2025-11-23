@@ -11,12 +11,16 @@ use crate::{
 pub struct SignalObservation {
     /// [SV] is the signal source
     pub sv: SV,
+
     /// Actual measurement. Unit depends on [Observable].
     pub value: f64,
+
     /// [Observable]
     pub observable: Observable,
+
     /// Lock loss indicator (when present)
     pub lli: Option<LliFlags>,
+
     /// SNR estimate (when present)
     pub snr: Option<SNR>,
 }

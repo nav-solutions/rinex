@@ -121,8 +121,8 @@ impl Header {
 
     /// Formats "RINEX VERSION / TYPE"
     fn format_rinex_version<W: Write>(&self, w: &mut BufWriter<W>) -> Result<(), FormattingError> {
-        let major = self.version.major;
-        let minor = self.version.minor;
+        let (major, minor) = (self.version.major, self.version.minor);
+
         match self.rinex_type {
             Type::NavigationData => match self.constellation {
                 Some(Constellation::Glonass) => {
@@ -154,14 +154,16 @@ impl Header {
                         "{}",
                         fmt_rinex(
                             &format!(
-                                "{:6}.{:02}           NAVIGATION DATA     {:X<20}",
+                                "{:6}.{:02}           NAVIGATION DATA     {:<20E}",
                                 major, minor, c
                             ),
                             "RINEX VERSION / TYPE"
                         )
                     )?;
                 },
-                _ => panic!("constellation must be specified when formatting a NavigationData"),
+                _ => {
+                    return Err(FormattingError::UndefinedConstellation);
+                },
             },
             Type::ObservationData => match self.constellation {
                 Some(Constellation::Mixed) => {
@@ -183,14 +185,16 @@ impl Header {
                         "{}",
                         fmt_rinex(
                             &format!(
-                                "{:6}.{:02}           OBSERVATION DATA    {:x<20}",
+                                "{:6}.{:02}           OBSERVATION DATA    {:<20E}",
                                 major, minor, c
                             ),
                             "RINEX VERSION / TYPE"
                         )
                     )?;
                 },
-                _ => panic!("constellation must be specified when formatting ObservationData"),
+                _ => {
+                    return Err(FormattingError::UndefinedConstellation);
+                },
             },
             Type::MeteoData => {
                 writeln!(
@@ -212,7 +216,7 @@ impl Header {
                     )
                 )?;
             },
-            Type::AntennaData => {},
+            Type::AntennaData => {}, // TODO (ANTEX)
         }
 
         Ok(())
