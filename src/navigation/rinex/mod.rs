@@ -122,15 +122,19 @@ impl Rinex {
         }
     }
 
-    /// [SV] clock state [Iterator].
+    /// Returns a satellite clock state (offset, drift, drift rate) [Iterator], which
+    /// applies to any Navigation RINEX.
+    ///
     /// ## Inputs
     /// - self: Navigation [Rinex]
     /// ## Output
     /// - offset (s), drift (s.s⁻¹), drift rate (s.s⁻²)  triplet iterator
-    pub fn nav_sv_clock_iter(&self) -> Box<dyn Iterator<Item = (NavKey, (f64, f64, f64))> + '_> {
+    pub fn nav_satellite_clock_bias_drift_rate_iter(
+        &self,
+    ) -> Box<dyn Iterator<Item = (NavKey, (f64, f64, f64))> + '_> {
         Box::new(
             self.nav_ephemeris_frames_iter()
-                .map(|(k, eph)| (*k, eph.sv_clock())),
+                .map(|(k, eph)| (*k, eph.clock_bias_drift_driftrate())),
         )
     }
 

@@ -54,7 +54,7 @@ pub fn generic_test(
         time_frame,
     );
 
-    assert_eq!(dut.sv_iter().collect::<Vec<_>>(), sv);
+    assert_eq!(dut.satellite_iter().collect::<Vec<_>>(), sv);
     assert_eq!(dut.nav_ephemeris_frames_iter().count(), nb_ephemeris);
 
     // EPH frames logic
