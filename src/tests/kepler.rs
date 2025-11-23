@@ -12,11 +12,14 @@ use crate::{
 };
 
 // use hifitime::Unit;
+use hifitime::Duration;
 
 use std::{
     // path::PathBuf,
     str::FromStr,
 };
+
+use log::{debug, error};
 
 #[test]
 fn v3_ephemeris_selection() {
@@ -166,7 +169,7 @@ fn v3_ephemeris_selection() {
 }
 
 #[test]
-fn v3_kepler() {
+fn v3_kepler_precision() {
     init_logger();
     let g10 = SV::from_str("G10").unwrap();
     let e30 = SV::from_str("E30").unwrap();
@@ -347,5 +350,127 @@ fn v3_kepler() {
             t_gpst,
             z_err
         );
+    }
+}
+
+#[test]
+fn v3_kepler() {
+    init_logger();
+    // verifies we can compute for all entries
+
+    let dut = Rinex::from_gzip_file("data/NAV/V3/MOJN00DNK_R_20201770000_01D_MN.rnx.gz").unwrap();
+
+    for (key, frame) in dut.nav_ephemeris_frames_iter() {
+        // test at toc
+        let state = frame
+            .resolve_orbital_state(key.sv, key.epoch, 10)
+            .unwrap_or_else(|e| {
+                panic!(
+                    "{}({:x}): failed to resolve orbital state: {}",
+                    key.epoch, key.sv, e
+                );
+            });
+
+        debug!("{}({:x}): {}", key.epoch, key.sv, state);
+
+        for delta in [
+            Duration::from_seconds(1.0),
+            Duration::from_seconds(19.0),
+            Duration::from_seconds(60.0),
+            Duration::from_seconds(600.0),
+            Duration::from_seconds(3600.0),
+            Duration::from_seconds(-1.0),
+            Duration::from_seconds(-19.0),
+            Duration::from_seconds(-60.0),
+            Duration::from_seconds(-600.0),
+            Duration::from_seconds(-3600.0),
+        ] {
+            let epoch = key.epoch + delta;
+
+            let state = frame
+                .resolve_orbital_state(key.sv, key.epoch, 10)
+                .unwrap_or_else(|e| {
+                    if delta.signum() >= 0 {
+                        panic!(
+                            "{}+{}({:x}): failed to resolve orbital state: {}",
+                            key.epoch, delta, key.sv, e
+                        );
+                    } else {
+                        panic!(
+                            "{}{}({:x}): failed to resolve orbital state: {}",
+                            key.epoch, delta, key.sv, e
+                        );
+                    }
+                });
+
+            if delta.signum() >= 0 {
+                debug!("{}+{}({:x}): {}", key.epoch, delta, key.sv, state);
+            } else {
+                debug!("{}{}({:x}): {}", key.epoch, delta, key.sv, state);
+            }
+        }
+    }
+}
+
+#[test]
+fn v4_kepler() {
+    init_logger();
+
+    // verifies we can compute for all entries
+    let dut = Rinex::from_gzip_file("data/NAV/V4/KMS300DNK_R_20221591000_01H_MN.rnx.gz").unwrap();
+
+    for (key, frame) in dut.nav_ephemeris_frames_iter() {
+        // test at toc
+        match frame.resolve_orbital_state(key.sv, key.epoch, 10) {
+            Ok(state) => {
+                debug!("{}({:x}): {}", key.epoch, key.sv, state);
+            },
+            Err(e) => {
+                error!(
+                    "{}({:x}): failed to resolve orbital state: {}",
+                    key.epoch, key.sv, e
+                );
+            },
+        }
+
+        for delta in [
+            Duration::from_seconds(1.0),
+            Duration::from_seconds(3.2),
+            Duration::from_seconds(19.0),
+            Duration::from_seconds(60.0),
+            Duration::from_seconds(600.0),
+            Duration::from_seconds(3600.0),
+            Duration::from_seconds(-1.0),
+            Duration::from_seconds(-3.2),
+            Duration::from_seconds(-19.0),
+            Duration::from_seconds(-60.0),
+            Duration::from_seconds(-600.0),
+            Duration::from_seconds(-3600.0),
+        ] {
+            let epoch = key.epoch + delta;
+
+            match frame.resolve_orbital_state(key.sv, key.epoch, 10) {
+                Ok(state) => {
+                    if delta.signum() >= 0 {
+                        debug!("{}+{}({:x}): {}", key.epoch, delta, key.sv, state);
+                    } else {
+                        debug!("{}{}({:x}): {}", key.epoch, delta, key.sv, state);
+                    }
+                },
+                Err(e) => {
+                    if delta.signum() >= 0 {
+                        error!(
+                            "{}+{}({:x}): failed to resolve orbital state: {}",
+                            key.epoch, delta, key.sv, e
+                        );
+                    } else {
+                        error!(
+                            "{}{}({:x}): failed to resolve orbital state: {}",
+                            key.epoch, delta, key.sv, e
+                        );
+                    }
+                },
+            }
+        }
     }
 }
