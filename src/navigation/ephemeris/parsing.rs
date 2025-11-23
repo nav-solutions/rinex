@@ -429,9 +429,9 @@ mod test {
             clock_drift_rate: 0.0,
             orbits,
         };
-        assert_eq!(ephemeris.get_orbit_f64("satPosX"), Some(-1.488799804690E3));
-        assert_eq!(ephemeris.get_orbit_f64("satPosY"), Some(1.292880712890E4));
-        assert_eq!(ephemeris.get_orbit_f64("satPosZ"), Some(2.193169775390E4));
+        assert_eq!(ephemeris.get_orbit_f64("posX"), Some(-1.488799804690E3));
+        assert_eq!(ephemeris.get_orbit_f64("posY"), Some(1.292880712890E4));
+        assert_eq!(ephemeris.get_orbit_f64("posZ"), Some(2.193169775390E4));
 
         let content =
             "    1.817068505860D+04 8.184757232670D-01 2.793967723850D-09 0.000000000000D+00
@@ -478,9 +478,9 @@ mod test {
             clock_drift_rate: 0.0,
             orbits,
         };
-        assert_eq!(ephemeris.get_orbit_f64("satPosX"), Some(0.783916601562E4));
-        assert_eq!(ephemeris.get_orbit_f64("satPosY"), Some(-0.216949155273E5));
-        assert_eq!(ephemeris.get_orbit_f64("satPosZ"), Some(0.109021518555E5));
+        assert_eq!(ephemeris.get_orbit_f64("posX"), Some(0.783916601562E4));
+        assert_eq!(ephemeris.get_orbit_f64("posY"), Some(-0.216949155273E5));
+        assert_eq!(ephemeris.get_orbit_f64("posZ"), Some(0.109021518555E5));
     }
 
     #[test]
@@ -503,10 +503,10 @@ mod test {
             clock_drift_rate: 0.0,
             orbits,
         };
-        assert_eq!(ephemeris.get_orbit_f64("satPosX"), Some(-1.488799804690E3));
+        assert_eq!(ephemeris.get_orbit_f64("posX"), Some(-1.488799804690E3));
         assert_eq!(ephemeris.get_orbit_f64("velX"), None);
-        assert_eq!(ephemeris.get_orbit_f64("satPosY"), Some(1.292880712890E4));
-        assert_eq!(ephemeris.get_orbit_f64("satPosZ"), Some(2.193169775390E4));
+        assert_eq!(ephemeris.get_orbit_f64("posY"), Some(1.292880712890E4));
+        assert_eq!(ephemeris.get_orbit_f64("posZ"), Some(2.193169775390E4));
     }
 
     #[test]
@@ -530,9 +530,9 @@ mod test {
             clock_drift_rate: 0.0,
             orbits,
         };
-        assert_eq!(ephemeris.get_orbit_f64("satPosX"), Some(0.783916601562E4));
+        assert_eq!(ephemeris.get_orbit_f64("posX"), Some(0.783916601562E4));
         assert_eq!(ephemeris.get_orbit_f64("velX"), None);
-        assert_eq!(ephemeris.get_orbit_f64("satPosY"), Some(-0.216949155273E5));
-        assert_eq!(ephemeris.get_orbit_f64("satPosZ"), Some(0.109021518555E5));
+        assert_eq!(ephemeris.get_orbit_f64("posY"), Some(-0.216949155273E5));
+        assert_eq!(ephemeris.get_orbit_f64("posZ"), Some(0.109021518555E5));
     }
 }

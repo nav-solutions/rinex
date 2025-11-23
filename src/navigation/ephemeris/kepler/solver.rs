@@ -2,7 +2,7 @@
 use log::{debug, error};
 
 use crate::{
-    navigation::Ephemeris,
+    navigation::{Ephemeris, EphemerisError},
     prelude::{Constellation, Epoch, SV},
 };
 
@@ -123,9 +123,9 @@ impl Solver {
     }
 
     /// Returns ECEF position [Vector3] in km.
-    pub fn position_km(&self) -> Option<Vector3> {
+    pub fn position_km(&self) -> Result<Vector3, EphemerisError> {
         let position_velocity_km = self.position_velocity_km()?;
-        Some(Vector3::new(
+        Ok(Vector3::new(
             position_velocity_km[0],
             position_velocity_km[1],
             position_velocity_km[2],
@@ -133,11 +133,12 @@ impl Solver {
     }
 
     /// Returns ECEF position and velocity as Vector6 in kilometers.
-    pub fn position_velocity_km(&self) -> Option<Vector6> {
+    pub fn position_velocity_km(&self) -> Result<Vector6, EphemerisError> {
         if self.satellite.is_beidou_geo() {
             let (position_km, velocity_km) =
                 (self.beidou_geo_position_km(), self.beidou_geo_velocity_km());
-            Some(Vector6::new(
+
+            Ok(Vector6::new(
                 position_km[0],
                 position_km[1],
                 position_km[2],
@@ -171,7 +172,7 @@ impl Solver {
 
                     let vel_m = fd_r * Vector4::new(fd_x, fd_y, self.fd_omega_k, self.fd_i_k);
 
-                    Some(Vector6::new(
+                    Ok(Vector6::new(
                         pos_m[0] / 1000.0,
                         pos_m[1] / 1000.0,
                         pos_m[2] / 1000.0,
@@ -180,11 +181,7 @@ impl Solver {
                         vel_m[2] / 1000.0,
                     ))
                 },
-                _ => {
-                    #[cfg(feature = "log")]
-                    error!("solver: {} is not supported", self.satellite.constellation);
-                    None
-                },
+                constellation => Err(EphemerisError::NotSupported(constellation)),
             }
         }
     }
@@ -206,7 +203,7 @@ impl Ephemeris {
         satellite: SV,
         epoch: Epoch,
         max_iteration: usize,
-    ) -> Option<Solver> {
+    ) -> Result<Solver, EphemerisError> {
         // gravitational constant
         let gm_m3_s2 = match satellite.constellation {
             Constellation::BeiDou => 3.986004418E14_f64,
@@ -237,7 +234,7 @@ impl Ephemeris {
         let dt_seconds = keplerian.dt(epoch).to_seconds();
 
         // apply the semi-major axis correction if any
-        if let Some(a_dot_m_s) = self.cnav_adot_m_s() {
+        if let Ok(a_dot_m_s) = self.cnav_adot_m_s() {
             keplerian.sma_m += a_dot_m_s * dt_seconds;
         }
 
@@ -259,7 +256,8 @@ impl Ephemeris {
                     "({}) solver: reached maximal number of iterations",
                     satellite
                 );
-                return None;
+
+                return Err(EphemerisError::Diverged);
             }
 
             e_k = m_k + keplerian.ecc * e_k_lst.sin();
@@ -271,6 +269,12 @@ impl Ephemeris {
             i += 1;
             e_k_lst = e_k;
         }
+
+        #[cfg(feature = "log")]
+        debug!(
+            "({:x}) solver: iter={} - dt={}s - e_k={}",
+            satellite, i, dt_seconds, e_k,
+        );
 
         // true anomaly
         let (sin_e_k, cos_e_k) = e_k.sin_cos();
@@ -333,11 +337,11 @@ impl Ephemeris {
         let r_sv = (x, y, 0.0);
 
         debug!(
-            "({}) dt={}s - omega_k={} - i_k={} - r_sv=({}, {})",
-            satellite, dt_seconds, omega_k, i_k, x, y
+            "({:x}) solver: omega_k={} - i_k={} - r_sv=({}, {})",
+            satellite, omega_k, i_k, x, y
         );
 
-        Some(Solver {
+        Ok(Solver {
             satellite,
             dt_seconds,
             omega_k,

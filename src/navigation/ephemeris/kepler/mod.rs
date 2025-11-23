@@ -1,6 +1,6 @@
 use crate::prelude::{nav::Orbit, Constellation, Duration, Epoch, SV};
 
-use crate::navigation::Ephemeris;
+use crate::navigation::{Ephemeris, EphemerisError};
 
 use anise::{
     constants::frames::IAU_EARTH_FRAME,
@@ -86,24 +86,28 @@ impl Ephemeris {
     /// Groups all keplerian parameters as [Keplerian], ready to
     /// be used in radio based navigation. This does not apply to Glonass
     /// nor SBAS satellites.
-    pub fn to_keplerian(&self, satellite: SV) -> Option<Keplerian> {
-        Some(Keplerian {
+    pub fn to_keplerian(&self, satellite: SV) -> Result<Keplerian, EphemerisError> {
+        let (crs_m, crc_m) = self.harmonic_correction_rsin_rcos()?;
+        let (cis_rad, cic_rad) = self.harmonic_correction_isin_icos()?;
+        let (cus_rad, cuc_rad) = self.harmonic_correction_usin_ucos()?;
+
+        Ok(Keplerian {
+            crc_m,
+            crs_m,
+            cic_rad,
+            cis_rad,
+            cuc_rad,
+            cus_rad,
             epoch: self.toe(satellite)?,
-            ecc: self.get_orbit_f64("e")?,
-            ma_rad: self.get_orbit_f64("m0")?,
-            inc_rad: self.get_orbit_f64("i0")?,
-            aop_rad: self.get_orbit_f64("omega")?,
-            longan_rad: self.get_orbit_f64("omega0")?,
-            cic_rad: self.get_orbit_f64("cic")?,
-            cis_rad: self.get_orbit_f64("cis")?,
-            cuc_rad: self.get_orbit_f64("cuc")?,
-            cus_rad: self.get_orbit_f64("cus")?,
-            crc_m: self.get_orbit_f64("crc")?,
-            crs_m: self.get_orbit_f64("crs")?,
-            dn_rad: self.get_orbit_f64("deltaN")?,
-            i_dot_rad_s: self.get_orbit_f64("idot")?,
-            sma_m: self.get_orbit_f64("sqrta")?.powf(2.0),
-            omega_dot_rad_s: self.get_orbit_f64("omegaDot")?,
+            ecc: self.eccentricity()?,
+            sma_m: self.semi_major_axis_m()?,
+            ma_rad: self.mean_anomaly_rad()?,
+            inc_rad: self.inclination_rad()?,
+            aop_rad: self.argument_of_perigee_rad()?,
+            dn_rad: self.mean_motion_difference_rad()?,
+            longan_rad: self.longitude_ascending_node_rad()?,
+            i_dot_rad_s: self.inclination_rate_of_change_rad_s()?,
+            omega_dot_rad_s: self.right_ascension_rate_of_change_rad_s()?,
         })
     }
 
@@ -149,9 +153,9 @@ impl Ephemeris {
         satellite: SV,
         epoch: Epoch,
         max_iteration: usize,
-    ) -> Option<Orbit> {
+    ) -> Result<Orbit, EphemerisError> {
         let pos_vel_km = self.resolve_position_velocity_km(satellite, epoch, max_iteration)?;
-        Some(Orbit::from_cartesian_pos_vel(
+        Ok(Orbit::from_cartesian_pos_vel(
             pos_vel_km,
             epoch,
             IAU_EARTH_FRAME,
@@ -176,9 +180,9 @@ impl Ephemeris {
         satellite: SV,
         epoch: Epoch,
         max_iteration: usize,
-    ) -> Option<Vector3> {
+    ) -> Result<Vector3, EphemerisError> {
         let pos_vel_km = self.resolve_position_velocity_km(satellite, epoch, max_iteration)?;
-        Some(Vector3::new(pos_vel_km[0], pos_vel_km[1], pos_vel_km[2]))
+        Ok(Vector3::new(pos_vel_km[0], pos_vel_km[1], pos_vel_km[2]))
     }
 
     /// Resolves satellite position and velocityn at desired [Epoch], expressed as ECEF coordinates in kilometers.
@@ -198,19 +202,20 @@ impl Ephemeris {
         satellite: SV,
         epoch: Epoch,
         max_iteration: usize,
-    ) -> Option<Vector6> {
+    ) -> Result<Vector6, EphemerisError> {
         if satellite.constellation.is_sbas() || satellite.constellation == Constellation::Glonass {
             let (x_km, y_km, z_km) = (
-                self.get_orbit_f64("satPosX")?,
-                self.get_orbit_f64("satPosY")?,
-                self.get_orbit_f64("satPosZ")?,
+                self.get_orbit_field_f64("posX")?,
+                self.get_orbit_field_f64("posY")?,
+                self.get_orbit_field_f64("posZ")?,
             );
             let (velx_km, vely_km, velz_km) = (
-                self.get_orbit_f64("velX")?,
-                self.get_orbit_f64("velY")?,
-                self.get_orbit_f64("velZ")?,
+                self.get_orbit_field_f64("velX")?,
+                self.get_orbit_field_f64("velY")?,
+                self.get_orbit_field_f64("velZ")?,
             );
-            Some(Vector6::new(x_km, y_km, z_km, velx_km, vely_km, velz_km)) // TODO: wrong
+
+            Ok(Vector6::new(x_km, y_km, z_km, velx_km, vely_km, velz_km)) // TODO: wrong
         } else {
             let solver = self.solver(satellite, epoch, max_iteration)?;
             solver.position_velocity_km()

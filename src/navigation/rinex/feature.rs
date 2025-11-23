@@ -1,5 +1,5 @@
 use crate::{
-    navigation::{BdModel, Ephemeris, IonosphereModel, KbModel, NavKey, NgModel},
+    navigation::{BdModel, Ephemeris, EphemerisError, IonosphereModel, KbModel, NavKey, NgModel},
     prelude::{
         nav::{Almanac, AzElRange, Orbit},
         Epoch, Rinex, SV,
@@ -7,6 +7,9 @@ use crate::{
 };
 
 use anise::math::Vector6;
+
+#[cfg(feature = "log")]
+use log::error;
 
 impl Rinex {
     /// Macro to resolve the [Orbit]al state of given satellite [SV] at specificied [Epoch] easily.
@@ -32,8 +35,11 @@ impl Rinex {
         satellite: SV,
         epoch: Epoch,
         max_iteration: usize,
-    ) -> Option<Orbit> {
-        let (_, _, eph) = self.nav_ephemeris_selection(satellite, epoch)?;
+    ) -> Result<Orbit, EphemerisError> {
+        let (_, _, eph) = self
+            .nav_satellite_ephemeris_selection(satellite, epoch)
+            .ok_or(EphemerisError::MissingData)?;
+
         eph.resolve_orbital_state(satellite, epoch, max_iteration)
     }
 
@@ -52,8 +58,11 @@ impl Rinex {
         satellite: SV,
         epoch: Epoch,
         max_iteration: usize,
-    ) -> Option<Vector6> {
-        let (_, _, eph) = self.nav_ephemeris_selection(satellite, epoch)?;
+    ) -> Result<Vector6, EphemerisError> {
+        let (_, _, eph) = self
+            .nav_satellite_ephemeris_selection(satellite, epoch)
+            .ok_or(EphemerisError::MissingData)?;
+
         eph.resolve_position_velocity_km(satellite, epoch, max_iteration)
     }
 
@@ -84,43 +93,52 @@ impl Rinex {
         observer: Orbit,
         almanac: &Almanac,
         max_iteration: usize,
-    ) -> Option<AzElRange> {
+    ) -> Result<AzElRange, EphemerisError> {
         let state = self.nav_satellite_orbital_state(satellite, epoch, max_iteration)?;
-        let azelrange = almanac
-            .azimuth_elevation_range_sez(state, observer, None, None)
-            .ok()?;
-        Some(azelrange)
+        let azelrange = almanac.azimuth_elevation_range_sez(state, observer, None, None)?;
+        Ok(azelrange)
     }
 
-    /// Ephemeris selection, that only applies to Navigation [Rinex].
+    /// Selects the most suited [Ephemeris] frame from the record, for this satellite
+    /// at requested [Epoch].
+    ///
     /// ## Inputs
-    /// - sv: desired [SV]
+    /// - satellite: desired [SV]
     /// - epoch: desired [Epoch]
+    ///
     /// ## Returns
-    /// - (toc, toe, [Ephemeris]) triplet if an [Ephemeris] message
-    /// was decoded in the correct time frame.
-    /// Note that `ToE` does not exist for GEO/SBAS [SV], so `ToC` is simply
-    /// copied in this case, to maintain the API.
-    pub fn nav_ephemeris_selection(&self, sv: SV, t: Epoch) -> Option<(Epoch, Epoch, &Ephemeris)> {
-        if sv.constellation.is_sbas() {
+    /// - (toc (Time of Clock), toe (Time of Ephemeris), [Ephemeris] frame) triplet.
+    ///
+    /// Note that `ToE` does not exist for GEO nor Glonass satellites, we copy ToC in these cases.
+    pub fn nav_satellite_ephemeris_selection(
+        &self,
+        satellite: SV,
+        epoch: Epoch,
+    ) -> Option<(Epoch, Epoch, &Ephemeris)> {
+        if satellite.constellation.is_sbas() {
             self.nav_ephemeris_frames_iter()
                 .filter_map(|(k, eph)| {
-                    if k.sv == sv {
+                    if k.sv == satellite {
                         Some((k.epoch, k.epoch, eph))
                     } else {
                         None
                     }
                 })
-                .min_by_key(|(toc, _, _)| t - *toc)
+                .min_by_key(|(toc, _, _)| (epoch - *toc).abs())
         } else {
             self.nav_ephemeris_frames_iter()
                 .filter_map(|(k, eph)| {
-                    if k.sv == sv {
-                        if eph.is_valid(sv, t) {
-                            if let Some(toe) = eph.toe(k.sv) {
-                                Some((k.epoch, toe, eph))
-                            } else {
-                                None
+                    if k.sv == satellite {
+                        if eph.is_valid(satellite, k.epoch, epoch) {
+                            match eph.toe(k.sv) {
+                                Ok(toe) => Some((k.epoch, toe, eph)),
+                                #[cfg(feature = "log")]
+                                Err(e) => {
+                                    error!("{}({:x}): {}", satellite, k.epoch, e);
+                                    None
+                                },
+                                #[cfg(not(feature = "log"))]
+                                Err(_) => None,
                             }
                         } else {
                             None
@@ -129,7 +147,7 @@ impl Rinex {
                         None
                     }
                 })
-                .min_by_key(|(_, toe, _)| (t - *toe).abs())
+                .min_by_key(|(_, toe, _)| (epoch - *toe).abs())
         }
     }
 
