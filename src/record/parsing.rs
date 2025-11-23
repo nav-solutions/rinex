@@ -43,8 +43,6 @@ impl Record {
     ) -> Result<(Self, Comments), ParsingError> {
         // eos reached: process pending buffer & exit
         let mut eos = false;
-
-        // crinex decompression in failure: process pending buffer & exit
         let mut crinex_error = false;
 
         // current line storage
@@ -184,6 +182,14 @@ impl Record {
                         }
                     },
                     Err(_) => {
+                        // We wind up here on the final line which is empty
+                        // and the decompressor reports that the next epoch is too short,
+                        // which is normal. But will not help create a resynchronizable decompressor.
+                        //
+                        // Hatanaka decompression cannot recover from corrupt content
+                        // in either revisions. It would be possible to recover if we
+                        // modified the Epoch synchronization __but__ develop a very
+                        // smart epoch detector, which does not seem easy to do.
                         crinex_error = true;
                     },
                 }

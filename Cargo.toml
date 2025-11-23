@@ -144,7 +144,7 @@ version = "4.1"
 features = ["std"]
 
 [dependencies.anise]
-version = "0.6.9"
+version = "0.8"
 optional = true
 
 [dependencies]
@@ -157,7 +157,7 @@ maud = { version = "0.26", optional = true }
 rtcm-rs = { version = "0.11", optional = true }
 serde = { version = "1.0", optional = true, default-features = false, features = ["derive"] }
 
-nalgebra = { version = "0.33", optional = true }
+nalgebra = { version = "0.34", optional = true }
 
 # Log is optional and our "debug" feature: use this if you're a dev.
 # Turn this on to obtain debug traces during parsing, formatting and calculations
