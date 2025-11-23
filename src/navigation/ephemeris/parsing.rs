@@ -290,50 +290,114 @@ mod test {
             Constellation::Galileo,
             content.lines(),
         );
-        assert!(orbits.is_ok());
-        let orbits = orbits.unwrap();
+
+        let orbits = orbits.unwrap_or_else(|e| {
+            panic!("failed to parse GAL(LNAV) V3 orbits: {}", e);
+        });
+
         let ephemeris = Ephemeris {
             clock_bias: 0.0,
             clock_drift: 0.0,
             clock_drift_rate: 0.0,
             orbits,
         };
-        assert_eq!(ephemeris.get_orbit_f64("iodnav"), Some(7.500000000000e+01));
-        assert_eq!(ephemeris.get_orbit_f64("crs"), Some(1.478125000000e+01));
-        assert_eq!(ephemeris.get_orbit_f64("deltaN"), Some(2.945479833915e-09));
-        assert_eq!(ephemeris.get_orbit_f64("m0"), Some(-3.955466341850e-01));
 
-        assert_eq!(ephemeris.get_orbit_f64("cuc"), Some(8.065253496170e-07));
-        assert_eq!(ephemeris.get_orbit_f64("e"), Some(3.683507675305e-04));
-        assert_eq!(ephemeris.get_orbit_f64("cus"), Some(-3.911554813385e-07));
-        assert_eq!(ephemeris.get_orbit_f64("sqrta"), Some(5.440603218079e+03));
-
-        assert_eq!(ephemeris.get_orbit_f64("toe"), Some(3.522000000000e+05));
-        assert_eq!(ephemeris.get_orbit_f64("cic"), Some(-6.519258022308e-08));
-        assert_eq!(ephemeris.get_orbit_f64("omega0"), Some(2.295381450845e+00));
-        assert_eq!(ephemeris.get_orbit_f64("cis"), Some(7.450580596924e-09));
-
-        assert_eq!(ephemeris.get_orbit_f64("i0"), Some(9.883726443393e-01));
-        assert_eq!(ephemeris.get_orbit_f64("crc"), Some(3.616875000000e+02));
-        assert_eq!(ephemeris.get_orbit_f64("omega"), Some(2.551413130998e-01));
         assert_eq!(
-            ephemeris.get_orbit_f64("omegaDot"),
-            Some(-5.907746081337e-09)
+            ephemeris.get_orbit_field_f64("iodnav").unwrap(),
+            7.500000000000e+01
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("crs").unwrap(),
+            1.478125000000e+01
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("deltaN").unwrap(),
+            2.945479833915e-09
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("m0").unwrap(),
+            -3.955466341850e-01
         );
 
-        assert_eq!(ephemeris.get_orbit_f64("idot"), Some(1.839362331110e-10));
-        assert_eq!(ephemeris.get_orbit_f64("source"), Some(2.580000000000e+02));
-        assert_eq!(ephemeris.week_number(), Some(2111));
-
-        assert_eq!(ephemeris.get_orbit_f64("sisa"), Some(3.120000000000e+00));
-        //assert_eq!(ephemeris.get_orbit_f64("health"), Some(0.000000000000e+00));
         assert_eq!(
-            ephemeris.get_orbit_f64("bgdE5aE1"),
-            Some(-1.303851604462e-08)
+            ephemeris.get_orbit_field_f64("cuc").unwrap(),
+            8.065253496170e-07
         );
-        assert!(ephemeris.get_orbit_f64("bgdE5bE1").is_none());
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("e").unwrap(),
+            3.683507675305e-04
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("cus").unwrap(),
+            -3.911554813385e-07
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("sqrta").unwrap(),
+            5.440603218079e+03
+        );
 
-        assert_eq!(ephemeris.get_orbit_f64("t_tm"), Some(3.555400000000e+05));
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("toe").unwrap(),
+            3.522000000000e+05
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("cic").unwrap(),
+            -6.519258022308e-08
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("omega0").unwrap(),
+            2.295381450845e+00
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("cis").unwrap(),
+            7.450580596924e-09
+        );
+
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("i0").unwrap(),
+            9.883726443393e-01
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("crc").unwrap(),
+            3.616875000000e+02
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("omega").unwrap(),
+            2.551413130998e-01
+        );
+
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("omegaDot").unwrap(),
+            -5.907746081337e-09
+        );
+
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("idot").unwrap(),
+            1.839362331110e-10
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("source").unwrap(),
+            2.580000000000e+02
+        );
+        assert_eq!(ephemeris.week_number().unwrap(), 2111);
+
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("sisa").unwrap(),
+            3.120000000000e+00
+        );
+        //assert_eq!(ephemeris.get_orbit_field_f64("health"), Some(0.000000000000e+00));
+
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("bgdE5aE1").unwrap(),
+            -1.303851604462e-08
+        );
+
+        assert!(ephemeris.get_orbit_field_f64("bgdE5bE1").is_err());
+
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("t_tm").unwrap(),
+            3.555400000000e+05
+        );
     }
 
     #[test]
@@ -354,8 +418,9 @@ mod test {
             content.lines(),
         );
 
-        assert!(orbits.is_ok());
-        let orbits = orbits.unwrap();
+        let orbits = orbits.unwrap_or_else(|e| {
+            panic!("failed to parse BDS(LNAV) V3 orbits: {}", e);
+        });
 
         let ephemeris = Ephemeris {
             clock_bias: 0.0,
@@ -364,49 +429,100 @@ mod test {
             orbits,
         };
 
-        assert_eq!(ephemeris.get_orbit_f64("aode"), Some(1.0));
-        assert_eq!(ephemeris.get_orbit_f64("crs"), Some(1.18906250000e+01));
-        assert_eq!(ephemeris.get_orbit_f64("deltaN"), Some(0.105325815814e-08));
-        assert_eq!(ephemeris.get_orbit_f64("m0"), Some(-0.255139531119e+01));
-
-        assert_eq!(ephemeris.get_orbit_f64("cuc"), Some(0.169500708580e-06));
-        assert_eq!(ephemeris.get_orbit_f64("e"), Some(0.401772442274e-03));
-        assert_eq!(ephemeris.get_orbit_f64("cus"), Some(0.292365439236e-04));
-        assert_eq!(ephemeris.get_orbit_f64("sqrta"), Some(0.649346986580e+04));
-
-        assert_eq!(ephemeris.get_orbit_f64("toe"), Some(0.432000000000e+06));
-        assert_eq!(ephemeris.get_orbit_f64("cic"), Some(0.105705112219e-06));
-        assert_eq!(ephemeris.get_orbit_f64("omega0"), Some(-0.277512444499e+01));
-        assert_eq!(ephemeris.get_orbit_f64("cis"), Some(-0.211410224438e-06));
-
-        assert_eq!(ephemeris.get_orbit_f64("i0"), Some(0.607169709798e-01));
-        assert_eq!(ephemeris.get_orbit_f64("crc"), Some(-0.897671875000e+03));
-        assert_eq!(ephemeris.get_orbit_f64("omega"), Some(0.154887266488e+00));
+        assert_eq!(ephemeris.get_orbit_field_f64("aode").unwrap(), 1.0);
         assert_eq!(
-            ephemeris.get_orbit_f64("omegaDot"),
-            Some(-0.871464871438e-10)
+            ephemeris.get_orbit_field_f64("crs").unwrap(),
+            1.18906250000e+01
         );
-
-        assert_eq!(ephemeris.get_orbit_f64("idot"), Some(-0.940753471872e-09));
-        assert_eq!(ephemeris.week_number(), Some(782));
         assert_eq!(
-            ephemeris.get_orbit_f64("accuracy"),
-            Some(0.200000000000e+01)
+            ephemeris.get_orbit_field_f64("deltaN").unwrap(),
+            0.105325815814e-08
         );
-        assert!(ephemeris.get_orbit_f64("health").is_some());
-
         assert_eq!(
-            ephemeris.get_orbit_f64("tgd1b1b3"),
-            Some(-0.599999994133e-09)
+            ephemeris.get_orbit_field_f64("m0").unwrap(),
+            -0.255139531119e+01
         );
 
         assert_eq!(
-            ephemeris.get_orbit_f64("tgd2b2b3"),
-            Some(-0.900000000000e-08)
+            ephemeris.get_orbit_field_f64("cuc").unwrap(),
+            0.169500708580e-06
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("e").unwrap(),
+            0.401772442274e-03
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("cus").unwrap(),
+            0.292365439236e-04
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("sqrta").unwrap(),
+            0.649346986580e+04
         );
 
-        assert!(ephemeris.get_orbit_f64("aodc").is_none());
-        assert_eq!(ephemeris.get_orbit_f64("t_tm"), Some(0.432000000000e+06));
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("toe").unwrap(),
+            0.432000000000e+06
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("cic").unwrap(),
+            0.105705112219e-06
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("omega0").unwrap(),
+            -0.277512444499e+01
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("cis").unwrap(),
+            -0.211410224438e-06
+        );
+
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("i0").unwrap(),
+            0.607169709798e-01
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("crc").unwrap(),
+            -0.897671875000e+03
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("omega").unwrap(),
+            0.154887266488e+00
+        );
+
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("omegaDot").unwrap(),
+            -0.871464871438e-10
+        );
+
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("idot").unwrap(),
+            -0.940753471872e-09
+        );
+        assert_eq!(ephemeris.week_number().unwrap(), 782);
+
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("accuracy").unwrap(),
+            0.200000000000e+01
+        );
+
+        assert!(ephemeris.get_orbit_field_f64("health").is_ok());
+
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("tgd1b1b3").unwrap(),
+            -0.599999994133e-09
+        );
+
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("tgd2b2b3").unwrap(),
+            -0.900000000000e-08
+        );
+
+        assert!(ephemeris.get_orbit_field_f64("aodc").is_err());
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("t_tm").unwrap(),
+            0.432000000000e+06
+        );
     }
 
     #[test]
@@ -421,17 +537,30 @@ mod test {
             Constellation::Glonass,
             content.lines(),
         );
-        assert!(orbits.is_ok(), "failed to parse Glonass V2 orbits");
-        let orbits = orbits.unwrap();
+
+        let orbits = orbits.unwrap_or_else(|e| {
+            panic!("failed to parse basic Glonass V2 orbits: {}", e);
+        });
+
         let ephemeris = Ephemeris {
             clock_bias: 0.0,
             clock_drift: 0.0,
             clock_drift_rate: 0.0,
             orbits,
         };
-        assert_eq!(ephemeris.get_orbit_f64("posX"), Some(-1.488799804690E3));
-        assert_eq!(ephemeris.get_orbit_f64("posY"), Some(1.292880712890E4));
-        assert_eq!(ephemeris.get_orbit_f64("posZ"), Some(2.193169775390E4));
+
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("posX").unwrap(),
+            -1.488799804690E3
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("posY").unwrap(),
+            1.292880712890E4
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("posZ").unwrap(),
+            2.193169775390E4
+        );
 
         let content =
             "    1.817068505860D+04 8.184757232670D-01 2.793967723850D-09 0.000000000000D+00
@@ -445,8 +574,9 @@ mod test {
             content.lines(),
         );
 
-        assert!(orbits.is_ok(), "failed to parse Glonass V2 orbits");
-        let orbits = orbits.unwrap();
+        let orbits = orbits.unwrap_or_else(|e| {
+            panic!("failed to parse basic Glonass V2 orbits: {}", e);
+        });
 
         let ephemeris = Ephemeris {
             clock_bias: 0.0,
@@ -455,7 +585,8 @@ mod test {
             orbits,
         };
 
-        assert_eq!(ephemeris.get_orbit_f64("channel"), Some(5.0));
+        assert_eq!(ephemeris.get_orbit_field_f64("channel").unwrap(), 5.0);
+        assert_eq!(ephemeris.glonass_fdma_channel().unwrap(), 5);
     }
 
     #[test]
@@ -470,17 +601,30 @@ mod test {
             Constellation::Glonass,
             content.lines(),
         );
-        assert!(orbits.is_ok(), "failed to parse Glonass V3 orbits");
-        let orbits = orbits.unwrap();
+
+        let orbits = orbits.unwrap_or_else(|e| {
+            panic!("failed to parse basic Glonass V3 orbits: {}", e);
+        });
+
         let ephemeris = Ephemeris {
             clock_bias: 0.0,
             clock_drift: 0.0,
             clock_drift_rate: 0.0,
             orbits,
         };
-        assert_eq!(ephemeris.get_orbit_f64("posX"), Some(0.783916601562E4));
-        assert_eq!(ephemeris.get_orbit_f64("posY"), Some(-0.216949155273E5));
-        assert_eq!(ephemeris.get_orbit_f64("posZ"), Some(0.109021518555E5));
+
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("posX").unwrap(),
+            0.783916601562E4
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("posY").unwrap(),
+            -0.216949155273E5
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("posZ").unwrap(),
+            0.109021518555E5
+        );
     }
 
     #[test]
@@ -495,18 +639,34 @@ mod test {
             Constellation::Glonass,
             content.lines(),
         );
-        assert!(orbits.is_ok(), "failed to parse Glonass V2 orbits");
-        let orbits = orbits.unwrap();
+
+        let orbits = orbits.unwrap_or_else(|e| {
+            panic!("failed to parse Glonass V2 orbits with gaps: {}", e);
+        });
+
         let ephemeris = Ephemeris {
             clock_bias: 0.0,
             clock_drift: 0.0,
             clock_drift_rate: 0.0,
             orbits,
         };
-        assert_eq!(ephemeris.get_orbit_f64("posX"), Some(-1.488799804690E3));
-        assert_eq!(ephemeris.get_orbit_f64("velX"), None);
-        assert_eq!(ephemeris.get_orbit_f64("posY"), Some(1.292880712890E4));
-        assert_eq!(ephemeris.get_orbit_f64("posZ"), Some(2.193169775390E4));
+
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("posX").unwrap(),
+            -1.488799804690E3
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("posY").unwrap(),
+            1.292880712890E4
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("posZ").unwrap(),
+            2.193169775390E4
+        );
+
+        assert!(ephemeris.get_orbit_field_f64("velX").is_err());
+        assert!(ephemeris.get_orbit_field_f64("velX").is_err());
+        assert!(ephemeris.get_orbit_field_f64("velX").is_err());
     }
 
     #[test]
@@ -522,17 +682,33 @@ mod test {
             Constellation::Glonass,
             content.lines(),
         );
-        assert!(orbits.is_ok(), "failed to parse Glonass V3 orbits");
-        let orbits = orbits.unwrap();
+
+        let orbits = orbits.unwrap_or_else(|e| {
+            panic!("failed to parse Glonass V3 orbits with gaps: {}", e);
+        });
+
         let ephemeris = Ephemeris {
             clock_bias: 0.0,
             clock_drift: 0.0,
             clock_drift_rate: 0.0,
             orbits,
         };
-        assert_eq!(ephemeris.get_orbit_f64("posX"), Some(0.783916601562E4));
-        assert_eq!(ephemeris.get_orbit_f64("velX"), None);
-        assert_eq!(ephemeris.get_orbit_f64("posY"), Some(-0.216949155273E5));
-        assert_eq!(ephemeris.get_orbit_f64("posZ"), Some(0.109021518555E5));
+
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("posX").unwrap(),
+            0.783916601562E4
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("posY").unwrap(),
+            -0.216949155273E5
+        );
+        assert_eq!(
+            ephemeris.get_orbit_field_f64("posZ").unwrap(),
+            0.109021518555E5
+        );
+
+        assert!(ephemeris.get_orbit_field_f64("velX").is_err());
+        assert!(ephemeris.get_orbit_field_f64("velY").is_err());
+        assert!(ephemeris.get_orbit_field_f64("velz").is_err());
     }
 }
