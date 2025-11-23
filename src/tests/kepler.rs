@@ -200,9 +200,9 @@ fn v3_kepler_precision() {
     ] {
         let t_gpst = Epoch::from_str(t_gpst).unwrap();
 
-        let (_, _, eph) = dut.nav_satellite_ephemeris_selection(g10, t_gpst).unwrap();
+        let (toc, _, eph) = dut.nav_satellite_ephemeris_selection(g10, t_gpst).unwrap();
 
-        let orbit = eph.resolve_orbital_state(g10, t_gpst, 10).unwrap();
+        let orbit = eph.resolve_orbital_state(g10, toc, t_gpst, 10).unwrap();
 
         let pos_vel = orbit.to_cartesian_pos_vel();
 
@@ -254,9 +254,9 @@ fn v3_kepler_precision() {
     ] {
         let t_gpst = Epoch::from_str(t_gpst).unwrap();
 
-        let (_, _, eph) = dut.nav_satellite_ephemeris_selection(e30, t_gpst).unwrap();
+        let (toc, _, eph) = dut.nav_satellite_ephemeris_selection(e30, t_gpst).unwrap();
 
-        let orbit = eph.resolve_orbital_state(e30, t_gpst, 10).unwrap();
+        let orbit = eph.resolve_orbital_state(e30, toc, t_gpst, 10).unwrap();
 
         let pos_vel = orbit.to_cartesian_pos_vel();
 
@@ -320,9 +320,9 @@ fn v3_kepler_precision() {
     ] {
         let t_gpst = Epoch::from_str(t_gpst).unwrap();
 
-        let (_, _, eph) = dut.nav_satellite_ephemeris_selection(c10, t_gpst).unwrap();
+        let (toc, _, eph) = dut.nav_satellite_ephemeris_selection(c10, t_gpst).unwrap();
 
-        let orbit = eph.resolve_orbital_state(c10, t_gpst, 10).unwrap();
+        let orbit = eph.resolve_orbital_state(c10, toc, t_gpst, 10).unwrap();
 
         let pos_vel = orbit.to_cartesian_pos_vel();
 
@@ -362,24 +362,27 @@ fn v3_kepler() {
 
     for (key, frame) in dut.nav_ephemeris_frames_iter() {
         // test at toc
-        let state = frame
-            .resolve_orbital_state(key.sv, key.epoch, 10)
-            .unwrap_or_else(|e| {
-                panic!(
+        match frame.resolve_orbital_state(key.sv, key.epoch, key.epoch, 10) {
+            Ok(state) => {
+                debug!("{}({:x}): {}", key.epoch, key.sv, state);
+            },
+            Err(e) => {
+                error!(
                     "{}({:x}): failed to resolve orbital state: {}",
                     key.epoch, key.sv, e
                 );
-            });
-
-        debug!("{}({:x}): {}", key.epoch, key.sv, state);
+            },
+        }
 
         for delta in [
             Duration::from_seconds(1.0),
+            Duration::from_seconds(3.4),
             Duration::from_seconds(19.0),
             Duration::from_seconds(60.0),
             Duration::from_seconds(600.0),
             Duration::from_seconds(3600.0),
             Duration::from_seconds(-1.0),
+            Duration::from_seconds(-3.4),
             Duration::from_seconds(-19.0),
             Duration::from_seconds(-60.0),
             Duration::from_seconds(-600.0),
@@ -387,26 +390,27 @@ fn v3_kepler() {
         ] {
             let epoch = key.epoch + delta;
 
-            let state = frame
-                .resolve_orbital_state(key.sv, key.epoch, 10)
-                .unwrap_or_else(|e| {
+            match frame.resolve_orbital_state(key.sv, key.epoch, epoch, 10) {
+                Ok(state) => {
                     if delta.signum() >= 0 {
-                        panic!(
+                        debug!("{}+{}({:x}): {}", key.epoch, delta, key.sv, state);
+                    } else {
+                        debug!("{}{}({:x}): {}", key.epoch, delta, key.sv, state);
+                    }
+                },
+                Err(e) => {
+                    if delta.signum() >= 0 {
+                        error!(
                             "{}+{}({:x}): failed to resolve orbital state: {}",
                             key.epoch, delta, key.sv, e
                         );
                     } else {
-                        panic!(
+                        error!(
                             "{}{}({:x}): failed to resolve orbital state: {}",
                             key.epoch, delta, key.sv, e
                         );
                     }
-                });
-
-            if delta.signum() >= 0 {
-                debug!("{}+{}({:x}): {}", key.epoch, delta, key.sv, state);
-            } else {
-                debug!("{}{}({:x}): {}", key.epoch, delta, key.sv, state);
+                },
             }
         }
     }
@@ -421,7 +425,7 @@ fn v4_kepler() {
 
     for (key, frame) in dut.nav_ephemeris_frames_iter() {
         // test at toc
-        match frame.resolve_orbital_state(key.sv, key.epoch, 10) {
+        match frame.resolve_orbital_state(key.sv, key.epoch, key.epoch, 10) {
             Ok(state) => {
                 debug!("{}({:x}): {}", key.epoch, key.sv, state);
             },
@@ -449,7 +453,7 @@ fn v4_kepler() {
         ] {
             let epoch = key.epoch + delta;
 
-            match frame.resolve_orbital_state(key.sv, key.epoch, 10) {
+            match frame.resolve_orbital_state(key.sv, key.epoch, epoch, 10) {
                 Ok(state) => {
                     if delta.signum() >= 0 {
                         debug!("{}+{}({:x}): {}", key.epoch, delta, key.sv, state);

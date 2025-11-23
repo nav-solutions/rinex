@@ -36,11 +36,11 @@ impl Rinex {
         epoch: Epoch,
         max_iteration: usize,
     ) -> Result<Orbit, EphemerisError> {
-        let (_, _, eph) = self
+        let (toc, _, eph) = self
             .nav_satellite_ephemeris_selection(satellite, epoch)
             .ok_or(EphemerisError::MissingData)?;
 
-        eph.resolve_orbital_state(satellite, epoch, max_iteration)
+        eph.resolve_orbital_state(satellite, toc, epoch, max_iteration)
     }
 
     /// Macro to resolve the [Orbit]al state of given satellite [SV] at specificied [Epoch] easily.
@@ -59,11 +59,11 @@ impl Rinex {
         epoch: Epoch,
         max_iteration: usize,
     ) -> Result<Vector6, EphemerisError> {
-        let (_, _, eph) = self
+        let (toc, _, eph) = self
             .nav_satellite_ephemeris_selection(satellite, epoch)
             .ok_or(EphemerisError::MissingData)?;
 
-        eph.resolve_position_velocity_km(satellite, epoch, max_iteration)
+        eph.resolve_position_velocity_km(satellite, toc, epoch, max_iteration)
     }
 
     /// Macro to resolve azimuth, elevation and slant range of desired satellite at desired [Epoch].

@@ -143,6 +143,7 @@ impl Ephemeris {
     ///
     /// ## Input
     /// - satellite: [SV]
+    /// - toc: [Epoch] time of clock
     /// - epoch: [Epoch] of navigation
     /// - max_iteration: maximal number of iteration allowed to reasonnably converge.
     ///
@@ -151,10 +152,11 @@ impl Ephemeris {
     pub fn resolve_orbital_state(
         &self,
         satellite: SV,
+        toc: Epoch,
         epoch: Epoch,
         max_iteration: usize,
     ) -> Result<Orbit, EphemerisError> {
-        let pos_vel_km = self.resolve_position_velocity_km(satellite, epoch, max_iteration)?;
+        let pos_vel_km = self.resolve_position_velocity_km(satellite, toc, epoch, max_iteration)?;
         Ok(Orbit::from_cartesian_pos_vel(
             pos_vel_km,
             epoch,
@@ -170,6 +172,7 @@ impl Ephemeris {
     ///
     /// ## Input
     /// - satellite: [SV]
+    /// - toc: [Epoch] time of clock
     /// - epoch: [Epoch] of navigation
     /// - max_iteration: maximal number of iteration allowed to reasonnably converge.
     ///
@@ -178,10 +181,11 @@ impl Ephemeris {
     pub fn resolve_position_km(
         &self,
         satellite: SV,
+        toc: Epoch,
         epoch: Epoch,
         max_iteration: usize,
     ) -> Result<Vector3, EphemerisError> {
-        let pos_vel_km = self.resolve_position_velocity_km(satellite, epoch, max_iteration)?;
+        let pos_vel_km = self.resolve_position_velocity_km(satellite, toc, epoch, max_iteration)?;
         Ok(Vector3::new(pos_vel_km[0], pos_vel_km[1], pos_vel_km[2]))
     }
 
@@ -192,6 +196,7 @@ impl Ephemeris {
     ///
     /// ## Input
     /// - satellite: [SV]
+    /// - toc: Time of clock [Epoch]
     /// - epoch: [Epoch] of navigation
     /// - max_iteration: maximal number of iteration allowed to reasonnably converge.
     ///
@@ -200,22 +205,47 @@ impl Ephemeris {
     pub fn resolve_position_velocity_km(
         &self,
         satellite: SV,
+        toc: Epoch,
         epoch: Epoch,
         max_iteration: usize,
     ) -> Result<Vector6, EphemerisError> {
         if satellite.constellation.is_sbas() || satellite.constellation == Constellation::Glonass {
-            let (x_km, y_km, z_km) = (
+            let (mut x_m, mut y_m, mut z_m) = (
                 self.get_orbit_field_f64("posX")?,
                 self.get_orbit_field_f64("posY")?,
                 self.get_orbit_field_f64("posZ")?,
             );
-            let (velx_km, vely_km, velz_km) = (
+
+            let (velx0_m, vely0_m, velz0_m) = (
                 self.get_orbit_field_f64("velX")?,
                 self.get_orbit_field_f64("velY")?,
                 self.get_orbit_field_f64("velZ")?,
             );
 
-            Ok(Vector6::new(x_km, y_km, z_km, velx_km, vely_km, velz_km)) // TODO: wrong
+            let (accelx0_m, accely0_m, accelz0_m) = (
+                self.get_orbit_field_f64("accelX").unwrap_or_default(),
+                self.get_orbit_field_f64("accelY").unwrap_or_default(),
+                self.get_orbit_field_f64("accelZ").unwrap_or_default(),
+            );
+
+            let dt = (toc - epoch).to_seconds();
+
+            x_m += velx0_m * dt;
+            y_m += vely0_m * dt;
+            z_m += velz0_m * dt;
+
+            x_m += 0.5 * accelx0_m * dt.powi(2);
+            y_m += 0.5 * accelx0_m * dt.powi(2);
+            z_m += 0.5 * accelx0_m * dt.powi(2);
+
+            Ok(Vector6::new(
+                x_m * 1e-3,
+                y_m * 1e-3,
+                z_m * 1e-3,
+                0.0,
+                0.0,
+                0.0,
+            ))
         } else {
             let solver = self.solver(satellite, epoch, max_iteration)?;
             solver.position_velocity_km()

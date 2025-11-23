@@ -54,8 +54,8 @@ pub(crate) struct Solver {
 }
 
 impl Solver {
-    /// Returns ẍ and ÿ first temporal derivatives of orbital position.
-    fn orbit_velocity(&self) -> (f64, f64) {
+    /// Returns ẍ and ÿ first temporal derivatives of orbital position, in meters per second.
+    fn orbit_velocity_m_s(&self) -> (f64, f64) {
         let (sin_u_k, cos_u_k) = self.u_k.sin_cos();
         let fd_x = self.fd_r_k * cos_u_k - self.r_k * self.fd_u_k * sin_u_k;
         let fd_y = self.fd_r_k * sin_u_k + self.r_k * self.fd_u_k * cos_u_k;
@@ -94,7 +94,7 @@ impl Solver {
         let (x, y, _) = self.r_sv;
         let (sin_omega_k, cos_omega_k) = self.omega_k.sin_cos();
         let (sin_i_k, cos_i_k) = self.i_k.sin_cos();
-        let (fd_x, fd_y) = self.orbit_velocity();
+        let (fd_x, fd_y) = self.orbit_velocity_m_s();
         let fd_xgk = -y * self.fd_omega_k - fd_y * cos_i_k * sin_omega_k + fd_x * cos_omega_k;
         let fd_ygk = x * self.fd_omega_k + fd_y * cos_i_k * cos_omega_k + fd_x * sin_omega_k;
         let fd_zgk = fd_y * sin_i_k + y * self.fd_i_k * cos_i_k;
@@ -148,12 +148,15 @@ impl Solver {
             ))
         } else {
             match self.satellite.constellation {
-                Constellation::GPS | Constellation::Galileo | Constellation::BeiDou => {
+                Constellation::GPS
+                | Constellation::Galileo
+                | Constellation::BeiDou
+                | Constellation::QZSS => {
                     let (x_m, y_m, z_m) = self.r_sv;
                     let pos_m =
                         self.meo_orbit_to_ecef_rotation_matrix() * Vector3::new(x_m, y_m, z_m);
 
-                    let (fd_x, fd_y) = self.orbit_velocity();
+                    let (fd_x, fd_y) = self.orbit_velocity_m_s();
                     let (sin_omega_k, cos_omega_k) = self.omega_k.sin_cos();
                     let (sin_i_k, cos_i_k) = self.i_k.sin_cos();
 
