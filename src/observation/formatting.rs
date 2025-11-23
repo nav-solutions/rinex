@@ -22,7 +22,7 @@ impl Observations {
         let sv_list = self
             .signals
             .iter()
-            .map(|sig| sig.sv)
+            .map(|sig| sig.satellite)
             .unique()
             .sorted()
             .collect::<Vec<_>>();
@@ -80,18 +80,18 @@ impl Observations {
                 if let Some(observation) = self
                     .signals
                     .iter()
-                    .filter(|sig| &sig.sv == sv && &sig.observable == observable)
+                    .filter(|sig| &sig.satellite == sv && &sig.observable == observable)
                     .reduce(|k, _| k)
                 {
                     write!(w, "{:14.3}", observation.value)?;
 
-                    if let Some(lli) = observation.lli {
+                    if let Some(lli) = observation.lli_flags {
                         write!(w, "{:x}", lli)?;
                     } else {
                         write!(w, " ")?;
                     }
 
-                    if let Some(snr) = observation.snr {
+                    if let Some(snr) = observation.signal_noise_ratio {
                         write!(w, "{:x}", snr)?;
                     } else {
                         write!(w, " ")?;
@@ -214,18 +214,18 @@ impl Observations {
                     if let Some(observation) = self
                         .signals
                         .iter()
-                        .filter(|sig| sig.sv == *sv && sig.observable == *observable)
+                        .filter(|sig| sig.satellite == *sv && sig.observable == *observable)
                         .reduce(|k, _| k)
                     {
                         write!(w, "{:14.3}", observation.value)?;
 
-                        if let Some(lli) = &observation.lli {
+                        if let Some(lli) = &observation.lli_flags {
                             write!(w, "{}", lli.bits())?;
                         } else {
                             write!(w, " ")?;
                         }
 
-                        if let Some(snr) = &observation.snr {
+                        if let Some(snr) = &observation.signal_noise_ratio {
                             write!(w, "{:x}", snr)?;
                         } else {
                             write!(w, " ")?;

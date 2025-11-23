@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 pub use clock::ClockObservation;
 pub use flag::EpochFlag;
 pub use header::HeaderFields;
-pub use lli::LliFlags;
+pub use lli::LLIFlags;
 pub use signal::SignalObservation;
 pub use snr::SNR;
 
@@ -50,6 +50,7 @@ pub struct Observations {
     /// It describes the receiver state with respect to the GNSS [TimeScale] defined
     /// in [Header].
     pub clock: Option<ClockObservation>,
+
     /// List of [SignalObservation]s.
     pub signals: Vec<SignalObservation>,
 }
@@ -74,6 +75,7 @@ impl Observations {
         }
         s
     }
+
     /// Define [Observations] with [ClockObservation]
     pub fn with_clock_observation(&self, clock: ClockObservation) -> Self {
         let mut s = self.clone();
@@ -88,8 +90,12 @@ impl Observations {
 pub struct ObsKey {
     /// Sampling [Epoch]
     pub epoch: Epoch,
+
     /// [EpochFlag] gives more information about sampling conditions
     pub flag: EpochFlag,
+
+    /// True if attached measurements are system events, not actual measurements.
+    pub hardware_event: bool,
 }
 
 /// Observation [Record] are sorted by [Epoch] of observation and may have two different forms.

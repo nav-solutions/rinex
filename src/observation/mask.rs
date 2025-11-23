@@ -24,10 +24,10 @@ pub fn mask_mut(rec: &mut Record, mask: &MaskFilter) {
                 rec.retain(|_, obs| {
                     obs.signals.retain(|sig| {
                         if broad_sbas_filter {
-                            sig.sv.constellation.is_sbas()
-                                || constells.contains(&sig.sv.constellation)
+                            sig.satellite.constellation.is_sbas()
+                                || constells.contains(&sig.satellite.constellation)
                         } else {
-                            constells.contains(&sig.sv.constellation)
+                            constells.contains(&sig.satellite.constellation)
                         }
                     });
                     !obs.signals.is_empty()
@@ -35,7 +35,7 @@ pub fn mask_mut(rec: &mut Record, mask: &MaskFilter) {
             },
             FilterItem::SvItem(items) => {
                 rec.retain(|_, obs| {
-                    obs.signals.retain(|sig| items.contains(&sig.sv));
+                    obs.signals.retain(|sig| items.contains(&sig.satellite));
                     !obs.signals.is_empty()
                 });
             },
@@ -43,8 +43,8 @@ pub fn mask_mut(rec: &mut Record, mask: &MaskFilter) {
                 let filter = SNR::from(*filter);
                 rec.retain(|_, obs| {
                     obs.signals.retain(|sig| {
-                        if let Some(snr) = sig.snr {
-                            snr == filter
+                        if let Some(signal_noise_ratio) = sig.signal_noise_ratio {
+                            signal_noise_ratio == filter
                         } else {
                             false // no SNR: drop out
                         }
@@ -82,13 +82,13 @@ pub fn mask_mut(rec: &mut Record, mask: &MaskFilter) {
             FilterItem::ConstellationItem(constells) => {
                 rec.retain(|_, obs| {
                     obs.signals
-                        .retain(|sig| !constells.contains(&sig.sv.constellation));
+                        .retain(|sig| !constells.contains(&sig.satellite.constellation));
                     !obs.signals.is_empty()
                 });
             },
             FilterItem::SvItem(items) => {
                 rec.retain(|_, obs| {
-                    obs.signals.retain(|sig| !items.contains(&sig.sv));
+                    obs.signals.retain(|sig| !items.contains(&sig.satellite));
                     !obs.signals.is_empty()
                 });
             },
@@ -122,8 +122,8 @@ pub fn mask_mut(rec: &mut Record, mask: &MaskFilter) {
                     obs.signals.retain(|sig| {
                         let mut retained = true;
                         for item in items {
-                            if item.constellation == sig.sv.constellation {
-                                retained &= sig.sv.prn >= item.prn;
+                            if item.constellation == sig.satellite.constellation {
+                                retained &= sig.satellite.prn >= item.prn;
                             }
                         }
                         retained
@@ -135,8 +135,8 @@ pub fn mask_mut(rec: &mut Record, mask: &MaskFilter) {
                 let filter = SNR::from(*filter);
                 rec.retain(|_, obs| {
                     obs.signals.retain(|sig| {
-                        if let Some(snr) = sig.snr {
-                            snr >= filter
+                        if let Some(signal_noise_ratio) = sig.signal_noise_ratio {
+                            signal_noise_ratio >= filter
                         } else {
                             false // no SNR: drop out
                         }
@@ -153,8 +153,8 @@ pub fn mask_mut(rec: &mut Record, mask: &MaskFilter) {
                     obs.signals.retain(|sig| {
                         let mut retained = true;
                         for item in items {
-                            if item.constellation == sig.sv.constellation {
-                                retained &= sig.sv.prn > item.prn;
+                            if item.constellation == sig.satellite.constellation {
+                                retained &= sig.satellite.prn > item.prn;
                             }
                         }
                         retained
@@ -166,8 +166,8 @@ pub fn mask_mut(rec: &mut Record, mask: &MaskFilter) {
                 let filter = SNR::from(*filter);
                 rec.retain(|_, obs| {
                     obs.signals.retain(|sig| {
-                        if let Some(snr) = sig.snr {
-                            snr > filter
+                        if let Some(signal_noise_ratio) = sig.signal_noise_ratio {
+                            signal_noise_ratio > filter
                         } else {
                             false // no SNR: drop out
                         }
@@ -184,8 +184,8 @@ pub fn mask_mut(rec: &mut Record, mask: &MaskFilter) {
                     obs.signals.retain(|sig| {
                         let mut retained = true;
                         for item in items {
-                            if item.constellation == sig.sv.constellation {
-                                retained &= sig.sv.prn <= item.prn;
+                            if item.constellation == sig.satellite.constellation {
+                                retained &= sig.satellite.prn <= item.prn;
                             }
                         }
                         retained
@@ -197,8 +197,8 @@ pub fn mask_mut(rec: &mut Record, mask: &MaskFilter) {
                 let filter = SNR::from(*filter);
                 rec.retain(|_, obs| {
                     obs.signals.retain(|sig| {
-                        if let Some(snr) = sig.snr {
-                            snr <= filter
+                        if let Some(signal_noise_ratio) = sig.signal_noise_ratio {
+                            signal_noise_ratio <= filter
                         } else {
                             false // no SNR: drop out
                         }
@@ -215,8 +215,8 @@ pub fn mask_mut(rec: &mut Record, mask: &MaskFilter) {
                     obs.signals.retain(|sig| {
                         let mut retained = true;
                         for item in items {
-                            if item.constellation == sig.sv.constellation {
-                                retained &= sig.sv.prn < item.prn;
+                            if item.constellation == sig.satellite.constellation {
+                                retained &= sig.satellite.prn < item.prn;
                             }
                         }
                         retained
@@ -228,8 +228,8 @@ pub fn mask_mut(rec: &mut Record, mask: &MaskFilter) {
                 let filter = SNR::from(*filter);
                 rec.retain(|_, obs| {
                     obs.signals.retain(|sig| {
-                        if let Some(snr) = sig.snr {
-                            snr < filter
+                        if let Some(signal_noise_ratio) = sig.signal_noise_ratio {
+                            signal_noise_ratio < filter
                         } else {
                             false // no SNR: drop out
                         }

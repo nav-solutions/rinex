@@ -1,6 +1,6 @@
 //! Feature dependent high level methods
 use crate::{
-    observation::{EpochFlag, LliFlags, ObsKey, SignalObservation},
+    observation::{EpochFlag, LLIFlags, ObsKey, SignalObservation},
     prelude::{Carrier, Epoch, Observable, Rinex, SV},
 };
 
@@ -13,12 +13,16 @@ use std::collections::{BTreeMap, HashMap};
 pub enum Combination {
     /// Geometry Free (GF) combination (same physics)
     GeometryFree,
+
     /// Ionosphere Free (IF) combination (same physics)
     IonosphereFree,
+
     /// Wide Lane (Wl) combination (same physics)
     WideLane,
+
     /// Narrow Lane (Nl) combination (same physics)
     NarrowLane,
+
     /// Melbourne-Wübbena (MW) combination (cross-mixed physics)
     MelbourneWubbena,
 }
@@ -83,7 +87,7 @@ impl Rinex {
             self.signal_observations_iter()
                 .filter_map(|(_, sig)| {
                     if let Ok(carrier) =
-                        Carrier::from_observable(sig.sv.constellation, &sig.observable)
+                        Carrier::from_observable(sig.satellite.constellation, &sig.observable)
                     {
                         Some(carrier)
                     } else {
@@ -141,7 +145,7 @@ impl Rinex {
     }
 
     /// Returns an Iterator over [Epoch]s where [Observable::PhaseRange] sampling took place in good conditions.
-    /// For good tracking conditions, you need to take the attached [LliFlags] into account.
+    /// For good tracking conditions, you need to take the attached [LLIFlags] into account.
     /// See [Rinex::signal_ok_iter()] for more information.
     /// Use [Rinex::phase_range_tracking_ok_iter()] for both good sampling and tracking conditions filtering.
     /// Use [Rinex::phase_tracking_issues_iter()] for tracking errors iteration.
@@ -162,14 +166,14 @@ impl Rinex {
 
     /// Returns an Iterator over [Epoch]s where [Observable::PhaseRange] sampling and tracking took place in good conditions.
     /// Use [Rinex::phase_range_sampling_ok_iter()] to verify the sampling conditions only.
-    /// NB: if [LliFlags] is missing, we consider the tracking was GOOD. Because some receivers omit or do not encode
-    /// the [LliFlags] and would rather not stream out RINEX in such situation (and we would wind up with empty dataset).
+    /// NB: if [LLIFlags] is missing, we consider the tracking was GOOD. Because some receivers omit or do not encode
+    /// the [LLIFlags] and would rather not stream out RINEX in such situation (and we would wind up with empty dataset).
     pub fn phase_range_tracking_ok_iter(
         &self,
     ) -> Box<dyn Iterator<Item = (Epoch, &SignalObservation)> + '_> {
         Box::new(self.phase_range_sampling_ok_iter().filter_map(|(k, sig)| {
-            if let Some(lli) = sig.lli {
-                if lli.intersects(LliFlags::OK_OR_UNKNOWN) {
+            if let Some(lli) = sig.lli_flags {
+                if lli.intersects(LLIFlags::OK_OR_UNKNOWN) {
                     Some((k, sig))
                 } else {
                     None
@@ -186,8 +190,8 @@ impl Rinex {
     ) -> Box<dyn Iterator<Item = (ObsKey, &SignalObservation)> + '_> {
         Box::new(self.signal_observations_iter().filter_map(|(k, sig)| {
             if sig.observable.is_phase_range_observable() {
-                if let Some(lli) = sig.lli {
-                    if lli.intersects(LliFlags::LOCK_LOSS) {
+                if let Some(lli) = sig.lli_flags {
+                    if lli.intersects(LLIFlags::LOCK_LOSS) {
                         Some((k, sig))
                     } else {
                         None
@@ -202,13 +206,13 @@ impl Rinex {
     }
 
     /// Returns Iterator over both Half and Full Phase Cycle slips events.
-    /// Use provided [LliFlags] to inquire.
+    /// Use provided [LLIFlags] to inquire.
     pub fn phase_half_full_cycle_slip_events(
         &self,
     ) -> Box<dyn Iterator<Item = (ObsKey, &SignalObservation)> + '_> {
         Box::new(self.phase_range_observations_iter().filter_map(|(k, sig)| {
-            let lli = sig.lli?;
-            if lli.intersects(LliFlags::LOCK_LOSS) || lli.intersects(LliFlags::HALF_CYCLE_SLIP) {
+            let lli = sig.lli_flags?;
+            if lli.intersects(LLIFlags::LOCK_LOSS) || lli.intersects(LLIFlags::HALF_CYCLE_SLIP) {
                 Some((k, sig))
             } else {
                 None
@@ -216,9 +220,9 @@ impl Rinex {
         }))
     }
 
-    /// Copies and returns a new [Rinex] where [LliFlags] mask (and mask) was applied.
+    /// Copies and returns a new [Rinex] where [LLIFlags] mask (and mask) was applied.
     /// This only impacts Observation RINEX.
-    pub fn observation_phase_tracking_lli_masking(&self, mask: LliFlags) -> Self {
+    pub fn observation_phase_tracking_lli_masking(&self, mask: LLIFlags) -> Self {
         let mut s = self.clone();
         s.observation_phase_tracking_lli_masking_mut(mask);
         s
@@ -226,12 +230,12 @@ impl Rinex {
 
     /// Mutable [Self::observation_phase_tracking_lli_masking] implementation.
     /// This only impacts Observation RINEX.
-    pub fn observation_phase_tracking_lli_masking_mut(&mut self, mask: LliFlags) {
+    pub fn observation_phase_tracking_lli_masking_mut(&mut self, mask: LLIFlags) {
         if let Some(rec) = self.record.as_mut_obs() {
             rec.retain(|_, v| {
                 v.signals.retain(|sig| {
                     if sig.observable.is_phase_range_observable() {
-                        if let Some(lli) = sig.lli {
+                        if let Some(lli) = sig.lli_flags {
                             lli.intersects(mask)
                         } else {
                             false
@@ -310,9 +314,9 @@ impl Rinex {
                     continue;
                 }
 
-                let is_l1_pivot = v.observable.is_l1_pivot(v.sv.constellation);
+                let is_l1_pivot = v.observable.is_l1_pivot(v.satellite.constellation);
 
-                let carrier = v.observable.to_carrier(v.sv.constellation);
+                let carrier = v.observable.to_carrier(v.satellite.constellation);
                 if carrier.is_err() {
                     continue;
                 }
@@ -323,11 +327,15 @@ impl Rinex {
 
                 if is_l1_pivot {
                     if is_phase_range {
-                        phase_ref_value
-                            .insert(v.sv, (k.epoch, v.observable.clone(), freq, lambda, v.value));
+                        phase_ref_value.insert(
+                            v.satellite,
+                            (k.epoch, v.observable.clone(), freq, lambda, v.value),
+                        );
                     } else {
-                        pr_ref_value
-                            .insert(v.sv, (k.epoch, v.observable.clone(), freq, lambda, v.value));
+                        pr_ref_value.insert(
+                            v.satellite,
+                            (k.epoch, v.observable.clone(), freq, lambda, v.value),
+                        );
                     };
                 } else {
                     let reference = if is_phase_range {
@@ -336,7 +344,8 @@ impl Rinex {
                         &pr_ref_value
                     };
 
-                    if let Some((last_seen, reference, f_1, w_1, ref_value)) = reference.get(&v.sv)
+                    if let Some((last_seen, reference, f_1, w_1, ref_value)) =
+                        reference.get(&v.satellite)
                     {
                         if k.epoch - *last_seen > dominant_sampling {
                             // avoid moving forward on data gaps
@@ -394,7 +403,7 @@ impl Rinex {
                         let combination = CombinationKey {
                             epoch: k.epoch,
                             flag: k.flag,
-                            sv: v.sv,
+                            sv: v.satellite,
                             lhs: v.observable.clone(),
                             reference: reference.clone(),
                         };
@@ -437,7 +446,7 @@ impl Rinex {
         for (k, v) in self.signal_observations_iter() {
             let is_ph = v.observable.is_phase_range_observable();
             let is_pr = v.observable.is_pseudo_range_observable();
-            let carrier = v.observable.to_carrier(v.sv.constellation);
+            let carrier = v.observable.to_carrier(v.satellite.constellation);
 
             if !is_ph && !is_pr || carrier.is_err() {
                 continue;
@@ -502,9 +511,12 @@ impl Rinex {
 
             // store value
             if is_pr {
-                rho.insert((v.sv, v.observable.clone()), v.value);
+                rho.insert((v.satellite, v.observable.clone()), v.value);
             } else {
-                phi.insert((v.sv, v.observable.clone()), (freq, v.value * lambda));
+                phi.insert(
+                    (v.satellite, v.observable.clone()),
+                    (freq, v.value * lambda),
+                );
             }
 
             t = k.epoch;

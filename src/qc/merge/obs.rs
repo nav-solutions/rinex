@@ -9,16 +9,16 @@ pub fn merge_mut(rec: &mut Record, rhs: &Record) -> Result<(), MergeError> {
                 if let Some(lhs) = lhs
                     .signals
                     .iter_mut()
-                    .find(|sig| sig.sv == rhs.sv && sig.observable == rhs.observable)
+                    .find(|sig| sig.satellite == rhs.satellite && sig.observable == rhs.observable)
                 {
-                    if let Some(lli) = rhs.lli {
-                        if lhs.lli.is_none() {
-                            lhs.lli = Some(lli);
+                    if let Some(lli_flags) = rhs.lli_flags {
+                        if lhs.lli_flags.is_none() {
+                            lhs.lli_flags = Some(lli_flags);
                         }
                     }
-                    if let Some(snr) = rhs.snr {
-                        if lhs.snr.is_none() {
-                            lhs.snr = Some(snr);
+                    if let Some(signal_noise_ratio) = rhs.signal_noise_ratio {
+                        if lhs.signal_noise_ratio.is_none() {
+                            lhs.signal_noise_ratio = Some(signal_noise_ratio);
                         }
                     }
                 } else {

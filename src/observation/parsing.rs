@@ -2,7 +2,7 @@
 use crate::{
     epoch::{parse_in_timescale as parse_epoch_in_timescale, parse_utc as parse_utc_epoch},
     observation::{
-        ClockObservation, EpochFlag, LliFlags, ObsKey, Observations, SignalObservation, SNR,
+        ClockObservation, EpochFlag, LLIFlags, ObsKey, Observations, SignalObservation, SNR,
     },
     prelude::{Constellation, Header, Observable, ParsingError, TimeScale, Version, SV},
 };
@@ -99,7 +99,11 @@ pub fn parse_epoch(
     let (flag, rem) = rem.split_at(3);
     let flag = EpochFlag::from_str(flag.trim())?;
 
-    let key = ObsKey { epoch, flag };
+    let key = ObsKey {
+        epoch,
+        flag,
+        hardware_event: false,
+    };
 
     let (num_sat, rem) = rem.split_at(3);
     let num_sat = num_sat
@@ -375,28 +379,28 @@ fn parse_signals_v2(
             //println!("observation: [{}] \"{}\" {}", sv, slice, observables[obs_ptr]);
 
             // parse possible LLI
-            let mut lli = Option::<LliFlags>::None;
+            let mut lli_flags = Option::<LLIFlags>::None;
 
             if slice.len() > OBSERVABLE_F14_WIDTH {
                 let lli_slice = &slice[OBSERVABLE_F14_WIDTH..OBSERVABLE_F14_WIDTH + 1];
                 //println!("lli: \"{}\"", lli_slice);
                 match lli_slice.parse::<u8>() {
                     Ok(unsigned) => {
-                        lli = LliFlags::from_bits(unsigned);
+                        lli_flags = LLIFlags::from_bits(unsigned);
                     },
                     Err(_) => {},
                 }
             }
 
             // parse possible SNR
-            let mut snr = Option::<SNR>::None;
+            let mut signal_noise_ratio = Option::<SNR>::None;
 
             if slice.len() > OBSERVABLE_F14_WIDTH + 1 {
                 let snr_slice = &slice[OBSERVABLE_F14_WIDTH + 1..OBSERVABLE_F14_WIDTH + 2];
                 match SNR::from_str(snr_slice) {
                     Ok(found) => {
                         //println!("SNR (OK): \"{}\" [{:?}]", snr_slice, observables[obs_ptr]); // DEBUG
-                        snr = Some(found);
+                        signal_noise_ratio = Some(found);
                     },
                     Err(_) => {
                         // println!("SNR (ERR): {:?} [{:?}]", e, observables[obs_ptr]); // DEBUG
@@ -409,9 +413,9 @@ fn parse_signals_v2(
 
             if let Ok(value) = slice[..end].trim().parse::<f64>() {
                 signals.push(SignalObservation {
-                    sv,
-                    snr,
-                    lli,
+                    satellite: sv,
+                    signal_noise_ratio,
+                    lli_flags,
                     value,
                     observable: observables[obs_ptr].clone(),
                 });
@@ -493,14 +497,14 @@ fn parse_signals_v3(
             let end = (offset + OBSERVABLE_WIDTH).min(line.len());
             let slice = &line[offset..end];
 
-            let mut lli = Option::<LliFlags>::None;
+            let mut lli_flags = Option::<LLIFlags>::None;
 
             if slice.len() > OBSERVABLE_F14_WIDTH {
                 let start = offset + OBSERVABLE_F14_WIDTH - 1;
                 let lli_slice = &line[start..start + 1];
                 match lli_slice.parse::<u8>() {
                     Ok(unsigned) => {
-                        lli = LliFlags::from_bits(unsigned);
+                        lli_flags = LLIFlags::from_bits(unsigned);
                     },
                     Err(_e) => {
                         //#[cfg(feature = "log")]
@@ -509,14 +513,14 @@ fn parse_signals_v3(
                 }
             }
 
-            let mut snr = Option::<SNR>::None;
+            let mut signal_noise_ratio = Option::<SNR>::None;
 
             if slice.len() > OBSERVABLE_F14_WIDTH + 1 {
                 let start = offset + OBSERVABLE_F14_WIDTH;
                 let snr_slice = &line[start..start + 1];
 
                 if let Ok(value) = snr_slice.parse::<u8>() {
-                    snr = Some(SNR::from(value));
+                    signal_noise_ratio = Some(SNR::from(value));
                 }
             }
 
@@ -524,10 +528,10 @@ fn parse_signals_v3(
 
             if let Ok(value) = slice[..end].trim().parse::<f64>() {
                 signals.push(SignalObservation {
-                    sv,
+                    satellite: sv,
                     value,
-                    lli,
-                    snr,
+                    lli_flags,
+                    signal_noise_ratio,
                     observable: observables[i].clone(),
                 });
             }

@@ -1,5 +1,5 @@
 use crate::{
-    observation::LliFlags,
+    observation::LLIFlags,
     observation::SNR,
     prelude::{Observable, SV},
 };
@@ -9,8 +9,8 @@ use crate::{
 #[derive(Default, Clone, Debug, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct SignalObservation {
-    /// [SV] is the signal source
-    pub sv: SV,
+    /// Satellite (signal source)
+    pub satellite: SV,
 
     /// Actual measurement. Unit depends on [Observable].
     pub value: f64,
@@ -18,53 +18,65 @@ pub struct SignalObservation {
     /// [Observable]
     pub observable: Observable,
 
-    /// Lock loss indicator (when present)
-    pub lli: Option<LliFlags>,
+    /// Measurement status and phase tracker status (when present)
+    pub lli_flags: Option<LLIFlags>,
 
-    /// SNR estimate (when present)
-    pub snr: Option<SNR>,
+    /// Possible S/N ratio estimate.
+    pub signal_noise_ratio: Option<SNR>,
 }
 
 impl SignalObservation {
-    /// Builds new signal observation
-    pub fn new(sv: SV, observable: Observable, value: f64) -> Self {
+    /// Builds new signal observation.
+    pub fn new(satellite: SV, observable: Observable, value: f64) -> Self {
         Self {
-            sv,
-            observable,
             value,
-            lli: None,
-            snr: None,
+            satellite,
+            observable,
+            lli_flags: None,
+            signal_noise_ratio: None,
         }
     }
 
     /// Copy and define [SNR]
-    pub fn with_snr(&self, snr: SNR) -> Self {
+    pub fn with_snr(&self, signal_noise_ratio: SNR) -> Self {
         let mut s = self.clone();
-        s.snr = Some(snr);
+        s.signal_noise_ratio = Some(signal_noise_ratio);
+        s
+    }
+
+    /// Copy and define [Observable]
+    pub fn with_observable(&self, observable: Observable) -> Self {
+        let mut s = self.clone();
+        s.observable = observable.clone();
+        s
+    }
+
+    /// Copy and define [LLIFlags]
+    pub fn with_lli_flags(&self, flags: LLIFlags) -> Self {
+        let mut s = self.clone();
+        s.lli_flags = Some(flags);
         s
     }
 
     /// [Observation] is said OK when
-    ///  - If LLI is present it must match [LliFlags::OK_OR_UNKNOWN]
+    ///  - If LLI is present it must match [LLIFlags::OK_OR_UNKNOWN]
     ///  - If SNR is present, it must be [SNR::strong]
-    ///  - NB: when both are missing, we still return OK.
-    /// This allows method that Iterate over OK Epoch Data to consider
-    /// data when SNR or LLI are missing.
+    ///  - NB: this is pessimistic, missing LLI and/or SNR defaults to OK.
     pub fn is_ok(self) -> bool {
-        let lli_ok = self.lli.unwrap_or(LliFlags::OK_OR_UNKNOWN) == LliFlags::OK_OR_UNKNOWN;
-        let snr_ok = self.snr.unwrap_or_default().strong();
+        let lli_ok = self.lli_flags.unwrap_or(LLIFlags::OK_OR_UNKNOWN) == LLIFlags::OK_OR_UNKNOWN;
+        let snr_ok = self.signal_noise_ratio.unwrap_or_default().strong();
         lli_ok && snr_ok
     }
 
-    /// [Observation::is_ok] with additional SNR criteria to match (>=).
-    /// SNR must then be present otherwise this is not OK.
+    /// [Observation::is_ok] with additional SNR criteria to match (above or equals).
+    /// SNR becomes mandatory otherwise we return false here.
     pub fn is_ok_snr(&self, min_snr: SNR) -> bool {
         if self
-            .lli
-            .unwrap_or(LliFlags::OK_OR_UNKNOWN)
-            .intersects(LliFlags::OK_OR_UNKNOWN)
+            .lli_flags
+            .unwrap_or(LLIFlags::OK_OR_UNKNOWN)
+            .intersects(LLIFlags::OK_OR_UNKNOWN)
         {
-            if let Some(snr) = self.snr {
+            if let Some(snr) = self.signal_noise_ratio {
                 snr >= min_snr
             } else {
                 false

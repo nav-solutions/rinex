@@ -1,12 +1,25 @@
 use bitflags::bitflags;
-use std::collections::{BTreeMap, HashMap};
-use std::str::FromStr;
 use thiserror::Error;
 
-use crate::{epoch, prelude::*, types::Type, version::Version, Carrier, Observable};
+use std::{
+    collections::{BTreeMap, HashMap},
+    str::FromStr,
+    num::{ParseIntError, ParseFloatError},
+};
 
-use crate::observation::EpochFlag;
-use crate::observation::SNR;
+use crate::{
+    epoch, 
+    observation::{EpochFlag, SNR, flag::Error as FlagError},
+    types::Type, version::Version, Carrier, Observable,
+};
+
+use gnss_rs::{
+    constellation::ParsingError as ConstellationParsingError,
+    sv::ParsingError as SvParsingError,
+};
+
+#[cfg(feature = "serde")]
+use serde::Serialize;
 
 #[cfg(feature = "qc")]
 use qc_traits::MergeError;
@@ -19,25 +32,29 @@ use qc_traits::{
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("failed to parse epoch flag")]
-    EpochFlag(#[from] crate::observation::flag::Error),
+    EpochFlag(#[from] EpochFlag),
+
     #[error("failed to parse epoch")]
     EpochError(#[from] epoch::ParsingError),
+
     #[error("constellation parsing error")]
-    ConstellationParsing(#[from] gnss::constellation::ParsingError),
+    ConstellationParsing(#[from] ConstellationParsingError),
+
     #[error("sv parsing error")]
-    SvParsing(#[from] gnss::sv::ParsingError),
+    SvParsing(#[from] SvParsingError),
+
     #[error("failed to parse integer number")]
-    ParseIntError(#[from] std::num::ParseIntError),
+    ParseIntError(#[from] ParseIntError),
+
     #[error("failed to parse float number")]
-    ParseFloatError(#[from] std::num::ParseFloatError),
+    ParseFloatError(#[from] ParseFloatError),
+    
     #[error("failed to parse vehicles properly (nb_sat mismatch)")]
     EpochParsingError,
+
     #[error("line is empty")]
     MissingData,
 }
-
-#[cfg(feature = "serde")]
-use serde::Serialize;
 
 bitflags! {
     #[derive(Debug, Copy, Clone)]
@@ -46,11 +63,14 @@ bitflags! {
     pub struct LliFlags: u8 {
         /// Current epoch is marked Ok or Unknown status
         const OK_OR_UNKNOWN = 0x00;
+
         /// Lock lost between previous observation and current observation,
         /// cycle slip is possible
         const LOCK_LOSS = 0x01;
+
         /// Half cycle slip marker
         const HALF_CYCLE_SLIP = 0x02;
+
         /// Observing under anti spoofing,
         /// might suffer from decreased SNR - decreased signal quality
         const UNDER_ANTI_SPOOFING = 0x04;
@@ -59,37 +79,50 @@ bitflags! {
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
-pub struct ObservationData {
-    /// physical measurement
-    pub obs: f64,
-    /// Lock loss indicator
-    pub lli: Option<LliFlags>,
-    /// Signal strength indicator
-    pub snr: Option<SNR>,
+pub enum Observation {
+    /// Measurement
+    Measurement(Measurement),
+
+    // /// Hardware / Measurement system event
+    // Event(Event),
 }
 
-impl std::ops::Add for ObservationData {
+#[derive(Default, Copy, Clone, Debug, PartialEq, PartialOrd)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+pub struct Measurement {
+    /// Physical measurement
+    pub measurement: f64,
+
+    /// Lock loss indicator.
+    pub phase_lock_loss: Option<LliFlags>,
+
+    /// Signal quality indicator.
+    pub signal_noise_ratio: Option<SNR>,
+}
+
+impl std::ops::Add for Measurement {
     type Output = Self;
+
+    /// Adds provided [Measurement] to self, returning a new [Measurement].
+    /// Phase lock and SNR information are preserved.
     fn add(self, rhs: Self) -> Self {
         Self {
-            lli: self.lli,
-            snr: self.snr,
-            obs: self.obs + rhs.obs,
+            phase_lock_loss: self.phase_lock_loss,
+            signal_noise_ratio: self.signal_noise_ratio,
+            measurement: self.measurement + rhs.measurement,
         }
     }
 }
 
-impl std::ops::AddAssign for ObservationData {
+impl std::ops::AddAssign for Measurement {
+    /// Adds provided [Measurement] to mutable self.
+    /// Phase lock and SNR information are preserved.
     fn add_assign(&mut self, rhs: Self) {
-        self.obs += rhs.obs;
+        self.measurement += rhs.measurement;
     }
 }
 
-impl ObservationData {
-    /// Builds new ObservationData structure
-    pub fn new(obs: f64, lli: Option<LliFlags>, snr: Option<SNR>) -> ObservationData {
-        ObservationData { obs, lli, snr }
-    }
+impl Measurement {
     /// Returns `true` if self is determined as `ok`.    
     /// Self is declared `ok` if LLI and SSI flags missing.
     /// If LLI exists:    
@@ -120,15 +153,16 @@ impl ObservationData {
         }
     }
 
-    /// Returns Real Distance, by converting observed pseudo range,
-    /// and compensating for distant and local clock offsets.
-    /// See [p17-p18 of the RINEX specifications]. It makes only
-    /// sense to apply this method on Pseudo Range observations.
-    /// - rcvr_offset: receiver clock offset for this epoch, given in file
-    /// - sv_offset: sv clock offset
-    /// - bias: other (optionnal..) additive biases
-    pub fn pr_real_distance(&self, rcvr_offset: f64, sv_offset: f64, biases: f64) -> f64 {
-        self.obs + 299_792_458.0_f64 * (rcvr_offset - sv_offset) + biases
+    /// Macro to apply to this [Measurement], compensating for the receiver
+    /// and remote satellite offset and other external (cummulated) biases.
+    /// This should apply to pseudo-range [Measurements] only.
+    /// 
+    /// ## Input
+    /// - rx_clock_offset: receiver clock bias
+    /// - sat_clock_offset: emitter clock bias
+    /// - biases: external cumulated bias (in meters of signal propagation)
+    pub fn pseudo_to_real_range(&self, rx_clock_offset_s: f64, sat_clock_offset_s: f64, ext_biases_m: f64) -> f64 {
+        self.obs + 299_792_458.0_f64 * (rx_clock_offset_s - sat_clock_offset_s) + ext_biases_m
     }
 }
 
@@ -138,7 +172,7 @@ pub type Record = BTreeMap<
     (Epoch, EpochFlag),
     (
         Option<f64>,
-        BTreeMap<SV, HashMap<Observable, ObservationData>>,
+        BTreeMap<SV, HashMap<Observable, Measurement>>,
     ),
 >;
 
@@ -178,7 +212,7 @@ pub(crate) fn is_new_epoch(line: &str, v: Version) -> bool {
     }
 }
 
-/// Builds `Record` entry for `ObservationData` from given epoch content
+/// Builds `Record` entry for `Measurement` from given epoch content
 pub(crate) fn parse_epoch(
     header: &Header,
     content: &str,
@@ -187,7 +221,7 @@ pub(crate) fn parse_epoch(
     (
         (Epoch, EpochFlag),
         Option<f64>,
-        BTreeMap<SV, HashMap<Observable, ObservationData>>,
+        BTreeMap<SV, HashMap<Observable, Measurement>>,
     ),
     Error,
 > {
@@ -282,7 +316,7 @@ fn parse_normal(
     (
         (Epoch, EpochFlag),
         Option<f64>,
-        BTreeMap<SV, HashMap<Observable, ObservationData>>,
+        BTreeMap<SV, HashMap<Observable, Measurement>>,
     ),
     Error,
 > {
@@ -325,7 +359,7 @@ fn parse_event(
     (
         (Epoch, EpochFlag),
         Option<f64>,
-        BTreeMap<SV, HashMap<Observable, ObservationData>>,
+        BTreeMap<SV, HashMap<Observable, Measurement>>,
     ),
     Error,
 > {
@@ -346,14 +380,14 @@ fn parse_v2(
     systems: &str,
     header_observables: &HashMap<Constellation, Vec<Observable>>,
     lines: std::str::Lines<'_>,
-) -> BTreeMap<SV, HashMap<Observable, ObservationData>> {
+) -> BTreeMap<SV, HashMap<Observable, Measurement>> {
     let svnn_size = 3; // SVNN standard
     let nb_max_observables = 5; // in a single line
     let observable_width = 16; // data + 2 flags + 1 whitespace
     let mut sv_ptr = 0; // svnn pointer
     let mut obs_ptr = 0; // observable pointer
-    let mut data: BTreeMap<SV, HashMap<Observable, ObservationData>> = BTreeMap::new();
-    let mut inner: HashMap<Observable, ObservationData> = HashMap::with_capacity(5);
+    let mut data: BTreeMap<SV, HashMap<Observable, Measurement>> = BTreeMap::new();
+    let mut inner: HashMap<Observable, Measurement> = HashMap::with_capacity(5);
     let mut sv = SV::default();
     let mut observables: &Vec<Observable>;
     //println!("{:?}", header_observables); // DEBUG
@@ -471,7 +505,7 @@ fn parse_v2(
                     //println!("{} {:?} {:?} ==> {}", obs, lli, snr, obscodes[obs_ptr-1]); //DEBUG
                     inner.insert(
                         observables[obs_ptr - 1].clone(),
-                        ObservationData { obs, lli, snr },
+                        Measurement { obs, lli, snr },
                     );
                 } //f64::obs
             } // parsing all observations
@@ -549,11 +583,11 @@ fn parse_v2(
 fn parse_v3(
     observables: &HashMap<Constellation, Vec<Observable>>,
     lines: std::str::Lines<'_>,
-) -> BTreeMap<SV, HashMap<Observable, ObservationData>> {
+) -> BTreeMap<SV, HashMap<Observable, Measurement>> {
     let svnn_size = 3; // SVNN standard
     let observable_width = 16; // data + 2 flags
-    let mut data: BTreeMap<SV, HashMap<Observable, ObservationData>> = BTreeMap::new();
-    let mut inner: HashMap<Observable, ObservationData> = HashMap::with_capacity(5);
+    let mut data: BTreeMap<SV, HashMap<Observable, Measurement>> = BTreeMap::new();
+    let mut inner: HashMap<Observable, Measurement> = HashMap::with_capacity(5);
     for line in lines {
         // browse all lines
         //println!("parse_v3: \"{}\"", line); //DEBUG
@@ -599,7 +633,7 @@ fn parse_v3(
                         //println!("LLI {:?}", lli); //DEBUG
                         //println!("SSI {:?}", snr);
                         // build content
-                        inner.insert(obscodes[i].clone(), ObservationData { obs, lli, snr });
+                        inner.insert(obscodes[i].clone(), Measurement { obs, lli, snr });
                     }
                 }
                 if rem.len() >= observable_width - 2 {
@@ -619,7 +653,7 @@ fn parse_v3(
                                 }
                             }
                         }
-                        inner.insert(obscodes[nb_obs].clone(), ObservationData { obs, lli, snr });
+                        inner.insert(obscodes[nb_obs].clone(), Measurement { obs, lli, snr });
                     }
                 }
                 if !inner.is_empty() {
@@ -636,7 +670,7 @@ pub(crate) fn fmt_epoch(
     epoch: Epoch,
     flag: EpochFlag,
     clock_offset: &Option<f64>,
-    data: &BTreeMap<SV, HashMap<Observable, ObservationData>>,
+    data: &BTreeMap<SV, HashMap<Observable, Measurement>>,
     header: &Header,
 ) -> String {
     if header.version.major < 3 {
@@ -650,7 +684,7 @@ fn fmt_epoch_v3(
     epoch: Epoch,
     flag: EpochFlag,
     clock_offset: &Option<f64>,
-    data: &BTreeMap<SV, HashMap<Observable, ObservationData>>,
+    data: &BTreeMap<SV, HashMap<Observable, Measurement>>,
     header: &Header,
 ) -> String {
     let mut lines = String::with_capacity(128);
@@ -658,7 +692,7 @@ fn fmt_epoch_v3(
 
     lines.push_str(&format!(
         "> {}  {} {:2}",
-        epoch::format(epoch, Type::ObservationData, 3),
+        epoch::format(epoch, Type::Measurement, 3),
         flag,
         data.len()
     ));
@@ -703,7 +737,7 @@ fn fmt_epoch_v2(
     epoch: Epoch,
     flag: EpochFlag,
     clock_offset: &Option<f64>,
-    data: &BTreeMap<SV, HashMap<Observable, ObservationData>>,
+    data: &BTreeMap<SV, HashMap<Observable, Measurement>>,
     header: &Header,
 ) -> String {
     let mut lines = String::with_capacity(128);
@@ -711,7 +745,7 @@ fn fmt_epoch_v2(
 
     lines.push_str(&format!(
         " {}  {} {:2}",
-        epoch::format(epoch, Type::ObservationData, 2),
+        epoch::format(epoch, Type::Measurement, 2),
         flag,
         data.len()
     ));
@@ -1514,12 +1548,19 @@ pub(crate) fn code_multipath(
 #[cfg(test)]
 mod test {
     use super::*;
+
+    use crate::{
+        observation::{HeaderFields, EpochFlag},
+    };
+
     fn parse_and_format_helper(ver: Version, epoch_str: &str, expected_flag: EpochFlag) {
         let first = epoch::parse_utc("2020 01 01 00 00  0.1000000").unwrap();
-        let data: BTreeMap<SV, HashMap<Observable, ObservationData>> = BTreeMap::new();
+        let data: BTreeMap<SV, HashMap<Observable, Measurement>> = BTreeMap::new();
+
         let header = Header::default().with_version(ver).with_observation_fields(
-            crate::observation::HeaderFields::default().with_time_of_first_obs(first),
+            HeaderFields::default().with_time_of_first_obs(first),
         );
+
         let ts = TimeScale::UTC;
         let clock_offset: Option<f64> = None;
 

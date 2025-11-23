@@ -145,7 +145,7 @@ pub mod prelude {
         pub use crate::carrier::Carrier;
 
         pub use crate::observation::{
-            ClockObservation, Combination, CombinationKey, EpochFlag, LliFlags, ObsKey,
+            ClockObservation, Combination, CombinationKey, EpochFlag, LLIFlags, ObsKey,
             Observations, SignalObservation, SNR,
         };
     }
@@ -1011,7 +1011,7 @@ impl Rinex {
         if self.is_observation_rinex() {
             Box::new(
                 self.signal_observations_iter()
-                    .map(|(_, v)| v.sv)
+                    .map(|(_, v)| v.satellite)
                     .sorted()
                     .unique(),
             )
@@ -1220,7 +1220,9 @@ impl Rinex {
 
                         for (rhs_epoch, rhs_values) in filtered_rhs_epochs {
                             for rhs_sig in rhs_values.signals.iter() {
-                                if rhs_sig.sv == sig.sv && rhs_sig.observable == sig.observable {
+                                if rhs_sig.satellite == sig.satellite
+                                    && rhs_sig.observable == sig.observable
+                                {
                                     let dt = (rhs_epoch.epoch - k.epoch).abs();
                                     if dt <= min_dt {
                                         reference = rhs_sig.value;

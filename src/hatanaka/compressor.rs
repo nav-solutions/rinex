@@ -19,17 +19,23 @@ pub struct CompressorExpert<const M: usize> {
     /// True (by default) if this a CRINEX3 compressor.
     /// Modify this before getting started!
     pub v3: bool,
+
     /// True when epoch descriptor should be compressed.
     /// True on first epoch.
     epoch_compression: bool,
+
     /// Readable Epoch being compressed
     epoch_buf: String,
+
     /// Readable flags being compressed
     flags_buf: String,
+
     /// Epoch [TextDiff]
     epoch_diff: TextDiff,
+
     /// Flags kernel, per SV
     flags_diff: HashMap<SV, TextDiff>,
+
     /// Flag textdiff
     /// Compression kernels (per SV and signal)
     sv_kernels: HashMap<(SV, Observable), NumDiff<M>>,
@@ -73,7 +79,7 @@ impl<const M: usize> CompressorExpert<M> {
             let svnn = v
                 .signals
                 .iter()
-                .map(|sig| sig.sv)
+                .map(|sig| sig.satellite)
                 .unique()
                 .sorted()
                 .collect::<Vec<_>>();
@@ -174,7 +180,7 @@ impl<const M: usize> CompressorExpert<M> {
                     if let Some(signal) = v
                         .signals
                         .iter()
-                        .filter(|sig| sig.sv == *sv && &sig.observable == observable)
+                        .filter(|sig| sig.satellite == *sv && &sig.observable == observable)
                         .reduce(|k, _| k)
                     {
                         let quantized = (signal.value * 1000.0).round() as i64;
@@ -183,7 +189,9 @@ impl<const M: usize> CompressorExpert<M> {
                         if let Some((_, sv_kernel)) = self
                             .sv_kernels
                             .iter_mut()
-                            .filter(|((sv, obs), _)| *sv == signal.sv && obs == &signal.observable)
+                            .filter(|((sv, obs), _)| {
+                                *sv == signal.satellite && obs == &signal.observable
+                            })
                             .reduce(|k, _| k)
                         {
                             let compressed = sv_kernel.compress(quantized);
@@ -192,18 +200,18 @@ impl<const M: usize> CompressorExpert<M> {
                             // first encounter: build kernel
                             let kernel = NumDiff::<M>::new(quantized, 3);
                             self.sv_kernels
-                                .insert((signal.sv, signal.observable.clone()), kernel);
+                                .insert((signal.satellite, signal.observable.clone()), kernel);
 
                             write!(w, "{}&{} ", 3, quantized)?;
                         }
 
-                        if let Some(lli) = signal.lli {
+                        if let Some(lli) = signal.lli_flags {
                             self.flags_buf.push_str(&format!("{}", lli.bits() as u8));
                         } else {
                             self.flags_buf.push_str(" ");
                         }
 
-                        if let Some(snr) = signal.snr {
+                        if let Some(snr) = signal.signal_noise_ratio {
                             self.flags_buf.push_str(&format!("{}", snr as u8));
                         } else {
                             self.flags_buf.push_str(" ");
