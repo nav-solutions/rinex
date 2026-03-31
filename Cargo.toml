@@ -110,8 +110,8 @@ full = [
 ]
 
 [build-dependencies]
-serde_json = { version = "1.0", features = ["preserve_order"] }
-serde = { version = "1.0", default-features = false, features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+serde = { version = "1", default-features = false, features = ["derive"] }
 
 [dependencies.gnss-rs]
 git = "https://github.com/nav-solutions/gnss"
@@ -140,7 +140,7 @@ optional = true
 features = ["std", "sfrbx-gps"]
 
 [dependencies.hifitime]
-version = "4.1"
+version = "4.2"
 features = ["std"]
 
 [dependencies.anise]
@@ -173,7 +173,7 @@ num-integer = "0.1.44"
 
 [dev-dependencies]
 flate2 = "1"
-rand = "0.9"
+rand = "0.10"
 serde_json = "1"
 criterion = "0.8"
 env_logger = "0.11"
