@@ -115,7 +115,7 @@ serde = { version = "1", default-features = false, features = ["derive"] }
 
 [dependencies.gnss-rs]
 git = "https://github.com/nav-solutions/gnss"
-rev = "dc4d4c2d413a3be90a3fa08a6ab29079eec13923"
+rev = "83b2b9397d05a59a9d06b0ddf1fab73c7f1ab1c1"
 features = ["std", "domes", "cospar", "sbas"]
 
 [dependencies.gnss-qc-traits]
