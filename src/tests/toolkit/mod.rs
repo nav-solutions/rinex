@@ -1,5 +1,5 @@
 use crate::*;
-use rand::{distr::Alphanumeric, Rng};
+use rand::{distr::Alphanumeric, Rng, RngExt};
 
 use crate::hardware::Antenna;
 
@@ -34,8 +34,8 @@ pub use csv::{gnss_csv, observables_csv, sv_csv};
 
 /// Random name generator
 pub fn random_name(size: usize) -> String {
-    rand::thread_rng()
-        .sample_iter(&Alphanumeric)
+    rand::rng()
+        .sample_iter(Alphanumeric)
         .take(size)
         .map(char::from)
         .collect()

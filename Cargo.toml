@@ -110,17 +110,17 @@ full = [
 ]
 
 [build-dependencies]
-serde_json = { version = "1.0", features = ["preserve_order"] }
-serde = { version = "1.0", default-features = false, features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+serde = { version = "1", default-features = false, features = ["derive"] }
 
 [dependencies.gnss-rs]
 git = "https://github.com/nav-solutions/gnss"
-rev = "dc4d4c2d413a3be90a3fa08a6ab29079eec13923"
+rev = "83b2b9397d05a59a9d06b0ddf1fab73c7f1ab1c1"
 features = ["std", "domes", "cospar", "sbas"]
 
 [dependencies.gnss-qc-traits]
 git = "https://github.com/nav-solutions/qc-traits"
-rev = "63200d41bab2efa7d10082ae43a113d360722342"
+rev = "3fddd9f447629e691538ed903790e9aeb09f92ef"
 optional = true
 features = ["html"]
 
@@ -140,7 +140,7 @@ optional = true
 features = ["std", "sfrbx-gps"]
 
 [dependencies.hifitime]
-version = "4.1"
+version = "4.2"
 features = ["std"]
 
 [dependencies.anise]
@@ -173,10 +173,10 @@ num-integer = "0.1.44"
 
 [dev-dependencies]
 flate2 = "1"
-rand = "0.9"
 serde_json = "1"
 criterion = "0.8"
 env_logger = "0.11"
+rand = { version = "0.10", features = ["thread_rng"] }
 
 [[bench]]
 name = "parsing"
