@@ -13,6 +13,7 @@ use crate::{
         gps::{GpsQzssl1cHealth, GpsQzssl1l2l5Health},
         irnss::IrnssHealth,
     },
+    parse_f64,
     prelude::ParsingError,
 };
 
@@ -139,8 +140,7 @@ impl OrbitItem {
         constellation: Constellation,
     ) -> Result<OrbitItem, ParsingError> {
         // make it "rust" compatible
-        let float =
-            f64::from_str(&val_str.replace('D', "e")).map_err(|_| ParsingError::NavNullOrbit)?;
+        let float = parse_f64(val_str).map_err(|_| ParsingError::NavNullOrbit)?;
 
         // do not tolerate zero values for native types
         match type_str {

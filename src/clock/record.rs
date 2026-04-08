@@ -4,6 +4,7 @@ use std::{collections::BTreeMap, str::FromStr};
 
 use crate::{
     epoch::parse_in_timescale as parse_epoch_in_timescale,
+    parse_f64,
     prelude::{Epoch, ParsingError, TimeScale, Version, SV},
 };
 
@@ -205,15 +206,12 @@ pub(crate) fn parse_epoch(
     for (index, item) in rem.split_ascii_whitespace().enumerate() {
         match index {
             0 => {
-                profile.bias = item
-                    .trim()
-                    .parse::<f64>()
+                profile.bias = parse_f64(item.trim())
                     .map_err(|_| ParsingError::ClockProfile)?;
             },
             1 => {
                 profile.bias_dev = Some(
-                    item.trim()
-                        .parse::<f64>()
+                    parse_f64(item.trim())
                         .map_err(|_| ParsingError::ClockProfile)?,
                 );
             },
@@ -225,29 +223,25 @@ pub(crate) fn parse_epoch(
             match index {
                 0 => {
                     profile.drift = Some(
-                        item.trim()
-                            .parse::<f64>()
+                        parse_f64(item.trim())
                             .map_err(|_| ParsingError::ClockProfile)?,
                     );
                 },
                 1 => {
                     profile.drift_dev = Some(
-                        item.trim()
-                            .parse::<f64>()
+                        parse_f64(item.trim())
                             .map_err(|_| ParsingError::ClockProfile)?,
                     );
                 },
                 2 => {
                     profile.drift_change = Some(
-                        item.trim()
-                            .parse::<f64>()
+                        parse_f64(item.trim())
                             .map_err(|_| ParsingError::ClockProfile)?,
                     );
                 },
                 3 => {
                     profile.drift_change_dev = Some(
-                        item.trim()
-                            .parse::<f64>()
+                        parse_f64(item.trim())
                             .map_err(|_| ParsingError::ClockProfile)?,
                     );
                 },

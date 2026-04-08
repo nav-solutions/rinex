@@ -4,6 +4,7 @@ use crate::{
     observation::{
         ClockObservation, EpochFlag, LliFlags, ObsKey, Observations, SignalObservation, SNR,
     },
+    parse_f64,
     prelude::{Constellation, Header, Observable, ParsingError, TimeScale, Version, SV},
 };
 
@@ -138,7 +139,7 @@ pub fn parse_epoch(
     };
 
     if let Some(offset) = offs {
-        if let Ok(offset_s) = offset.parse::<f64>() {
+        if let Ok(offset_s) = parse_f64(offset) {
             observations
                 .with_clock_observation(ClockObservation::default().with_offset_s(epoch, offset_s));
         }
@@ -407,7 +408,7 @@ fn parse_signals_v2(
             // parse observed value
             let end = slice.len().min(OBSERVABLE_F14_WIDTH);
 
-            if let Ok(value) = slice[..end].trim().parse::<f64>() {
+            if let Ok(value) = parse_f64(slice[..end].trim()) {
                 signals.push(SignalObservation {
                     sv,
                     snr,
@@ -522,7 +523,7 @@ fn parse_signals_v3(
 
             let end = OBSERVABLE_F14_WIDTH.min(slice.len());
 
-            if let Ok(value) = slice[..end].trim().parse::<f64>() {
+            if let Ok(value) = parse_f64(slice[..end].trim()) {
                 signals.push(SignalObservation {
                     sv,
                     value,

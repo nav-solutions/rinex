@@ -1,9 +1,8 @@
 use crate::{
     epoch::parse_in_timescale as parse_epoch_in_timescale,
+    parse_f64,
     prelude::{Epoch, ParsingError, TimeScale},
 };
-
-use std::str::FromStr;
 
 /// BDGIM Model payload
 #[derive(Debug, Copy, Clone, Default, PartialEq, PartialOrd)]
@@ -45,15 +44,15 @@ impl BdModel {
         let epoch = parse_epoch_in_timescale(epoch.trim(), ts)?;
 
         let alpha = (
-            f64::from_str(a0.trim()).map_err(|_| ParsingError::BdgimData)?,
-            f64::from_str(a1.trim()).map_err(|_| ParsingError::BdgimData)?,
-            f64::from_str(a2.trim()).map_err(|_| ParsingError::BdgimData)?,
-            f64::from_str(a3.trim()).map_err(|_| ParsingError::BdgimData)?,
-            f64::from_str(a4.trim()).map_err(|_| ParsingError::BdgimData)?,
-            f64::from_str(a5.trim()).map_err(|_| ParsingError::BdgimData)?,
-            f64::from_str(a6.trim()).map_err(|_| ParsingError::BdgimData)?,
-            f64::from_str(a7.trim()).map_err(|_| ParsingError::BdgimData)?,
-            f64::from_str(a8.trim()).map_err(|_| ParsingError::BdgimData)?,
+            parse_f64(a0.trim()).map_err(|_| ParsingError::BdgimData)?,
+            parse_f64(a1.trim()).map_err(|_| ParsingError::BdgimData)?,
+            parse_f64(a2.trim()).map_err(|_| ParsingError::BdgimData)?,
+            parse_f64(a3.trim()).map_err(|_| ParsingError::BdgimData)?,
+            parse_f64(a4.trim()).map_err(|_| ParsingError::BdgimData)?,
+            parse_f64(a5.trim()).map_err(|_| ParsingError::BdgimData)?,
+            parse_f64(a6.trim()).map_err(|_| ParsingError::BdgimData)?,
+            parse_f64(a7.trim()).map_err(|_| ParsingError::BdgimData)?,
+            parse_f64(a8.trim()).map_err(|_| ParsingError::BdgimData)?,
         );
 
         Ok((epoch, Self { alpha }))

@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 use thiserror::Error;
 
-use crate::{epoch, prelude::*, types::Type, version::Version, Carrier, Observable};
+use crate::{epoch, parse_f64, prelude::*, types::Type, version::Version, Carrier, Observable};
 
 use crate::observation::EpochFlag;
 use crate::observation::SNR;
@@ -454,7 +454,7 @@ fn parse_v2(
                                                                      //println!("OBS \"{}\"", obs); //DEBUG
                 let mut lli: Option<LliFlags> = None;
                 let mut snr: Option<SNR> = None;
-                if let Ok(obs) = obs.trim().parse::<f64>() {
+                if let Ok(obs) = parse_f64(obs.trim()) {
                     // parse obs
                     if slice.len() > 14 {
                         let lli_str = &slice[14..15];
@@ -606,7 +606,7 @@ fn parse_v3(
                     let mut snr: Option<SNR> = None;
                     let mut lli: Option<LliFlags> = None;
                     let obs = &rem[0..observable_width - 2];
-                    if let Ok(obs) = obs.trim().parse::<f64>() {
+                    if let Ok(obs) = parse_f64(obs.trim()) {
                         if rem.len() > observable_width - 2 {
                             let lli_str = &rem[observable_width - 2..observable_width - 1];
                             if let Ok(u) = lli_str.parse::<u8>() {
