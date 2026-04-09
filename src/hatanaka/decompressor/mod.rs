@@ -581,7 +581,6 @@ impl<const M: usize> DecompressorExpert<M> {
     fn run_observation(&mut self, line: &str, len: usize, buf: &mut [u8]) -> Result<usize, Error> {
         let mut consumed = 0;
         let mut produced = 0;
-        let mut new_state = self.state;
 
         self.blanking_indexes.clear(); // new run
 
