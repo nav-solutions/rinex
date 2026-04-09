@@ -1,76 +1,144 @@
 use crate::{
-    navigation::{BdModel, Ephemeris, IonosphereModel, KbModel, NavKey, NgModel},
+    navigation::{BdModel, Ephemeris, EphemerisError, IonosphereModel, KbModel, NavKey, NgModel},
     prelude::{
         nav::{Almanac, AzElRange, Orbit},
         Epoch, Rinex, SV,
     },
 };
 
+use anise::math::Vector6;
+
+#[cfg(feature = "log")]
+use log::error;
+
 impl Rinex {
-    /// [SV] orbital state vector determination attempt, that only applies
-    /// to Navigation [Rinex].
+    /// Macro to resolve the [Orbit]al state of given satellite [SV] at specificied [Epoch] easily.
+    /// This applies to Navigation RINEX files only, the specified [Epoch] and satellite must exist in the record,
+    /// and we perform the initial requirements. While this is okay for very few satellites and Epochs, this is quite inefficient
+    /// and should not be used to process a complete temporal frame and group of satellites. For a real processing pipeline,
+    /// you should:
+    ///
+    /// - browse the RINEX record and manage the [Ephemeris] pool yourself, a pipelined manner, and use the solver provided
+    /// by the [Ephemeris] object.
+    /// - operate at a high lever, through our [GNSS-Qc](https://github.com/nav-solutions/gnss-qc) which will wrap the
+    /// RINEX library and provide processing pipelines.
+    ///
     /// ## Inputs
-    /// - sv: desired [SV]
-    /// - t: desired [Epoch] to express the [Orbit]al state
+    /// - satellite: selected [SV] (which must exist)
+    /// - epoch: [Epoch] of navigation, which must be within the timeframe of this record.
+    /// - max_iteration: maximal number of iteration allowed to reasonnably converge.
+    ///
     /// ## Returns
     /// - orbital state: expressed as ECEF [Orbit]
-    pub fn sv_orbit(&self, sv: SV, t: Epoch) -> Option<Orbit> {
-        let (_, _, eph) = self.nav_ephemeris_selection(sv, t)?;
-        eph.kepler2position(sv, t)
+    pub fn nav_satellite_orbital_state(
+        &self,
+        satellite: SV,
+        epoch: Epoch,
+        max_iteration: usize,
+    ) -> Result<Orbit, EphemerisError> {
+        let (toc, _, eph) = self
+            .nav_satellite_ephemeris_selection(satellite, epoch)
+            .ok_or(EphemerisError::MissingData)?;
+
+        eph.resolve_orbital_state(satellite, toc, epoch, max_iteration)
     }
 
-    /// [SV] (azimuth, elevation, slant range) triplet determination,
-    /// that only applies to Navigation [Rinex].
+    /// Macro to resolve the [Orbit]al state of given satellite [SV] at specificied [Epoch] easily.
+    /// Refer to [Self::nav_satellite_orbital_state].
+    ///
     /// ## Inputs
-    /// - sv: target [SV]
-    /// - t: target [Epoch]
-    /// - rx_orbit: RX position expressed as an [Orbit]
+    /// - satellite: selected [SV] (which must exist)
+    /// - epoch: [Epoch] of navigation, which must be within the timeframe of this record.
+    /// - max_iteration: maximal number of iteration allowed to reasonnably converge.
+    ///
+    /// ## Returns
+    /// - ECEF position and velocity in kilometer, as [Vector6].
+    pub fn nav_satellite_position_velocity_km(
+        &self,
+        satellite: SV,
+        epoch: Epoch,
+        max_iteration: usize,
+    ) -> Result<Vector6, EphemerisError> {
+        let (toc, _, eph) = self
+            .nav_satellite_ephemeris_selection(satellite, epoch)
+            .ok_or(EphemerisError::MissingData)?;
+
+        eph.resolve_position_velocity_km(satellite, toc, epoch, max_iteration)
+    }
+
+    /// Macro to resolve azimuth, elevation and slant range of desired satellite at desired [Epoch].
+    /// This applies to Navigation RINEX files only, the specified [Epoch] and satellite must exist in the record,
+    /// and we perform the initial requirements. While this is okay for very few satellites and Epochs, this is quite inefficient
+    /// and should not be used to process a complete temporal frame and group of satellites. For a real processing pipeline,
+    /// you should:
+    ///
+    /// - browse the RINEX record and manage the [Ephemeris] pool yourself, a pipelined manner, and use the solver provided
+    /// by the [Ephemeris] object.
+    /// - operate at a high lever, through our [GNSS-Qc](https://github.com/nav-solutions/gnss-qc) which will wrap the
+    /// RINEX library and provide processing pipelines.
+    ///
+    /// ## Inputs
+    /// - satellite: selected [SV] (must exist)
+    /// - epoch: [Epoch] of navigation, which must be within the timeframe of this record.
+    /// - observer: state of the observer, expressed as an [Orbit]
     /// - almanac: [Almanac] context
+    /// - max_iteration: maximal number of iteration allowed to reasonnably converge.
+    ///
     /// ## Returns
     /// - [AzElRange] on calculations success
-    pub fn nav_azimuth_elevation_range(
+    pub fn nav_satellite_azimuth_elevation_range(
         &self,
-        sv: SV,
-        t: Epoch,
-        rx_orbit: Orbit,
+        satellite: SV,
+        epoch: Epoch,
+        observer: Orbit,
         almanac: &Almanac,
-    ) -> Option<AzElRange> {
-        let sv_orbit = self.sv_orbit(sv, t)?;
-        let azelrange = almanac
-            .azimuth_elevation_range_sez(sv_orbit, rx_orbit, None, None)
-            .ok()?;
-        Some(azelrange)
+        max_iteration: usize,
+    ) -> Result<AzElRange, EphemerisError> {
+        let state = self.nav_satellite_orbital_state(satellite, epoch, max_iteration)?;
+        let azelrange = almanac.azimuth_elevation_range_sez(state, observer, None, None)?;
+        Ok(azelrange)
     }
 
-    /// Ephemeris selection, that only applies to Navigation [Rinex].
+    /// Selects the most suited [Ephemeris] frame from the record, for this satellite
+    /// at requested [Epoch].
+    ///
     /// ## Inputs
-    /// - sv: desired [SV]
+    /// - satellite: desired [SV]
     /// - epoch: desired [Epoch]
+    ///
     /// ## Returns
-    /// - (toc, toe, [Ephemeris]) triplet if an [Ephemeris] message
-    /// was decoded in the correct time frame.
-    /// Note that `ToE` does not exist for GEO/SBAS [SV], so `ToC` is simply
-    /// copied in this case, to maintain the API.
-    pub fn nav_ephemeris_selection(&self, sv: SV, t: Epoch) -> Option<(Epoch, Epoch, &Ephemeris)> {
-        if sv.constellation.is_sbas() {
+    /// - (toc (Time of Clock), toe (Time of Ephemeris), [Ephemeris] frame) triplet.
+    ///
+    /// Note that `ToE` does not exist for GEO nor Glonass satellites, we copy ToC in these cases.
+    pub fn nav_satellite_ephemeris_selection(
+        &self,
+        satellite: SV,
+        epoch: Epoch,
+    ) -> Option<(Epoch, Epoch, &Ephemeris)> {
+        if satellite.constellation.is_sbas() {
             self.nav_ephemeris_frames_iter()
                 .filter_map(|(k, eph)| {
-                    if k.sv == sv {
+                    if k.sv == satellite {
                         Some((k.epoch, k.epoch, eph))
                     } else {
                         None
                     }
                 })
-                .min_by_key(|(toc, _, _)| t - *toc)
+                .min_by_key(|(toc, _, _)| (epoch - *toc).abs())
         } else {
             self.nav_ephemeris_frames_iter()
                 .filter_map(|(k, eph)| {
-                    if k.sv == sv {
-                        if eph.is_valid(sv, t) {
-                            if let Some(toe) = eph.toe(k.sv) {
-                                Some((k.epoch, toe, eph))
-                            } else {
-                                None
+                    if k.sv == satellite {
+                        if eph.is_valid(satellite, k.epoch, epoch) {
+                            match eph.toe(k.sv) {
+                                Ok(toe) => Some((k.epoch, toe, eph)),
+                                #[cfg(feature = "log")]
+                                Err(e) => {
+                                    error!("{}({:x}): {}", satellite, k.epoch, e);
+                                    None
+                                },
+                                #[cfg(not(feature = "log"))]
+                                Err(_) => None,
                             }
                         } else {
                             None
@@ -79,7 +147,7 @@ impl Rinex {
                         None
                     }
                 })
-                .min_by_key(|(_, toe, _)| (t - *toe).abs())
+                .min_by_key(|(_, toe, _)| (epoch - *toe).abs())
         }
     }
 

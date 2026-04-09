@@ -3,7 +3,7 @@ use crate::{
     prelude::{Constellation, Rinex},
 };
 
-use ublox::PacketRef;
+// use ublox::PacketRef;
 
 use std::io::{Error, ErrorKind};
 

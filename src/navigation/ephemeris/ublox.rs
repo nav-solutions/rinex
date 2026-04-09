@@ -122,28 +122,37 @@ impl Ephemeris {
 
         let toc = (toc.to_time_of_week().1 / 1_000_000_000) as f64;
 
-        let toe = self.get_orbit_f64("toe")?;
-        let tgd_s = self.get_orbit_f64("tgd")?;
-        let iodc = self.get_orbit_f64("iodc")? as u16;
-        let sv_health = self.get_orbit_f64("health")? as u8;
+        let toe = self.get_orbit_field_f64("toe").ok()?;
+        let tgd_s = self.get_orbit_field_f64("tgd").ok()?;
+        let iodc = self.get_orbit_field_f64("iodc").ok()? as u16;
+        let sv_health = self.get_orbit_field_f64("health").ok()? as u8;
 
-        let (cuc, cus) = (self.get_orbit_f64("cuc")?, self.get_orbit_f64("cus")?);
-        let (cic, cis) = (self.get_orbit_f64("cic")?, self.get_orbit_f64("cis")?);
-        let (crc, crs_rad) = (self.get_orbit_f64("crc")?, self.get_orbit_f64("crs")?);
+        let (cuc, cus) = (
+            self.get_orbit_field_f64("cuc").ok()?,
+            self.get_orbit_field_f64("cus").ok()?,
+        );
+        let (cic, cis) = (
+            self.get_orbit_field_f64("cic").ok()?,
+            self.get_orbit_field_f64("cis").ok()?,
+        );
+        let (crc, crs) = (
+            self.get_orbit_field_f64("crc").ok()?,
+            self.get_orbit_field_f64("crs").ok()?,
+        );
 
-        let e = self.get_orbit_f64("e")?;
-        let sqrt_a = self.get_orbit_f64("sqrta")?;
-        let omega0_semicircles = self.get_orbit_f64("omega0")?;
-        let omega_semicircles = self.get_orbit_f64("omega")?;
-        let omega_dot = self.get_orbit_f64("omegaDot")?;
-        let dn_semicircles = self.get_orbit_f64("deltaN")?;
-        let m0_semicircles = self.get_orbit_f64("m0")?;
-        let i0_semicircles = self.get_orbit_f64("i0")?;
-        let idot_semicircles = self.get_orbit_f64("idot")?;
+        let e = self.get_orbit_field_f64("e").ok()?;
+        let sqrt_a = self.get_orbit_field_f64("sqrta").ok()?;
+        let omega0_semicircles = self.get_orbit_field_f64("omega0").ok()?;
+        let omega_semicircles = self.get_orbit_field_f64("omega").ok()?;
+        let omega_dot = self.get_orbit_field_f64("omegaDot").ok()?;
+        let dn_semicircles = self.get_orbit_field_f64("deltaN").ok()?;
+        let m0_semicircles = self.get_orbit_field_f64("m0").ok()?;
+        let i0_semicircles = self.get_orbit_field_f64("i0").ok()?;
+        let idot_semicircles = self.get_orbit_field_f64("idot").ok()?;
 
         // TODO check whether these exist in V2
-        let ura_index = self.get_orbit_f64("accuracy").unwrap_or_default() as u8;
-        let fit_interval = self.get_orbit_f64("fitInt").unwrap_or_default() as u8;
+        let ura_index = self.get_orbit_field_f64("accuracy").unwrap_or_default() as u8;
+        let fit_interval = self.get_orbit_field_f64("fitInt").unwrap_or_default() as u8;
 
         let builder = MgaGpsEphBuilder {
             msg_type: 0,
@@ -168,7 +177,7 @@ impl Ephemeris {
             cuc,
             cus,
             crc,
-            crs_rad,
+            crs_rad: crs,
             e,
             toe,
             sqrt_a,
@@ -260,34 +269,43 @@ impl Ephemeris {
         let iode = 0;
 
         // TODO (V2/V3)
-        let iodc = self.get_orbit_f64("iodc").unwrap_or_default() as u8;
+        let iodc = self.get_orbit_field_f64("iodc").unwrap_or_default() as u8;
 
-        let ura = self.get_orbit_f64("accuracy")? as u8;
+        let ura = self.get_orbit_field_f64("accuracy").ok()? as u8;
 
         // TODO TGD versus signals
-        let tgd_ns = match self.get_orbit_f64("tgd1b1b3") {
-            Some(tgd) => tgd * 1.0E9,
-            None => self.get_orbit_f64("tgd2b2b3").unwrap_or_default() * 1.0E9,
+        let tgd_ns = match self.get_orbit_field_f64("tgd1b1b3") {
+            Ok(tgd) => tgd * 1.0E9,
+            Err(_) => self.get_orbit_field_f64("tgd2b2b3").unwrap_or_default() * 1.0E9,
         };
 
-        let (cuc_rad, cus_rad) = (self.get_orbit_f64("cuc")?, self.get_orbit_f64("cus")?);
-        let (cic_rad, cis_rad) = (self.get_orbit_f64("cic")?, self.get_orbit_f64("cis")?);
-        let (crc_rad, crs_rad) = (self.get_orbit_f64("crc")?, self.get_orbit_f64("crs")?);
+        let (cuc_rad, cus_rad) = (
+            self.get_orbit_field_f64("cuc").ok()?,
+            self.get_orbit_field_f64("cus").ok()?,
+        );
+        let (cic_rad, cis_rad) = (
+            self.get_orbit_field_f64("cic").ok()?,
+            self.get_orbit_field_f64("cis").ok()?,
+        );
+        let (crc_rad, crs_rad) = (
+            self.get_orbit_field_f64("crc").ok()?,
+            self.get_orbit_field_f64("crs").ok()?,
+        );
 
-        let e = self.get_orbit_f64("e")?;
-        let sqrt_a = self.get_orbit_f64("sqrta")?;
-        let omega0_semicircles = self.get_orbit_f64("omega0")?;
-        let omega_semicircles = self.get_orbit_f64("omega")?;
-        let omega_dot_semicircles = self.get_orbit_f64("omegaDot")?;
-        let dn_semicircles = self.get_orbit_f64("deltaN")?;
-        let m0_semicircles = self.get_orbit_f64("m0")?;
-        let i0_semicircles = self.get_orbit_f64("i0")?;
-        let i_dot_semicircles = self.get_orbit_f64("idot")?;
+        let e = self.get_orbit_field_f64("e").ok()?;
+        let sqrt_a = self.get_orbit_field_f64("sqrta").ok()?;
+        let omega0_semicircles = self.get_orbit_field_f64("omega0").ok()?;
+        let omega_semicircles = self.get_orbit_field_f64("omega").ok()?;
+        let omega_dot_semicircles = self.get_orbit_field_f64("omegaDot").ok()?;
+        let dn_semicircles = self.get_orbit_field_f64("deltaN").ok()?;
+        let m0_semicircles = self.get_orbit_field_f64("m0").ok()?;
+        let i0_semicircles = self.get_orbit_field_f64("i0").ok()?;
+        let i_dot_semicircles = self.get_orbit_field_f64("idot").ok()?;
 
-        let toe = self.get_orbit_f64("toe")?;
+        let toe = self.get_orbit_field_f64("toe").ok()?;
 
         // TODO exists in V4, check V2 and V3
-        let ura = self.get_orbit_f64("accuracy").unwrap_or_default() as u8;
+        let ura = self.get_orbit_field_f64("accuracy").unwrap_or_default() as u8;
 
         let builder = MgaBdsEphBuilder {
             msg_type: 0, // TODO
@@ -346,9 +364,9 @@ impl Ephemeris {
                 orbits: HashMap::from_iter([
                     ("health".to_string(), OrbitItem::F64(0.0)),
                     ("channel".to_string(), OrbitItem::F64(ubx.h() as f64)),
-                    ("satPosX".to_string(), OrbitItem::F64(ubx.x_km())),
-                    ("satPosY".to_string(), OrbitItem::F64(ubx.y_km())),
-                    ("satPosZ".to_string(), OrbitItem::F64(ubx.z_km())),
+                    ("posX".to_string(), OrbitItem::F64(ubx.x_km())),
+                    ("posY".to_string(), OrbitItem::F64(ubx.y_km())),
+                    ("posZ".to_string(), OrbitItem::F64(ubx.z_km())),
                     ("velX".to_string(), OrbitItem::F64(ubx.dx_km_s())),
                     ("velY".to_string(), OrbitItem::F64(ubx.dy_km_s())),
                     ("velZ".to_string(), OrbitItem::F64(ubx.dz_km_s())),
@@ -391,26 +409,26 @@ impl Ephemeris {
         // TODO tb_mins
         let tb_mins = 0;
 
-        let b = self.get_orbit_f64("health")? as u8;
-        let h = self.get_orbit_f64("channel")? as i8;
-        let eph_age_days = self.get_orbit_f64("ageOp")? as u8;
+        let b = self.get_orbit_field_f64("health").ok()? as u8;
+        let h = self.get_orbit_field_f64("channel").ok()? as i8;
+        let eph_age_days = self.get_orbit_field_f64("ageOp").ok()? as u8;
 
         let (x_km, y_km, z_km) = (
-            self.get_orbit_f64("satPosX")? / 1000.0,
-            self.get_orbit_f64("satPosY")? / 1000.0,
-            self.get_orbit_f64("satPosZ")? / 1000.0,
+            self.get_orbit_field_f64("posX").ok()? / 1000.0,
+            self.get_orbit_field_f64("posY").ok()? / 1000.0,
+            self.get_orbit_field_f64("posZ").ok()? / 1000.0,
         );
 
         let (dx_km_s, dy_km_s, dz_km_s) = (
-            self.get_orbit_f64("velX")? / 1000.0,
-            self.get_orbit_f64("velY")? / 1000.0,
-            self.get_orbit_f64("velZ")? / 1000.0,
+            self.get_orbit_field_f64("velX").ok()? / 1000.0,
+            self.get_orbit_field_f64("velY").ok()? / 1000.0,
+            self.get_orbit_field_f64("velZ").ok()? / 1000.0,
         );
 
         let (ddx_km_s2, ddy_km_s2, ddz_km_s2) = (
-            self.get_orbit_f64("accelX")? / 1000.0,
-            self.get_orbit_f64("accelY")? / 1000.0,
-            self.get_orbit_f64("accelZ")? / 1000.0,
+            self.get_orbit_field_f64("accelX").ok()? / 1000.0,
+            self.get_orbit_field_f64("accelY").ok()? / 1000.0,
+            self.get_orbit_field_f64("accelZ").ok()? / 1000.0,
         );
 
         let builder = MgaGloEphBuilder {
@@ -519,24 +537,33 @@ impl Ephemeris {
 
         let toc = (toc.to_time_of_week().1 / 1_000_000_000) as f64;
 
-        let (cuc_rad, cus_rad) = (self.get_orbit_f64("cuc")?, self.get_orbit_f64("cus")?);
-        let (cic_rad, cis_rad) = (self.get_orbit_f64("cic")?, self.get_orbit_f64("cis")?);
-        let (crc_rad, crs_rad) = (self.get_orbit_f64("crc")?, self.get_orbit_f64("crs")?);
+        let (cuc_rad, cus_rad) = (
+            self.get_orbit_field_f64("cuc").ok()?,
+            self.get_orbit_field_f64("cus").ok()?,
+        );
+        let (cic_rad, cis_rad) = (
+            self.get_orbit_field_f64("cic").ok()?,
+            self.get_orbit_field_f64("cis").ok()?,
+        );
+        let (crc_rad, crs_rad) = (
+            self.get_orbit_field_f64("crc").ok()?,
+            self.get_orbit_field_f64("crs").ok()?,
+        );
 
-        let e = self.get_orbit_f64("e")?;
-        let sqrt_a = self.get_orbit_f64("sqrta")?;
-        let omega0_semicircles = self.get_orbit_f64("omega0")?;
-        let omega_semicircles = self.get_orbit_f64("omega")?;
-        let omega_dot_semicircles = self.get_orbit_f64("omegaDot")?;
-        let dn_semicircles = self.get_orbit_f64("deltaN")?;
-        let m0_semicircles = self.get_orbit_f64("m0")?;
-        let i0_semicircles = self.get_orbit_f64("i0")?;
-        let i_dot_semicircles = self.get_orbit_f64("idot")?;
+        let e = self.get_orbit_field_f64("e").ok()?;
+        let sqrt_a = self.get_orbit_field_f64("sqrta").ok()?;
+        let omega0_semicircles = self.get_orbit_field_f64("omega0").ok()?;
+        let omega_semicircles = self.get_orbit_field_f64("omega").ok()?;
+        let omega_dot_semicircles = self.get_orbit_field_f64("omegaDot").ok()?;
+        let dn_semicircles = self.get_orbit_field_f64("deltaN").ok()?;
+        let m0_semicircles = self.get_orbit_field_f64("m0").ok()?;
+        let i0_semicircles = self.get_orbit_field_f64("i0").ok()?;
+        let i_dot_semicircles = self.get_orbit_field_f64("idot").ok()?;
 
-        let toe = self.get_orbit_f64("toe")?;
+        let toe = self.get_orbit_field_f64("toe").ok()?;
 
         // TODO exists in V4, check V2 and V3
-        let ura = self.get_orbit_f64("accuracy").unwrap_or_default() as u8;
+        let ura = self.get_orbit_field_f64("accuracy").unwrap_or_default() as u8;
 
         let builder = MgaGalEphBuilder {
             msg_type: 0, // TODO

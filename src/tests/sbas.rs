@@ -22,7 +22,7 @@ fn test_sbas_obs_v3_formatting() {
     let s25 = SV::from_str("S25").unwrap();
     let s36 = SV::from_str("S36").unwrap();
 
-    for sv in rinex.sv_iter() {
+    for sv in rinex.satellite_iter() {
         s23_found |= sv == s23;
         s25_found |= sv == s25;
         s36_found |= sv == s36;
@@ -53,7 +53,7 @@ fn test_sbas_obs_v3_formatting() {
 
     // test
     let (mut s23_found, mut s25_found, mut s36_found) = (false, false, false);
-    for sv in dut.sv_iter() {
+    for sv in dut.satellite_iter() {
         s23_found |= sv == s23;
         s25_found |= sv == s25;
         s36_found |= sv == s36;
@@ -74,7 +74,7 @@ fn test_sbas_obs_v3_formatting() {
 
     // test
     let (mut s23_found, mut s25_found, mut s36_found) = (false, false, false);
-    for sv in dut.sv_iter() {
+    for sv in dut.satellite_iter() {
         s23_found |= sv == s23;
         s25_found |= sv == s25;
         s36_found |= sv == s36;

@@ -145,7 +145,7 @@ pub fn generic_observation_rinex_test(
     }
 
     // Check SV content
-    let content = dut.sv_iter().collect::<Vec<_>>();
+    let content = dut.satellite_iter().collect::<Vec<_>>();
     let expected = sv_from_csv(sv_csv);
     assert_eq!(content, expected);
 
@@ -189,8 +189,8 @@ pub fn generic_observation_rinex_test(
 /// [Rinex] against [Rinex] model verification
 pub fn generic_comparison(dut: &Rinex, model: &Rinex) {
     // verify SV
-    let dut_content = dut.sv_iter().sorted().collect::<Vec<_>>();
-    let expected_content = model.sv_iter().sorted().collect::<Vec<_>>();
+    let dut_content = dut.satellite_iter().sorted().collect::<Vec<_>>();
+    let expected_content = model.satellite_iter().sorted().collect::<Vec<_>>();
     assert_eq!(dut_content, expected_content);
 
     // verify constellations

@@ -79,15 +79,15 @@ fn forge_sbas_ephemeris_frame(_toc: &Epoch, sv: SV, eph: &Ephemeris) -> Option<E
     let clock_offset = eph.clock_bias;
     let clock_drift = eph.clock_drift;
 
-    let x_km = eph.orbits.get("satPosX")?.as_f64();
+    let x_km = eph.orbits.get("posX")?.as_f64();
     let vel_x_km = eph.orbits.get("velX")?.as_f64();
     let acc_x_km = eph.orbits.get("accelX")?.as_f64();
 
-    let y_km = eph.orbits.get("satPosX")?.as_f64();
+    let y_km = eph.orbits.get("posX")?.as_f64();
     let vel_y_km = eph.orbits.get("velY")?.as_f64();
     let acc_y_km = eph.orbits.get("accelY")?.as_f64();
 
-    let z_km = eph.orbits.get("satPosX")?.as_f64();
+    let z_km = eph.orbits.get("posX")?.as_f64();
     let vel_z_km = eph.orbits.get("velZ")?.as_f64();
     let acc_z_km = eph.orbits.get("accelZ")?.as_f64();
 
@@ -180,15 +180,15 @@ fn forge_glo_ephemeris_frame(eph: &Ephemeris) -> Option<EphemerisFrame> {
     let clock_offset_s = eph.clock_bias;
     let clock_rel_freq_bias = eph.clock_drift;
 
-    let x_km = eph.orbits.get("satPosX")?.as_f64();
+    let x_km = eph.orbits.get("posX")?.as_f64();
     let vel_x_km = eph.orbits.get("velX")?.as_f64();
     let acc_x_km = eph.orbits.get("accelX")?.as_f64();
 
-    let y_km = eph.orbits.get("satPosX")?.as_f64();
+    let y_km = eph.orbits.get("posY")?.as_f64();
     let vel_y_km = eph.orbits.get("velY")?.as_f64();
     let acc_y_km = eph.orbits.get("accelY")?.as_f64();
 
-    let z_km = eph.orbits.get("satPosX")?.as_f64();
+    let z_km = eph.orbits.get("posZ")?.as_f64();
     let vel_z_km = eph.orbits.get("velZ")?.as_f64();
     let acc_z_km = eph.orbits.get("accelZ")?.as_f64();
 

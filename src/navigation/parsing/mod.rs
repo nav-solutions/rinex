@@ -185,7 +185,7 @@ mod test {
         assert_eq!(orbits.len(), 10);
 
         for (k, v) in orbits.iter() {
-            if k.eq("satPosX") {
+            if k.eq("posX") {
                 assert_eq!(v.as_f64(), -1.488799804690E+03);
             } else if k.eq("velX") {
                 assert_eq!(v.as_f64(), -2.196182250980E+00);
@@ -193,7 +193,7 @@ mod test {
                 assert_eq!(v.as_f64(), 3.725290298460E-09);
             } else if k.eq("health") {
                 assert!(v.as_glonass_health_flag().is_some());
-            } else if k.eq("satPosY") {
+            } else if k.eq("posY") {
                 assert_eq!(v.as_f64(), 1.292880712890E+04);
             } else if k.eq("velY") {
                 assert_eq!(v.as_f64(), -2.049269676210E+00);
@@ -201,7 +201,7 @@ mod test {
                 assert_eq!(v.as_f64(), 0.0);
             } else if k.eq("channel") {
                 assert_eq!(v.as_i8(), 1);
-            } else if k.eq("satPosZ") {
+            } else if k.eq("posZ") {
                 assert_eq!(v.as_f64(), 2.193169775390E+04);
             } else if k.eq("velZ") {
                 assert_eq!(v.as_f64(), 1.059645652770E+00);
@@ -428,7 +428,7 @@ mod test {
         assert_eq!(orbits.len(), 9);
 
         for (k, v) in orbits.iter() {
-            if k.eq("satPosX") {
+            if k.eq("posX") {
                 assert_eq!(v.as_f64(), 0.124900639648e+05);
             } else if k.eq("velX") {
                 assert_eq!(v.as_f64(), 0.912527084351e+00);
@@ -436,7 +436,7 @@ mod test {
                 assert_eq!(v.as_f64(), 0.000000000000e+00);
             } else if k.eq("health") {
                 assert!(v.as_glonass_health_flag().is_some());
-            } else if k.eq("satPosY") {
+            } else if k.eq("posY") {
                 assert_eq!(v.as_f64(), 0.595546582031e+04);
             } else if k.eq("velY") {
                 assert_eq!(v.as_f64(), 0.278496932983e+01);
@@ -444,7 +444,7 @@ mod test {
                 assert_eq!(v.as_f64(), 0.000000000000e+00);
             } else if k.eq("channel") {
                 assert_eq!(v.as_i8(), 5);
-            } else if k.eq("satPosZ") {
+            } else if k.eq("posZ") {
                 assert_eq!(v.as_f64(), 0.214479208984e+05);
             } else if k.eq("velZ") {
                 assert_eq!(v.as_f64(), -0.131077289581e+01);

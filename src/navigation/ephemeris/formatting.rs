@@ -46,7 +46,7 @@ impl Ephemeris {
         // following standard specs
         let data_fields = &standard_specs.items;
         for i in 0..data_fields.len() {
-            if let Some(value) = self.get_orbit_f64(data_fields[i].0) {
+            if let Ok(value) = self.get_orbit_field_f64(data_fields[i].0) {
                 if i % 4 == 0 {
                     write!(w, "\n   {}", NavFormatter::new(value))?;
                 } else {
