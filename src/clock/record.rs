@@ -206,14 +206,11 @@ pub(crate) fn parse_epoch(
     for (index, item) in rem.split_ascii_whitespace().enumerate() {
         match index {
             0 => {
-                profile.bias = parse_f64(item.trim())
-                    .map_err(|_| ParsingError::ClockProfile)?;
+                profile.bias = parse_f64(item.trim()).map_err(|_| ParsingError::ClockProfile)?;
             },
             1 => {
-                profile.bias_dev = Some(
-                    parse_f64(item.trim())
-                        .map_err(|_| ParsingError::ClockProfile)?,
-                );
+                profile.bias_dev =
+                    Some(parse_f64(item.trim()).map_err(|_| ParsingError::ClockProfile)?);
             },
             _ => {},
         }
@@ -222,28 +219,20 @@ pub(crate) fn parse_epoch(
         for (index, item) in line.split_ascii_whitespace().enumerate() {
             match index {
                 0 => {
-                    profile.drift = Some(
-                        parse_f64(item.trim())
-                            .map_err(|_| ParsingError::ClockProfile)?,
-                    );
+                    profile.drift =
+                        Some(parse_f64(item.trim()).map_err(|_| ParsingError::ClockProfile)?);
                 },
                 1 => {
-                    profile.drift_dev = Some(
-                        parse_f64(item.trim())
-                            .map_err(|_| ParsingError::ClockProfile)?,
-                    );
+                    profile.drift_dev =
+                        Some(parse_f64(item.trim()).map_err(|_| ParsingError::ClockProfile)?);
                 },
                 2 => {
-                    profile.drift_change = Some(
-                        parse_f64(item.trim())
-                            .map_err(|_| ParsingError::ClockProfile)?,
-                    );
+                    profile.drift_change =
+                        Some(parse_f64(item.trim()).map_err(|_| ParsingError::ClockProfile)?);
                 },
                 3 => {
-                    profile.drift_change_dev = Some(
-                        parse_f64(item.trim())
-                            .map_err(|_| ParsingError::ClockProfile)?,
-                    );
+                    profile.drift_change_dev =
+                        Some(parse_f64(item.trim()).map_err(|_| ParsingError::ClockProfile)?);
                 },
                 _ => {},
             }

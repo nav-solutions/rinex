@@ -275,14 +275,11 @@ pub(crate) fn parse_antenna(
             let (east, rem) = rem.split_at(10);
             let (up, _) = rem.split_at(10);
 
-            let north = parse_f64(north.trim())
-                .map_err(|_| ParsingError::AntexAPCCoordinates)?;
+            let north = parse_f64(north.trim()).map_err(|_| ParsingError::AntexAPCCoordinates)?;
 
-            let east = parse_f64(east.trim())
-                .map_err(|_| ParsingError::AntexAPCCoordinates)?;
+            let east = parse_f64(east.trim()).map_err(|_| ParsingError::AntexAPCCoordinates)?;
 
-            let up = parse_f64(up.trim())
-                .map_err(|_| ParsingError::AntexAPCCoordinates)?;
+            let up = parse_f64(up.trim()).map_err(|_| ParsingError::AntexAPCCoordinates)?;
 
             freq_data.apc_eccentricity = (north, east, up);
         } else if marker.contains("ZEN1 / ZEN2 / DZEN") {
@@ -290,14 +287,11 @@ pub(crate) fn parse_antenna(
             let (end, rem) = rem.split_at(6);
             let (spacing, _) = rem.split_at(6);
 
-            let start = parse_f64(start.trim())
-                .map_err(|_| ParsingError::AntexZenithGrid)?;
+            let start = parse_f64(start.trim()).map_err(|_| ParsingError::AntexZenithGrid)?;
 
-            let end = parse_f64(end.trim())
-                .map_err(|_| ParsingError::AntexZenithGrid)?;
+            let end = parse_f64(end.trim()).map_err(|_| ParsingError::AntexZenithGrid)?;
 
-            let spacing = parse_f64(spacing.trim())
-                .map_err(|_| ParsingError::AntexZenithGrid)?;
+            let spacing = parse_f64(spacing.trim()).map_err(|_| ParsingError::AntexZenithGrid)?;
 
             antenna.zenith_grid = Linspace {
                 start,

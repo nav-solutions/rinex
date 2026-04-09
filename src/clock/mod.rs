@@ -9,8 +9,7 @@ use std::{
 };
 
 use crate::{
-    fmt_rinex,
-    parse_f64,
+    fmt_rinex, parse_f64,
     prelude::{FormattingError, TimeScale, Version, DOMES},
 };
 
