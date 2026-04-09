@@ -5,7 +5,10 @@ use crate::{
     prelude::{Constellation, Rinex},
 };
 
-use ublox::{MgaBdsEphRef, MgaGloEphRef, MgaGpsEphRef, PacketRef, Parser};
+use ublox::{
+    mga_bds_eph::MgaBdsEphRef, mga_glo_eph::MgaGloEphRef, mga_gps_eph::MgaGpsEphRef,
+    packetref_proto23::PacketRef, Parser, UbxPacket,
+};
 
 // MGA-EPH-XXX
 #[test]
@@ -32,17 +35,22 @@ fn esbcdnk_ephv3_to_ubx_mga() {
                     });
 
                     match ubx_frame {
-                        Ok(PacketRef::MgaGpsEph(encoded)) => {
-                            // run mirror OP
-                            let (decoded_sv, decoded_eph) =
-                                Ephemeris::from_ubx_mga_gps(k.epoch, encoded);
+                        Ok(UbxPacket::Proto23(packet)) => {
+                            match packet {
+                                PacketRef::MgaGpsEph(encoded) => {
+                                    // run mirror OP
+                                    let (decoded_sv, decoded_eph) =
+                                        Ephemeris::from_ubx_mga_gps(k.epoch, encoded);
 
-                            assert_eq!(decoded_sv, k.sv);
+                                    assert_eq!(decoded_sv, k.sv);
 
-                            // TODO: testbench
-                            // assert_eq!(decoded_eph, ephemeris.clone());
+                                    // TODO: testbench
+                                    // assert_eq!(decoded_eph, ephemeris.clone());
 
-                            gps += 1;
+                                    gps += 1;
+                                },
+                                _ => {},
+                            }
                         },
                         _ => panic!("{}({}) did not encode a UBX-MGA-GPS frame", k.epoch, k.sv),
                     }
@@ -57,17 +65,22 @@ fn esbcdnk_ephv3_to_ubx_mga() {
                     });
 
                     match ubx_frame {
-                        Ok(PacketRef::MgaGpsEph(encoded)) => {
-                            // run mirror OP
-                            let (decoded_sv, decoded_eph) =
-                                Ephemeris::from_ubx_mga_qzss(k.epoch, encoded);
+                        Ok(UbxPacket::Proto23(packet)) => {
+                            match packet {
+                                PacketRef::MgaGpsEph(encoded) => {
+                                    // run mirror OP
+                                    let (decoded_sv, decoded_eph) =
+                                        Ephemeris::from_ubx_mga_qzss(k.epoch, encoded);
 
-                            assert_eq!(decoded_sv, k.sv);
+                                    assert_eq!(decoded_sv, k.sv);
 
-                            // TODO: testbench
-                            // assert_eq!(decoded_eph, ephemeris.clone());
+                                    // TODO: testbench
+                                    // assert_eq!(decoded_eph, ephemeris.clone());
 
-                            qzss += 1;
+                                    qzss += 1;
+                                },
+                                _ => {},
+                            }
                         },
                         _ => panic!("{}({}) did not encode a UBX-MGA-QZSS frame", k.epoch, k.sv),
                     }
@@ -82,17 +95,22 @@ fn esbcdnk_ephv3_to_ubx_mga() {
                     });
 
                     match ubx_frame {
-                        Ok(PacketRef::MgaBdsEph(encoded)) => {
-                            // run mirror OP
-                            let (decoded_sv, decoded_eph) =
-                                Ephemeris::from_ubx_mga_bds(k.epoch, encoded);
+                        Ok(UbxPacket::Proto23(packet)) => {
+                            match packet {
+                                PacketRef::MgaBdsEph(encoded) => {
+                                    // run mirror OP
+                                    let (decoded_sv, decoded_eph) =
+                                        Ephemeris::from_ubx_mga_bds(k.epoch, encoded);
 
-                            assert_eq!(decoded_sv, k.sv);
+                                    assert_eq!(decoded_sv, k.sv);
 
-                            // TODO: testbench
-                            // assert_eq!(decoded_eph, ephemeris.clone());
+                                    // TODO: testbench
+                                    // assert_eq!(decoded_eph, ephemeris.clone());
 
-                            bds += 1;
+                                    bds += 1;
+                                },
+                                _ => {},
+                            }
                         },
                         _ => panic!("{}({}) did not encode a UBX-MGA-BDS frame", k.epoch, k.sv),
                     }
@@ -107,17 +125,22 @@ fn esbcdnk_ephv3_to_ubx_mga() {
                     });
 
                     match ubx_frame {
-                        Ok(PacketRef::MgaGalEph(encoded)) => {
-                            // run mirror OP
-                            let (decoded_sv, decoded_eph) =
-                                Ephemeris::from_ubx_mga_gal(k.epoch, encoded);
+                        Ok(UbxPacket::Proto23(packet)) => {
+                            match packet {
+                                PacketRef::MgaGalEph(encoded) => {
+                                    // run mirror OP
+                                    let (decoded_sv, decoded_eph) =
+                                        Ephemeris::from_ubx_mga_gal(k.epoch, encoded);
 
-                            assert_eq!(decoded_sv, k.sv);
+                                    assert_eq!(decoded_sv, k.sv);
 
-                            // TODO: testbench
-                            // assert_eq!(decoded_eph, ephemeris.clone());
+                                    // TODO: testbench
+                                    // assert_eq!(decoded_eph, ephemeris.clone());
 
-                            gal += 1;
+                                    gal += 1;
+                                },
+                                _ => {},
+                            }
                         },
                         _ => panic!("{}({}) did not encode a UBX-MGA-BDS frame", k.epoch, k.sv),
                     }
@@ -167,10 +190,15 @@ fn glo_v2_to_ubx_mga() {
                     });
 
                     match ubx_frame {
-                        Ok(PacketRef::MgaGloEph(encoded)) => {
-                            // could go even further matching all data fields
+                        Ok(UbxPacket::Proto23(packet)) => {
+                            match packet {
+                                PacketRef::MgaGloEph(encoded) => {
+                                    // could go even further matching all data fields
 
-                            glo += 1;
+                                    glo += 1;
+                                },
+                                _ => {},
+                            }
                         },
                         _ => panic!("{}({}) did not encode a UBX-MGA-BDS frame", k.epoch, k.sv),
                     }
@@ -219,16 +247,16 @@ fn esbcdnk_nav3_to_ubx() {
                     match iter.next() {
                         Some(message) => match message {
                             Ok(packet) => match packet {
-                                PacketRef::MgaGpsEph(_) => {
+                                UbxPacket::Proto23(PacketRef::MgaGpsEph(_)) => {
                                     total_mga_gps_eph += 1;
                                 },
-                                PacketRef::MgaBdsEph(_) => {
+                                UbxPacket::Proto23(PacketRef::MgaBdsEph(_)) => {
                                     total_mga_bds_eph += 1;
                                 },
-                                PacketRef::MgaGalEph(_) => {
+                                UbxPacket::Proto23(PacketRef::MgaGalEph(_)) => {
                                     total_mga_gal_eph += 1;
                                 },
-                                PacketRef::MgaGloEph(_) => {
+                                UbxPacket::Proto23(PacketRef::MgaGloEph(_)) => {
                                     total_mga_glo_eph += 1;
                                 },
                                 msg => {
