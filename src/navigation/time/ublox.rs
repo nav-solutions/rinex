@@ -6,7 +6,7 @@ use crate::{
 use ublox::{mga_gal_time::MgaGalTimeBuilder, mga_gps_utc::MgaGpsUtcBuilder};
 
 #[cfg(doc)]
-use ublox::{MgaGalTimeRef, MgaGpsUtcRef};
+use ublox::{mga_gal_time::MgaGalTimeRef, mga_gps_utc::MgaGpsUtcRef};
 
 impl TimeOffset {
     /// Encodes this [TimeOffset] as [MgaGpsUtcRef] if it is referenced
