@@ -1,6 +1,6 @@
 use crate::navigation::{BdModel, KbModel};
 
-use ublox::{MgaBdsIonoBuilder, MgaGpsIonoBuilder};
+use ublox::{mga_bds_iono::MgaBdsIonoBuilder, mga_gps_iono::MgaGpsIonoBuilder};
 
 impl BdModel {
     /// Encodes this [BdModel] to UBX MGA-IONO-BDS frame

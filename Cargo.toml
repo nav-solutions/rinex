@@ -132,8 +132,7 @@ optional = true
 features = ["gps"]
 
 [dependencies.ublox]
-git = "https://github.com/ublox-rs/ublox"
-rev = "d43c425ee2904d577d06e70d7fbd80d98132a8a6"
+version = "0.10"
 optional = true
 features = ["std", "sfrbx-gps"]
 
