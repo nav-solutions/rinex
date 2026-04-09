@@ -11,6 +11,7 @@ use crate::{
     navigation::{HeaderFields as NavigationHeader, IonosphereModel, KbModel, TimeOffset},
     observable::Observable,
     observation::HeaderFields as ObservationHeader,
+    parse_f64,
     prelude::{Constellation, Duration, Epoch, ParsingError, TimeScale, COSPAR, DOMES, SV},
     types::Type,
     version::Version,
@@ -435,7 +436,7 @@ impl Header {
                 let (mut x_ecef_m, mut y_ecef_m, mut z_ecef_m) = (0.0_f64, 0.0_f64, 0.0_f64);
 
                 for (nth, item) in content.split_ascii_whitespace().enumerate() {
-                    if let Ok(ecef_m) = item.trim().parse::<f64>() {
+                    if let Ok(ecef_m) = parse_f64(item.trim()) {
                         match nth {
                             0 => {
                                 x_ecef_m = ecef_m;

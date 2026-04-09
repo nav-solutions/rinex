@@ -3,15 +3,13 @@ use crate::{
     error::FormattingError,
     fmt_rinex,
     navigation::formatting::NavFormatter,
+    parse_f64,
     prelude::{Constellation, Epoch, ParsingError, TimeScale},
 };
 
 use bitflags::bitflags;
 
-use std::{
-    io::{BufWriter, Write},
-    str::FromStr,
-};
+use std::io::{BufWriter, Write};
 
 bitflags! {
     #[derive(Debug, Default, Clone, Copy)]
@@ -59,11 +57,11 @@ impl NgModel {
 
         let epoch = parse_epoch_in_timescale(epoch.trim(), ts)?;
         let a = (
-            f64::from_str(a0.trim()).map_err(|_| ParsingError::NequickGData)?,
-            f64::from_str(a1.trim()).map_err(|_| ParsingError::NequickGData)?,
-            f64::from_str(rem.trim()).map_err(|_| ParsingError::NequickGData)?,
+            parse_f64(a0.trim()).map_err(|_| ParsingError::NequickGData)?,
+            parse_f64(a1.trim()).map_err(|_| ParsingError::NequickGData)?,
+            parse_f64(rem.trim()).map_err(|_| ParsingError::NequickGData)?,
         );
-        let f = f64::from_str(line.trim()).map_err(|_| ParsingError::NequickGData)?;
+        let f = parse_f64(line.trim()).map_err(|_| ParsingError::NequickGData)?;
         Ok((
             epoch,
             Self {

@@ -1,6 +1,5 @@
+use crate::parse_f64;
 use crate::prelude::ParsingError;
-
-use std::str::FromStr;
 
 mod bdgim;
 mod klobuchar;
@@ -40,7 +39,7 @@ impl IonosphereModel {
     /// Two models may exist: Klobuchar and NequickG.
     pub(crate) fn from_rinex3_header(header: &str) -> Result<Self, ParsingError> {
         let (system, model_params) = header.split_at(5);
-        let rem = model_params.replace("D", "E");
+        let rem = model_params;
         match system.trim() {
             /*
              * Models that only needs 3 fields
@@ -49,9 +48,9 @@ impl IonosphereModel {
                 let (a0, rem) = rem.split_at(12);
                 let (a1, rem) = rem.split_at(12);
                 let (a2, _) = rem.split_at(12);
-                let a0 = f64::from_str(a0.trim()).map_err(|_| ParsingError::NequickGData)?;
-                let a1 = f64::from_str(a1.trim()).map_err(|_| ParsingError::NequickGData)?;
-                let a2 = f64::from_str(a2.trim()).map_err(|_| ParsingError::NequickGData)?;
+                let a0 = parse_f64(a0.trim()).map_err(|_| ParsingError::NequickGData)?;
+                let a1 = parse_f64(a1.trim()).map_err(|_| ParsingError::NequickGData)?;
+                let a2 = parse_f64(a2.trim()).map_err(|_| ParsingError::NequickGData)?;
                 Ok(Self::NequickG(NgModel {
                     a: (a0, a1, a2),
                     // TODO: is this not the 4th field? double check
@@ -73,10 +72,10 @@ impl IonosphereModel {
                 };
                 /* determine which field we're dealing with */
                 if system.ends_with('A') {
-                    let a0 = f64::from_str(a0.trim()).map_err(|_| ParsingError::KlobucharData)?;
-                    let a1 = f64::from_str(a1.trim()).map_err(|_| ParsingError::KlobucharData)?;
-                    let a2 = f64::from_str(a2.trim()).map_err(|_| ParsingError::KlobucharData)?;
-                    let a3 = f64::from_str(a3.trim()).map_err(|_| ParsingError::KlobucharData)?;
+                    let a0 = parse_f64(a0.trim()).map_err(|_| ParsingError::KlobucharData)?;
+                    let a1 = parse_f64(a1.trim()).map_err(|_| ParsingError::KlobucharData)?;
+                    let a2 = parse_f64(a2.trim()).map_err(|_| ParsingError::KlobucharData)?;
+                    let a3 = parse_f64(a3.trim()).map_err(|_| ParsingError::KlobucharData)?;
 
                     Ok(Self::Klobuchar(KbModel {
                         alpha: (a0, a1, a2, a3),
@@ -84,10 +83,10 @@ impl IonosphereModel {
                         region,
                     }))
                 } else {
-                    let b0 = f64::from_str(a0.trim()).map_err(|_| ParsingError::KlobucharData)?;
-                    let b1 = f64::from_str(a1.trim()).map_err(|_| ParsingError::KlobucharData)?;
-                    let b2 = f64::from_str(a2.trim()).map_err(|_| ParsingError::KlobucharData)?;
-                    let b3 = f64::from_str(a3.trim()).map_err(|_| ParsingError::KlobucharData)?;
+                    let b0 = parse_f64(a0.trim()).map_err(|_| ParsingError::KlobucharData)?;
+                    let b1 = parse_f64(a1.trim()).map_err(|_| ParsingError::KlobucharData)?;
+                    let b2 = parse_f64(a2.trim()).map_err(|_| ParsingError::KlobucharData)?;
+                    let b3 = parse_f64(a3.trim()).map_err(|_| ParsingError::KlobucharData)?;
                     Ok(Self::Klobuchar(KbModel {
                         alpha: (0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64),
                         beta: (b0, b1, b2, b3),
@@ -102,7 +101,6 @@ impl IonosphereModel {
     /// In this case, it will apply for the entire day course.
     /// Only the Klobuchar model may exist.
     pub(crate) fn from_rinex2_header(header: &str, marker: &str) -> Result<Self, ParsingError> {
-        let header = header.replace("d", "e").replace("D", "E");
         let (_, rem) = header.split_at(2);
         let (a0, rem) = rem.split_at(12);
         let (a1, rem) = rem.split_at(12);
@@ -110,10 +108,10 @@ impl IonosphereModel {
         let (a3, _) = rem.split_at(12);
 
         if marker.contains("ALPHA") {
-            let a0 = f64::from_str(a0.trim()).map_err(|_| ParsingError::KlobucharData)?;
-            let a1 = f64::from_str(a1.trim()).map_err(|_| ParsingError::KlobucharData)?;
-            let a2 = f64::from_str(a2.trim()).map_err(|_| ParsingError::KlobucharData)?;
-            let a3 = f64::from_str(a3.trim()).map_err(|_| ParsingError::KlobucharData)?;
+            let a0 = parse_f64(a0.trim()).map_err(|_| ParsingError::KlobucharData)?;
+            let a1 = parse_f64(a1.trim()).map_err(|_| ParsingError::KlobucharData)?;
+            let a2 = parse_f64(a2.trim()).map_err(|_| ParsingError::KlobucharData)?;
+            let a3 = parse_f64(a3.trim()).map_err(|_| ParsingError::KlobucharData)?;
 
             Ok(Self::Klobuchar(KbModel {
                 alpha: (a0, a1, a2, a3),
@@ -122,10 +120,10 @@ impl IonosphereModel {
             }))
         } else {
             // Assume marker.contains("BETA")
-            let b0 = f64::from_str(a0.trim()).map_err(|_| ParsingError::KlobucharData)?;
-            let b1 = f64::from_str(a1.trim()).map_err(|_| ParsingError::KlobucharData)?;
-            let b2 = f64::from_str(a2.trim()).map_err(|_| ParsingError::KlobucharData)?;
-            let b3 = f64::from_str(a3.trim()).map_err(|_| ParsingError::KlobucharData)?;
+            let b0 = parse_f64(a0.trim()).map_err(|_| ParsingError::KlobucharData)?;
+            let b1 = parse_f64(a1.trim()).map_err(|_| ParsingError::KlobucharData)?;
+            let b2 = parse_f64(a2.trim()).map_err(|_| ParsingError::KlobucharData)?;
+            let b3 = parse_f64(a3.trim()).map_err(|_| ParsingError::KlobucharData)?;
 
             Ok(Self::Klobuchar(KbModel {
                 alpha: (0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64),

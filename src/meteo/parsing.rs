@@ -1,5 +1,6 @@
 use crate::{
     epoch::parse_utc as parse_utc_epoch,
+    parse_f64,
     prelude::{Header, MeteoKey, ParsingError, Version},
 };
 
@@ -50,7 +51,7 @@ pub fn parse_epoch(header: &Header, line: &str) -> Result<Vec<(MeteoKey, f64)>, 
     for code in codes.iter() {
         let end = (offset + 7).min(line_len - 1);
         let slice = &line[offset..end];
-        if let Ok(value) = slice.trim().parse::<f64>() {
+        if let Ok(value) = parse_f64(slice.trim()) {
             ret.push((
                 MeteoKey {
                     epoch,

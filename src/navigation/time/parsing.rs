@@ -2,6 +2,7 @@ use crate::{
     epoch::parse_in_timescale as parse_epoch_in_timescale,
     error::ParsingError,
     navigation::time::TimeOffset,
+    parse_f64,
     prelude::{Epoch, TimeScale},
 };
 
@@ -45,17 +46,9 @@ impl TimeOffset {
             .parse::<u64>()
             .map_err(|_| ParsingError::NavEpochWeekCounter)?;
 
-        let a0 = a0
-            .trim()
-            .replace('D', "e")
-            .parse::<f64>()
-            .map_err(|_| ParsingError::NavTimeOffsetParinsg)?;
+        let a0 = parse_f64(a0.trim()).map_err(|_| ParsingError::NavTimeOffsetParinsg)?;
 
-        let a1 = a1
-            .trim()
-            .replace('D', "e")
-            .parse::<f64>()
-            .map_err(|_| ParsingError::NavTimeOffsetParinsg)?;
+        let a1 = parse_f64(a1.trim()).map_err(|_| ParsingError::NavTimeOffsetParinsg)?;
 
         Ok(Self::from_time_of_week(
             week,
@@ -90,11 +83,7 @@ impl TimeOffset {
 
         let t_ref = Epoch::from_gregorian_utc_at_midnight(year, month, day);
 
-        let a0 = tau
-            .trim()
-            .replace('D', "e")
-            .parse::<f64>()
-            .map_err(|_| ParsingError::NavTimeOffsetParinsg)?;
+        let a0 = parse_f64(tau.trim()).map_err(|_| ParsingError::NavTimeOffsetParinsg)?;
 
         Ok(Self::from_epoch(
             t_ref,
@@ -124,17 +113,9 @@ impl TimeOffset {
             .parse::<u64>()
             .map_err(|_| ParsingError::NavEpochWeekCounter)?;
 
-        let a0 = a0
-            .trim()
-            .replace('D', "e")
-            .parse::<f64>()
-            .map_err(|_| ParsingError::NavTimeOffsetParinsg)?;
+        let a0 = parse_f64(a0.trim()).map_err(|_| ParsingError::NavTimeOffsetParinsg)?;
 
-        let a1 = a1
-            .trim()
-            .replace('D', "e")
-            .parse::<f64>()
-            .map_err(|_| ParsingError::NavTimeOffsetParinsg)?;
+        let a1 = parse_f64(a1.trim()).map_err(|_| ParsingError::NavTimeOffsetParinsg)?;
 
         Ok(Self::from_time_of_week(
             week,
@@ -168,18 +149,9 @@ impl TimeOffset {
         //     .map_err(|_| ParsingError::NavTimeOffsetParinsg)?;
 
         let (a0, a1, a2) = (
-            a0.trim()
-                .replace('D', "e")
-                .parse::<f64>()
-                .map_err(|_| ParsingError::NavTimeOffsetParinsg)?,
-            a1.trim()
-                .replace('D', "e")
-                .parse::<f64>()
-                .map_err(|_| ParsingError::NavTimeOffsetParinsg)?,
-            a2.trim()
-                .replace('D', "e")
-                .parse::<f64>()
-                .map_err(|_| ParsingError::NavTimeOffsetParinsg)?,
+            parse_f64(a0.trim()).map_err(|_| ParsingError::NavTimeOffsetParinsg)?,
+            parse_f64(a1.trim()).map_err(|_| ParsingError::NavTimeOffsetParinsg)?,
+            parse_f64(a2.trim()).map_err(|_| ParsingError::NavTimeOffsetParinsg)?,
         );
 
         let time_offset = Self::from_time_of_week(t_week, t_nanos, lhs, rhs, (a0, a1, a2));

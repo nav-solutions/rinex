@@ -9,7 +9,7 @@ use std::{
 };
 
 use crate::{
-    fmt_rinex,
+    fmt_rinex, parse_f64,
     prelude::{FormattingError, TimeScale, Version, DOMES},
 };
 
@@ -62,7 +62,7 @@ impl WorkClock {
                 } else {
                     None
                 },
-                constraint: if let Ok(value) = constraint.trim().parse::<f64>() {
+                constraint: if let Ok(value) = parse_f64(constraint.trim()) {
                     Some(value)
                 } else {
                     None
@@ -79,7 +79,7 @@ impl WorkClock {
                 } else {
                     None
                 },
-                constraint: if let Ok(value) = constraint.trim().parse::<f64>() {
+                constraint: if let Ok(value) = parse_f64(constraint.trim()) {
                     Some(value)
                 } else {
                     None

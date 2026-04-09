@@ -4,6 +4,7 @@ use crate::{
         ephemeris::orbits::{closest_nav_standards, OrbitItem},
         Ephemeris, NavMessageType,
     },
+    parse_f64,
     prelude::{Constellation, Epoch, ParsingError, TimeScale, Version, SV},
 };
 
@@ -136,23 +137,12 @@ impl Ephemeris {
 
         let epoch = parse_epoch_in_timescale(date.trim(), ts)?;
 
-        let clock_bias = clk_bias
-            .replace('D', "E")
-            .trim()
-            .parse::<f64>()
-            .map_err(|_| ParsingError::ClockParsing)?;
+        let clock_bias = parse_f64(clk_bias.trim()).map_err(|_| ParsingError::ClockParsing)?;
 
-        let clock_drift = clk_dr
-            .replace('D', "E")
-            .trim()
-            .parse::<f64>()
-            .map_err(|_| ParsingError::ClockParsing)?;
+        let clock_drift = parse_f64(clk_dr.trim()).map_err(|_| ParsingError::ClockParsing)?;
 
-        let mut clock_drift_rate = clk_drr
-            .replace('D', "E")
-            .trim()
-            .parse::<f64>()
-            .map_err(|_| ParsingError::ClockParsing)?;
+        let mut clock_drift_rate =
+            parse_f64(clk_drr.trim()).map_err(|_| ParsingError::ClockParsing)?;
 
         // parse orbits :
         //  only Legacy Frames in V2 and V3 (old) RINEX
@@ -200,23 +190,12 @@ impl Ephemeris {
         let (clk_bias, rem) = rem.split_at(19);
         let (clk_dr, clk_drr) = rem.split_at(19);
 
-        let clock_bias = clk_bias
-            .replace('D', "E")
-            .trim()
-            .parse::<f64>()
-            .map_err(|_| ParsingError::ClockParsing)?;
+        let clock_bias = parse_f64(clk_bias.trim()).map_err(|_| ParsingError::ClockParsing)?;
 
-        let clock_drift = clk_dr
-            .replace('D', "E")
-            .trim()
-            .parse::<f64>()
-            .map_err(|_| ParsingError::ClockParsing)?;
+        let clock_drift = parse_f64(clk_dr.trim()).map_err(|_| ParsingError::ClockParsing)?;
 
-        let mut clock_drift_rate = clk_drr
-            .replace('D', "E")
-            .trim()
-            .parse::<f64>()
-            .map_err(|_| ParsingError::ClockParsing)?;
+        let mut clock_drift_rate =
+            parse_f64(clk_drr.trim()).map_err(|_| ParsingError::ClockParsing)?;
 
         let mut orbits =
             parse_orbits(Version { major: 4, minor: 0 }, msg, sv.constellation, lines)?;
