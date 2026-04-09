@@ -37,6 +37,10 @@ other RINEX-like formats have their own parser:
   - [DORIS (special observations)](https://github.com/nav-solutions/doris)
 - Many pre-processing algorithms including Filter Designer
 - Several file operations: merging, splitting, time binning (batch)
+- Several SERDES operations:
+  - to and from JSON with `serde`
+  - to and from Ublox messages with `ublox`
+  - to GNSS binary (currently limited to GPS protocol) with `protos`
 
 ## Warnings :warning:
 
@@ -47,7 +51,7 @@ other RINEX-like formats have their own parser:
 
 If you need to reference this work, please use the following model:
 
-`Nav-solutions (2025), RINEX: analysis and processing (MPLv2), https://github.com/nav-solutions`
+`Nav-solutions (2026), RINEX: analysis and processing (MPLv2), https://github.com/nav-solutions`
 
 ## Library features
 

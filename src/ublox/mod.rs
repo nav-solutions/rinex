@@ -3,8 +3,6 @@ use crate::prelude::Rinex;
 mod nav;
 use nav::Streamer as NavStreamer;
 
-use ublox::PacketRef;
-
 #[cfg(doc)]
 use ublox::Parser;
 

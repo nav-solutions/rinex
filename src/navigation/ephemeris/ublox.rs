@@ -6,8 +6,10 @@ use crate::{
 };
 
 use ublox::{
-    MgaBdsEphBuilder, MgaBdsEphRef, MgaGalEphBuilder, MgaGalEphRef, MgaGloEphBuilder, MgaGloEphRef,
-    MgaGpsEphBuilder, MgaGpsEphRef,
+    mga_bds_eph::{MgaBdsEphBuilder, MgaBdsEphRef},
+    mga_gal_eph::{MgaGalEphBuilder, MgaGalEphRef},
+    mga_glo_eph::{MgaGloEphBuilder, MgaGloEphRef},
+    mga_gps_eph::{MgaGpsEphBuilder, MgaGpsEphRef},
 };
 
 #[cfg(doc)]

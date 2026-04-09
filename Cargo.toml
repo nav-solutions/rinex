@@ -114,18 +114,16 @@ serde_json = { version = "1", features = ["preserve_order"] }
 serde = { version = "1", default-features = false, features = ["derive"] }
 
 [dependencies.gnss-rs]
-git = "https://github.com/nav-solutions/gnss"
-rev = "83b2b9397d05a59a9d06b0ddf1fab73c7f1ab1c1"
+version = "2.6"
 features = ["std", "domes", "cospar", "sbas"]
 
 [dependencies.gnss-qc-traits]
-git = "https://github.com/nav-solutions/qc-traits"
-rev = "3fddd9f447629e691538ed903790e9aeb09f92ef"
+version = "0.4"
 optional = true
 features = ["html"]
 
 [dependencies.binex]
-version = "0.5"
+version = "0.5.1"
 optional = true
 
 [dependencies.gnss-protos]
@@ -134,8 +132,7 @@ optional = true
 features = ["gps"]
 
 [dependencies.ublox]
-git = "https://github.com/ublox-rs/ublox"
-rev = "d43c425ee2904d577d06e70d7fbd80d98132a8a6"
+version = "0.10"
 optional = true
 features = ["std", "sfrbx-gps"]
 
