@@ -184,10 +184,13 @@ impl Observations {
         // encode new epoch
         self.format_epoch_v3(w, key, numsat)?;
 
-        // by sorted constellation then SV
-        for constell in constell_list.iter() {
-            // by sorted SV
-            for sv in sv_list.iter().filter(|sv| sv.constellation == *constell) {
+        // grouped by constellation: all SBAS grouped together;
+        // then sorted by PRN number per system
+        for constell in constell_list
+            .iter()
+            .map(|c| if c.is_sbas() { Constellation::SBAS } else { *c })
+        {
+            for sv in sv_list.iter().filter(|sv| sv.constellation == constell) {
                 write!(w, "{:x}", sv)?;
 
                 // following header definitions
@@ -273,8 +276,8 @@ impl Observations {
 mod test {
 
     use crate::{
-        observation::{EpochFlag, ObsKey, Observations, SignalObservation},
-        prelude::{Epoch, Observable, SV},
+        observation::{EpochFlag, HeaderFields, ObsKey, Observations, SignalObservation},
+        prelude::{Constellation, Epoch, Observable, SV},
     };
 
     use std::io::BufWriter;
@@ -795,5 +798,93 @@ mod test {
         let content = buf.into_inner().unwrap().to_ascii_utf8();
 
         assert_eq!(content, "> 2021 01 01 00 00  0.0000000  0 10\n",);
+    }
+
+    #[test]
+    fn test_gh_crx2rnx_issue11() {
+        // RINEX3 (not V2)
+        //
+        // SBAS (precisely identified geosat) when grouped
+        // by constellation create a funny ordering and geosat
+        // windup not really sorted out.
+
+        // create fake data
+        let epoch = Epoch::from_str("2021-01-01T00:00:00 GPST").unwrap();
+
+        let key = ObsKey {
+            epoch,
+            flag: EpochFlag::Ok,
+        };
+
+        let c1c = Observable::from_str("C1C").unwrap();
+        let c1q = Observable::from_str("C1Q").unwrap();
+        let c1x = Observable::from_str("C1X").unwrap();
+
+        let mut obs = Observations {
+            clock: None,
+            signals: Vec::new(),
+        };
+
+        let mut sv_list = Vec::new();
+
+        for sv in [
+            "G01", "G02", "E02", "E04", "R04", "R08", "S36", "S21", "S33", "S35",
+        ] {
+            let sv = SV::from_str(sv).unwrap();
+
+            sv_list.push(sv);
+
+            if sv.constellation == Constellation::GPS {
+                obs.signals.push(SignalObservation {
+                    sv,
+                    lli: None,
+                    snr: None,
+                    value: 1.0,
+                    observable: c1c.clone(),
+                });
+            } else if sv.constellation == Constellation::Galileo {
+                obs.signals.push(SignalObservation {
+                    sv,
+                    lli: None,
+                    snr: None,
+                    value: 2.0,
+                    observable: c1q.clone(),
+                });
+            } else if sv.constellation == Constellation::Glonass {
+                obs.signals.push(SignalObservation {
+                    sv,
+                    lli: None,
+                    snr: None,
+                    value: 3.0,
+                    observable: c1c.clone(),
+                });
+            } else if sv.constellation.is_sbas() {
+                obs.signals.push(SignalObservation {
+                    sv,
+                    lli: None,
+                    snr: None,
+                    value: 4.0,
+                    observable: c1x.clone(),
+                });
+            }
+        }
+
+        let mut buf = BufWriter::new(Utf8Buffer::new(8192));
+
+        let header = HeaderFields::default()
+            .with_time_of_first_obs(epoch)
+            .with_observable_code(Constellation::GPS, c1c.clone())
+            .with_observable_code(Constellation::Galileo, c1q.clone())
+            .with_observable_code(Constellation::Glonass, c1c.clone())
+            .with_observable_code(Constellation::SBAS, c1x.clone());
+
+        obs.format_v3(&mut buf, &key, &header, &sv_list, obs.signals.len())
+            .unwrap_or_else(|e| {
+                panic!("RINEXV3 epoch formatting failed with {}", e);
+            });
+
+        let content = buf.into_inner().unwrap().to_ascii_utf8();
+
+        assert_eq!(content, "> 2021 01 01 00 00  0.0000000  0 10\nG01         1.000  \nG02         1.000  \nR04         3.000  \nR08         3.000  \nE02         2.000  \nE04         2.000  \nS21         4.000  \nS33         4.000  \nS35         4.000  \nS21         4.000  \nS33         4.000  \nS35         4.000  \n");
     }
 }

@@ -296,7 +296,7 @@ pub fn generic_observation_epoch_decoding_test(
 
     let ts = t0.time_scale;
 
-    let mut specs = HeaderFields::default().with_timeof_first_obs(t0);
+    let mut specs = HeaderFields::default().with_time_of_first_obs(t0);
 
     for (constell, observable_csv) in header_gnss_obs_csv.iter() {
         let constell = Constellation::from_str(constell).unwrap();
