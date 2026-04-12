@@ -37,10 +37,12 @@ other RINEX-like formats have their own parser:
   - [DORIS (special observations)](https://github.com/nav-solutions/doris)
 - Many pre-processing algorithms including Filter Designer
 - Several file operations: merging, splitting, time binning (batch)
-- Several SERDES operations:
+- Several conversion methods (SERDES operations):
   - to and from JSON with `serde`
-  - to and from Ublox messages with `ublox`
-  - to GNSS binary (currently limited to GPS protocol) with `protos`
+  - RTCM protocol (on `rtcm` feature)
+  - BINEX messages (with `binex` feature)
+  - U-Blox (UBX) messages (with `ublox` feature)
+  - to binary GNSS protocols (currently limited to GPS protocol) with `protos`
 
 ## Warnings :warning:
 
