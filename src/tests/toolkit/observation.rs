@@ -2,16 +2,17 @@ use std::str::FromStr;
 
 use crate::{
     observation::{
-        parse_epoch, ClockObservation, EpochFlag, HeaderFields, ObsKey, Observations,
-        SignalObservation,
+        ClockObservation, EpochFlag, HeaderFields, ObsKey, Observations, SignalObservation,
+        parse_epoch,
     },
     prelude::{
-        Constellation, Epoch, GeodeticMarker, Header, Observable, Rinex, RinexType, Version, SV,
+        Constellation, Epoch, GeodeticMarker, Header, Observable, Rinex, RinexType, SV, Version,
     },
     tests::toolkit::{
-        generic_rinex_test, gnss_csv as gnss_from_csv, observables_csv as observable_from_csv,
+        TimeFrame, generic_rinex_test, gnss_csv as gnss_from_csv,
+        observables_csv as observable_from_csv,
         print_debug::{print_panic_gnss_diffs, print_panic_observable_diffs, print_panic_sv_diffs},
-        sv_csv as sv_from_csv, TimeFrame,
+        sv_csv as sv_from_csv,
     },
 };
 

@@ -1,7 +1,7 @@
 use crate::{
     epoch::parse_utc as parse_utc_epoch,
     navigation::{Ephemeris, NavFrame, NavFrameType, NavKey, NavMessageType},
-    prelude::{Header, ParsingError, Version, SV},
+    prelude::{Header, ParsingError, SV, Version},
 };
 
 mod v4;
@@ -41,7 +41,7 @@ pub fn is_new_epoch(line: &str, v: Version) -> bool {
         // old RINEX
         if line.len() < 23 {
             return false; // not enough bytes
-                          // to describe a PRN and an Epoch
+            // to describe a PRN and an Epoch
         }
 
         let (prn, _) = line.split_at(2);
@@ -55,7 +55,7 @@ pub fn is_new_epoch(line: &str, v: Version) -> bool {
         // RINEX V3
         if line.len() < 24 {
             return false; // not enough bytes
-                          // to describe an SV and an Epoch
+            // to describe an SV and an Epoch
         }
 
         // 1st entry matches a valid SV description

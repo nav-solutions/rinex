@@ -1,7 +1,7 @@
 //! Receiver and antenna
 use crate::{
     fmt_rinex,
-    prelude::{FormattingError, COSPAR, SV},
+    prelude::{COSPAR, FormattingError, SV},
 };
 
 use std::{
@@ -13,7 +13,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "qc")]
-use qc_traits::{html, Markup, QcHtmlReporting};
+use qc_traits::{Markup, QcHtmlReporting, html};
 
 /// GNSS receiver description
 #[derive(Default, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

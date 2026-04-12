@@ -1,6 +1,6 @@
 use crate::prelude::{
-    qc::{Merge, MergeError},
     Constellation, Epoch, Header,
+    qc::{Merge, MergeError},
 };
 
 use super::{

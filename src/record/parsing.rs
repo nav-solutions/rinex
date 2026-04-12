@@ -1,24 +1,24 @@
 use crate::{
     antex::{
-        record::{is_new_epoch as is_new_antex_epoch, parse_antenna as parse_antex_antenna},
         Record as AntexRecord,
+        record::{is_new_epoch as is_new_antex_epoch, parse_antenna as parse_antex_antenna},
     },
     clock::{
-        record::{is_new_epoch as is_new_clock_epoch, parse_epoch as parse_clock_epoch},
         ClockKey, ClockProfile, Record as ClockRecord,
+        record::{is_new_epoch as is_new_clock_epoch, parse_epoch as parse_clock_epoch},
     },
     hatanaka::DecompressorExpert,
     is_rinex_comment,
     meteo::{
-        is_new_epoch as is_new_meteo_epoch, parse_epoch as parse_meteo_epoch, Record as MeteoRecord,
+        Record as MeteoRecord, is_new_epoch as is_new_meteo_epoch, parse_epoch as parse_meteo_epoch,
     },
     navigation::{
-        is_new_epoch as is_new_nav_epoch, parse_epoch as parse_nav_epoch, Record as NavRecord,
+        Record as NavRecord, is_new_epoch as is_new_nav_epoch, parse_epoch as parse_nav_epoch,
     },
     observation::Observations,
     observation::{
-        is_new_epoch as is_new_observation_epoch, parse_epoch as parse_observation_epoch,
-        Record as ObservationRecord,
+        Record as ObservationRecord, is_new_epoch as is_new_observation_epoch,
+        parse_epoch as parse_observation_epoch,
     },
     prelude::{Epoch, Header, ParsingError, TimeScale},
     record::{Comments, Record},

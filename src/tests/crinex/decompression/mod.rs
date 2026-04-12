@@ -13,7 +13,7 @@ mod zegv0010;
 
 use std::{
     collections::HashMap,
-    str::{from_utf8, FromStr},
+    str::{FromStr, from_utf8},
 };
 
 use crate::{
@@ -91,7 +91,7 @@ pub fn run_raw_decompression_test(
 use crate::{
     observation::EpochFlag,
     prelude::{Epoch, Rinex, SV},
-    tests::toolkit::{generic_observation_rinex_test, SignalDataPoint, TimeFrame},
+    tests::toolkit::{SignalDataPoint, TimeFrame, generic_observation_rinex_test},
 };
 
 use std::{
@@ -338,7 +338,8 @@ fn testbench_v3() {
                 TimeFrame::from_erratic_csv(
                     "2022-03-04T00:00:00 GPST, 
                     2022-03-04T00:28:30 GPST,
-                    2022-03-04T00:57:00 GPST"),
+                    2022-03-04T00:57:00 GPST",
+                ),
                 vec![], // signals
                 vec![], // clocks
             );
@@ -359,9 +360,18 @@ fn testbench_v3() {
                 "G01, G07, G08, G10, G16, G18, G21, G23, G26, G30, R04, R05, R10, R12, R20, R21, E02, E11, E12, E24, E25, E31, E33, E36, C05, C11, C14, C21, C22, C23, C25, C28, C34, C37, C42, C43, C44, C58",
                 "GPS, GLO, GAL, BDS",
                 &[
-                    ("GPS", "C1C, L1C, S1C, C2S, L2S, S2S, C2W, L2W, S2W, C5Q, L5Q, S5Q"),
-                    ("GLO", "C1C, L1C, S1C, C2P, L2P, S2P, C2C, L2C, S2C, C3Q, L3Q, S3Q"),
-                    ("GAL", "C1C, L1C, S1C, C5Q, L5Q, S5Q, C6C, L6C, S6C, C7Q, L7Q, S7Q, C8Q, L8Q, S8Q"),
+                    (
+                        "GPS",
+                        "C1C, L1C, S1C, C2S, L2S, S2S, C2W, L2W, S2W, C5Q, L5Q, S5Q",
+                    ),
+                    (
+                        "GLO",
+                        "C1C, L1C, S1C, C2P, L2P, S2P, C2C, L2C, S2C, C3Q, L3Q, S3Q",
+                    ),
+                    (
+                        "GAL",
+                        "C1C, L1C, S1C, C5Q, L5Q, S5Q, C6C, L6C, S6C, C7Q, L7Q, S7Q, C8Q, L8Q, S8Q",
+                    ),
                     ("BDS", "C2I, L2I, S2I, C6I, L6I, S6I, C7I, L7I, S7I"),
                 ],
                 Some("2021-12-21T00:00:00 GPST"),
@@ -369,7 +379,9 @@ fn testbench_v3() {
                 None, // ground_ref_wgs84_m
                 None, // observer
                 None, // geodetic_marker
-                TimeFrame::from_inclusive_csv("2021-12-21T00:00:00 GPST, 2021-12-21T00:12:00 GPST, 30 s"),
+                TimeFrame::from_inclusive_csv(
+                    "2021-12-21T00:00:00 GPST, 2021-12-21T00:12:00 GPST, 30 s",
+                ),
                 vec![], // signals
                 vec![], // clocks
             );
@@ -453,29 +465,36 @@ fn v3_acor00esp_r2021() {
     );
 
     generic_observation_rinex_test(
-            &dut,
-            "3.04",
-            Some("MIXED"),
-            false,
-            "G01, G07, G08, G10, G16, G18, G21, G23, G26, G30, R04, R05, R10, R12, R20, R21, E02, E11, E12, E24, E25, E31, E33, E36, C05, C11, C14, C21, C22, C23, C25, C28, C34, C37, C42, C43, C44, C58",
-            "GPS, GLO, GAL, BDS",
-            &[
-                ("GPS", "C1C, L1C, S1C, C2S, L2S, S2S, C2W, L2W, S2W, C5Q, L5Q, S5Q"),
-                ("Gal", "C1C, L1C, S1C, C5Q, L5Q, S5Q, C6C, L6C, S6C, C7Q, L7Q, S7Q, C8Q, L8Q, S8Q"),
-                ("GLO", "C1C, L1C, S1C, C2P, L2P, S2P, C2C, L2C, S2C, C3Q, L3Q, S3Q"),
-                ("BDS", "C2I, L2I, S2I, C6I, L6I, S6I, C7I, L7I, S7I"),
-            ],
-            Some("2021-12-21T00:00:00 GPST"),
-            Some("2021-12-21T23:59:30 GPST"),
-            None,
-            None,
-            None,
-            TimeFrame::from_inclusive_csv("2021-12-21T00:00:00 GPST, 2021-12-21T00:12:00 GPST, 30 s"),
-            vec![
-
-            ],
-            vec![],
-        );
+        &dut,
+        "3.04",
+        Some("MIXED"),
+        false,
+        "G01, G07, G08, G10, G16, G18, G21, G23, G26, G30, R04, R05, R10, R12, R20, R21, E02, E11, E12, E24, E25, E31, E33, E36, C05, C11, C14, C21, C22, C23, C25, C28, C34, C37, C42, C43, C44, C58",
+        "GPS, GLO, GAL, BDS",
+        &[
+            (
+                "GPS",
+                "C1C, L1C, S1C, C2S, L2S, S2S, C2W, L2W, S2W, C5Q, L5Q, S5Q",
+            ),
+            (
+                "Gal",
+                "C1C, L1C, S1C, C5Q, L5Q, S5Q, C6C, L6C, S6C, C7Q, L7Q, S7Q, C8Q, L8Q, S8Q",
+            ),
+            (
+                "GLO",
+                "C1C, L1C, S1C, C2P, L2P, S2P, C2C, L2C, S2C, C3Q, L3Q, S3Q",
+            ),
+            ("BDS", "C2I, L2I, S2I, C6I, L6I, S6I, C7I, L7I, S7I"),
+        ],
+        Some("2021-12-21T00:00:00 GPST"),
+        Some("2021-12-21T23:59:30 GPST"),
+        None,
+        None,
+        None,
+        TimeFrame::from_inclusive_csv("2021-12-21T00:00:00 GPST, 2021-12-21T00:12:00 GPST, 30 s"),
+        vec![],
+        vec![],
+    );
 }
 
 #[cfg(feature = "flate2")]

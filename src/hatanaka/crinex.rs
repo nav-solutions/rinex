@@ -200,7 +200,7 @@ impl std::str::FromStr for CRINEX {
 
 #[cfg(test)]
 mod test {
-    use crate::prelude::{Epoch, Version, CRINEX};
+    use crate::prelude::{CRINEX, Epoch, Version};
     use std::str::FromStr;
 
     #[test]

@@ -1,5 +1,5 @@
 use super::Error;
-use hifitime::{Duration, Unit, DAYS_PER_YEAR};
+use hifitime::{DAYS_PER_YEAR, Duration, Unit};
 
 #[cfg(feature = "serde")]
 use serde::Serialize;
@@ -78,7 +78,7 @@ impl std::str::FromStr for PPU {
 #[cfg(test)]
 mod test {
     use super::PPU;
-    use hifitime::{Unit, DAYS_PER_YEAR};
+    use hifitime::{DAYS_PER_YEAR, Unit};
     use std::str::FromStr;
     #[test]
     fn ppu_parsing() {

@@ -236,7 +236,7 @@ pub fn format<W: Write>(
 #[cfg(test)]
 mod test {
 
-    use super::{format_epoch_v2v3, format_epoch_v4, NavFormatter};
+    use super::{NavFormatter, format_epoch_v2v3, format_epoch_v4};
     use crate::navigation::{NavFrameType, NavKey, NavMessageType};
     use crate::prelude::{Constellation, Epoch, SV};
     use crate::tests::formatting::Utf8Buffer;

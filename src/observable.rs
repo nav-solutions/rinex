@@ -543,24 +543,36 @@ mod test {
     }
     #[test]
     fn test_physics() {
-        assert!(Observable::from_str("L1")
-            .unwrap()
-            .is_phase_range_observable());
-        assert!(Observable::from_str("L2")
-            .unwrap()
-            .is_phase_range_observable());
-        assert!(Observable::from_str("L6X")
-            .unwrap()
-            .is_phase_range_observable());
-        assert!(Observable::from_str("C1")
-            .unwrap()
-            .is_pseudo_range_observable());
-        assert!(Observable::from_str("C2")
-            .unwrap()
-            .is_pseudo_range_observable());
-        assert!(Observable::from_str("C6X")
-            .unwrap()
-            .is_pseudo_range_observable());
+        assert!(
+            Observable::from_str("L1")
+                .unwrap()
+                .is_phase_range_observable()
+        );
+        assert!(
+            Observable::from_str("L2")
+                .unwrap()
+                .is_phase_range_observable()
+        );
+        assert!(
+            Observable::from_str("L6X")
+                .unwrap()
+                .is_phase_range_observable()
+        );
+        assert!(
+            Observable::from_str("C1")
+                .unwrap()
+                .is_pseudo_range_observable()
+        );
+        assert!(
+            Observable::from_str("C2")
+                .unwrap()
+                .is_pseudo_range_observable()
+        );
+        assert!(
+            Observable::from_str("C6X")
+                .unwrap()
+                .is_pseudo_range_observable()
+        );
         assert!(Observable::from_str("D1").unwrap().is_doppler_observable());
         assert!(Observable::from_str("D2").unwrap().is_doppler_observable());
         assert!(Observable::from_str("D6X").unwrap().is_doppler_observable());

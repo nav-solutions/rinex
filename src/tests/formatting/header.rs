@@ -1,7 +1,7 @@
 use crate::{
     hardware::{Antenna, Receiver},
     prelude::{Constellation, Header, Version},
-    tests::formatting::{generic_formatted_lines_test, Utf8Buffer},
+    tests::formatting::{Utf8Buffer, generic_formatted_lines_test},
 };
 
 use std::collections::HashMap;

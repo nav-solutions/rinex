@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod test {
-    use crate::prelude::{clock::*, Constellation, DOMESTrackingPoint, Epoch, Rinex, DOMES, SV};
+    use crate::prelude::{Constellation, DOMES, DOMESTrackingPoint, Epoch, Rinex, SV, clock::*};
     use std::str::FromStr;
 
     #[test]

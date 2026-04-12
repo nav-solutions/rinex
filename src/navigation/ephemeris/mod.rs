@@ -44,7 +44,7 @@ use anise::{
 
 use std::collections::HashMap;
 
-use crate::prelude::{Constellation, Duration, Epoch, TimeScale, SV};
+use crate::prelude::{Constellation, Duration, Epoch, SV, TimeScale};
 
 /// Ephemeris Navigation message. May be found in all RINEX revisions.
 /// Describes the content of the radio message at publication time.

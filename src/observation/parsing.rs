@@ -2,10 +2,10 @@
 use crate::{
     epoch::{parse_in_timescale as parse_epoch_in_timescale, parse_utc as parse_utc_epoch},
     observation::{
-        ClockObservation, EpochFlag, LliFlags, ObsKey, Observations, SignalObservation, SNR,
+        ClockObservation, EpochFlag, LliFlags, ObsKey, Observations, SNR, SignalObservation,
     },
     parse_f64,
-    prelude::{Constellation, Header, Observable, ParsingError, TimeScale, Version, SV},
+    prelude::{Constellation, Header, Observable, ParsingError, SV, TimeScale, Version},
 };
 
 use std::{
@@ -48,7 +48,7 @@ pub fn is_new_epoch(line: &str, v: Version) -> bool {
         match line.chars().next() {
             Some(c) => {
                 c == '>' // epochs always delimited
-                         // by this new identifier
+                // by this new identifier
             },
             _ => false,
         }
@@ -542,8 +542,8 @@ fn parse_signals_v3(
 mod test {
     use super::is_new_epoch;
     use crate::{
-        observation::{EpochFlag, SignalObservation, SNR},
-        prelude::{Constellation, Observable, Version, SV},
+        observation::{EpochFlag, SNR, SignalObservation},
+        prelude::{Constellation, Observable, SV, Version},
         tests::toolkit::generic_observation_epoch_decoding_test,
     };
     use std::str::FromStr;
@@ -605,9 +605,10 @@ G09  25493930.890   133971510.403 6        41.250                    25493926.95
             content,
             3,
             Constellation::GPS,
-            &[
-                ("GPS", "C1C, L1C, S1C, C2P, C2W, C2S, C2L, C2X, L2P, L2W, L2S, L2L, L2X, S2P, S2W, S2S, S2L, S2X"),
-            ],
+            &[(
+                "GPS",
+                "C1C, L1C, S1C, C2P, C2W, C2S, C2L, C2X, L2P, L2W, L2S, L2L, L2X, S2P, S2W, S2S, S2L, S2X",
+            )],
             "2022-03-04T00:00:00 GPST",
             30,
             "2022-03-04T00:00:00 GPST",

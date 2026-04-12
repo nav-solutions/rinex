@@ -721,7 +721,6 @@ mod test {
         assert_eq!(
             content,
             " 17  1  1  0  0  0.0000000  0 24R01C01R02C02C03C04G07G08R09G10G13G15\n                                R15G16R16R17G18R18G20G21G23R24G26G27\n"
-
         );
 
         //let sv_list = [

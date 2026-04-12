@@ -359,9 +359,7 @@ impl<const M: usize> DecompressorExpert<M> {
             #[cfg(feature = "log")]
             trace!(
                 "recovered epoch: \"{}\" [size={}, numsat={}]",
-                self.epoch_descriptor,
-                self.epoch_desc_len,
-                self.numsat,
+                self.epoch_descriptor, self.epoch_desc_len, self.numsat,
             );
 
             // proceed
@@ -887,9 +885,7 @@ impl<const M: usize> DecompressorExpert<M> {
                 #[cfg(feature = "log")]
                 trace!(
                     "recovered flags \"{}\" (len={}, numobs={})",
-                    &self.flags_buf,
-                    flags_len,
-                    self.numobs
+                    &self.flags_buf, flags_len, self.numobs
                 );
 
                 // copy all flags to user
@@ -1038,7 +1034,7 @@ mod test {
         hatanaka::decompressor::{Decompressor, State},
         prelude::SV,
     };
-    use std::str::{from_utf8, FromStr};
+    use std::str::{FromStr, from_utf8};
 
     #[test]
     fn epoch_size_to_produce_v1() {
@@ -1155,8 +1151,14 @@ mod test {
         for (numobs, expected) in [
             (1, "G01  20243517.560  "),
             (2, "G03  20619020.680   108353702.79708"),
-            (4, "R10  22432243.520   119576492.91607      1307.754          43.250  "),
-            (8, "R17  20915624.780   111923741.34508      1970.309          49.000    20915629.120    87051816.58507      1532.457          46.500  "),
+            (
+                4,
+                "R10  22432243.520   119576492.91607      1307.754          43.250  ",
+            ),
+            (
+                8,
+                "R17  20915624.780   111923741.34508      1970.309          49.000    20915629.120    87051816.58507      1532.457          46.500  ",
+            ),
         ] {
             let size = State::Observation.size_to_produce(true, 0, numobs);
             assert_eq!(size, expected.len(), "failed for \"{}\"", expected);

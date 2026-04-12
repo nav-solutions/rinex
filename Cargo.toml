@@ -8,14 +8,14 @@ homepage = "https://github.com/nav-solutions"
 repository = "https://github.com/nav-solutions/rinex"
 keywords = ["geo", "gnss", "gps", "galileo"]
 categories = ["science", "science::geo", "parsing"]
-edition = "2021"
+edition = "2024"
 readme = "README.md"
 exclude = [
     "data/*",
 ]
 
 [package.metadata]
-msrv = "1.83"
+msrv = "1.85"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -115,18 +115,19 @@ serde = { version = "1", default-features = false, features = ["derive"] }
 
 [dependencies.gnss-rs]
 git = "https://github.com/nav-solutions/gnss"
-rev = "9b9c18f60cf60045c4b702a411377469f9962e6"
+rev = "9b9c18f60cf60045c4b702a411377469f9962e62"
 features = ["std", "domes", "cospar", "sbas"]
 
 [dependencies.gnss-qc-traits]
 git = "https://github.com/nav-solutions/qc-traits"
-rev = "338857514973a8682d93be3a7b54bb3444eb8741"
+rev = "146b737342c2d4efe377ef4804fc0f5ab9b15d97"
 optional = true
 features = ["html"]
 
 [dependencies.binex]
-version = "0.5.1"
-optional = true
+git = "https://github.com/nav-solutions/binex"
+rev = "95302377cd801e50c9073544eb99d2760b3bb679"
+option = true
 
 [dependencies.gnss-protos]
 version = "0.0.2"

@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod test {
     use crate::{
-        prelude::{qc::Merge, Rinex},
-        tests::toolkit::{generic_observation_rinex_test, TimeFrame},
+        prelude::{Rinex, qc::Merge},
+        tests::toolkit::{TimeFrame, generic_observation_rinex_test},
     };
     use std::{
         //fs::remove_file as fs_remove_file,
@@ -109,19 +109,30 @@ mod test {
             "2.11",
             Some("MIXED"),
             false,
-            "G01, G07, G08, G10, G15, G16, G18, G21, G23, G26, G32, R04, R05, R06, R07, R10, R12, R19, R20, R21, R22, E04, E11, E12, E19, E24, E25, E31, E33, S23, S36", 
+            "G01, G07, G08, G10, G15, G16, G18, G21, G23, G26, G32, R04, R05, R06, R07, R10, R12, R19, R20, R21, R22, E04, E11, E12, E19, E24, E25, E31, E33, S23, S36",
             "GPS, GLO, GAL, EGNOS",
             &[
-                ("GPS", "C1, C2, C5, C7, C8, L1, L2, L5, L7, L8, P1, P2, S1, S2, S5, S7, S8, D1, D2, D5, D7, D8"),
-                ("GLO", "L1, L2, L5, L7, L8, D1, D2, D5, D7, D8, S1, S2, S5, S7, S8, C1, C2, C5, C7, C8, P1, P2"),
-                ("GAL", "L1, L2, L5, L7, L8, D1, D2, D5, D7, D8, S1, S2, S5, S7, S8, C1, C2, C5, C7, C8, P1, P2"),
+                (
+                    "GPS",
+                    "C1, C2, C5, C7, C8, L1, L2, L5, L7, L8, P1, P2, S1, S2, S5, S7, S8, D1, D2, D5, D7, D8",
+                ),
+                (
+                    "GLO",
+                    "L1, L2, L5, L7, L8, D1, D2, D5, D7, D8, S1, S2, S5, S7, S8, C1, C2, C5, C7, C8, P1, P2",
+                ),
+                (
+                    "GAL",
+                    "L1, L2, L5, L7, L8, D1, D2, D5, D7, D8, S1, S2, S5, S7, S8, C1, C2, C5, C7, C8, P1, P2",
+                ),
             ],
             Some("2021-12-21T00:00:00 GPST"),
             Some("2021-12-21T23:59:30 GPST"),
             None,
             None,
             None,
-            TimeFrame::from_inclusive_csv("2021-12-21T00:00:00 GPST, 2021-12-21T01:04:00 GPST, 30 s"),
+            TimeFrame::from_inclusive_csv(
+                "2021-12-21T00:00:00 GPST, 2021-12-21T01:04:00 GPST, 30 s",
+            ),
             vec![],
             vec![],
         );

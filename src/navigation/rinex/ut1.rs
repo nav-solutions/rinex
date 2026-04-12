@@ -1,4 +1,4 @@
-use crate::prelude::{ut1::DeltaTaiUt1, Duration, Rinex};
+use crate::prelude::{Duration, Rinex, ut1::DeltaTaiUt1};
 
 impl Rinex {
     /// Forms a [DeltaTaiUt1] [Iterator] from all Earth Orientation parameters contained in this NAV V4 RINEX.

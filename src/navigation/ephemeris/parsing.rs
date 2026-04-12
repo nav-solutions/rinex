@@ -1,11 +1,11 @@
 use crate::{
     epoch::parse_in_timescale as parse_epoch_in_timescale,
     navigation::{
-        ephemeris::orbits::{closest_nav_standards, OrbitItem},
         Ephemeris, NavMessageType,
+        ephemeris::orbits::{OrbitItem, closest_nav_standards},
     },
     parse_f64,
-    prelude::{Constellation, Epoch, ParsingError, TimeScale, Version, SV},
+    prelude::{Constellation, Epoch, ParsingError, SV, TimeScale, Version},
 };
 
 use std::{collections::HashMap, str::Lines};

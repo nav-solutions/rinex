@@ -4,7 +4,7 @@ use crate::{
     antex::{Antenna, AntennaSpecific, Calibration, CalibrationMethod, RxAntenna, SvAntenna},
     linspace::Linspace,
     parse_f64,
-    prelude::{Carrier, Epoch, ParsingError, COSPAR, SV},
+    prelude::{COSPAR, Carrier, Epoch, ParsingError, SV},
 };
 
 #[cfg(feature = "serde")]
@@ -302,7 +302,7 @@ pub(crate) fn parse_antenna(
             inner.insert(frequency, freq_data.clone());
         } else if marker.contains("END OF ANTENNA") {
             break; // end of this block, considered as an `epoch`
-                   // if we make a parallel with other types of RINEX
+        // if we make a parallel with other types of RINEX
         } else {
             // inside phase pattern
         }

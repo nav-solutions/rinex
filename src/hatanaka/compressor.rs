@@ -1,12 +1,12 @@
 //! RINEX compression module
 
 use crate::{
+    BufWriter,
     epoch::epoch_decompose as epoch_decomposition,
     error::FormattingError,
     hatanaka::{NumDiff, TextDiff},
     observation::{HeaderFields, Record},
     prelude::{Constellation, Observable, SV},
-    BufWriter,
 };
 
 use std::{collections::HashMap, io::Write};

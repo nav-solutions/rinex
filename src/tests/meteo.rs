@@ -1,6 +1,6 @@
 use crate::{
     prelude::Rinex,
-    tests::toolkit::{generic_meteo_rinex_test, generic_rinex_comparison, TimeFrame},
+    tests::toolkit::{TimeFrame, generic_meteo_rinex_test, generic_rinex_comparison},
 };
 
 use std::fs::remove_file;

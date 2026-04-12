@@ -93,7 +93,7 @@ use antex::{Antenna, FrequencyDependentData};
 use antex::{AntennaMatcher, AntennaSpecific};
 
 #[cfg(feature = "flate2")]
-use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
+use flate2::{Compression as GzCompression, read::GzDecoder, write::GzEncoder};
 
 #[cfg(feature = "clock")]
 use std::collections::BTreeMap;
@@ -102,24 +102,24 @@ use crate::{
     epoch::epoch_decompose,
     hatanaka::CRINEX,
     observable::Observable,
-    production::{DataSource, DetailedProductionAttributes, ProductionAttributes, FFU, PPU},
+    production::{DataSource, DetailedProductionAttributes, FFU, PPU, ProductionAttributes},
 };
 
 /// Package to include all basic structures
 pub mod prelude {
     // export
     pub use crate::{
+        Rinex,
         carrier::Carrier,
         error::{Error, FormattingError, ParsingError},
         hatanaka::{
-            Decompressor, DecompressorExpert, DecompressorExpertIO, DecompressorIO, CRINEX,
+            CRINEX, Decompressor, DecompressorExpert, DecompressorExpertIO, DecompressorIO,
         },
         header::Header,
         leap::Leap,
         observable::Observable,
         types::Type as RinexType,
         version::Version,
-        Rinex,
     };
 
     pub use crate::marker::{GeodeticMarker, MarkerType};
@@ -130,7 +130,7 @@ pub mod prelude {
     pub use crate::record::{Comments, Record};
 
     // pub re-export
-    pub use gnss::prelude::{Constellation, DOMESTrackingPoint, COSPAR, DOMES, SV};
+    pub use gnss::prelude::{COSPAR, Constellation, DOMES, DOMESTrackingPoint, SV};
     pub use hifitime::{Duration, Epoch, Polynomial, TimeScale, TimeSeries};
 
     #[cfg(feature = "antex")]
@@ -146,7 +146,7 @@ pub mod prelude {
 
         pub use crate::observation::{
             ClockObservation, Combination, CombinationKey, EpochFlag, LliFlags, ObsKey,
-            Observations, SignalObservation, SNR,
+            Observations, SNR, SignalObservation,
         };
     }
 
@@ -206,7 +206,7 @@ pub mod prelude {
 /// Package dedicated to file production.
 pub mod prod {
     pub use crate::production::{
-        DataSource, DetailedProductionAttributes, ProductionAttributes, FFU, PPU,
+        DataSource, DetailedProductionAttributes, FFU, PPU, ProductionAttributes,
     };
 }
 
@@ -1433,14 +1433,23 @@ mod test {
     }
     #[test]
     fn fmt_wrapped_comments() {
-        for desc in ["just trying to form a very lengthy comment that will overflow since it does not fit in a single line",
-            "just trying to form a very very lengthy comment that will overflow since it does fit on three very meaningful lines. Imazdmazdpoakzdpoakzpdokpokddddddddddddddddddaaaaaaaaaaaaaaaaaaaaaaa"] {
+        for desc in [
+            "just trying to form a very lengthy comment that will overflow since it does not fit in a single line",
+            "just trying to form a very very lengthy comment that will overflow since it does fit on three very meaningful lines. Imazdmazdpoakzdpoakzpdokpokddddddddddddddddddaaaaaaaaaaaaaaaaaaaaaaa",
+        ] {
             let nb_lines = num_integer::div_ceil(desc.len(), 60);
             let comments = fmt_comment(desc);
             assert_eq!(comments.lines().count(), nb_lines);
             for line in comments.lines() {
-                assert!(line.len() >= 60, "comment line should be at least 60 byte long");
-                assert_eq!(line.find("COMMENT"), Some(60), "comment marker should located @ 60");
+                assert!(
+                    line.len() >= 60,
+                    "comment line should be at least 60 byte long"
+                );
+                assert_eq!(
+                    line.find("COMMENT"),
+                    Some(60),
+                    "comment marker should located @ 60"
+                );
                 assert!(is_rinex_comment(line), "should be valid comment");
             }
         }
@@ -1448,11 +1457,15 @@ mod test {
     #[test]
     fn fmt_observables_v3() {
         for (desc, expected) in [
-("R    9 C1C L1C S1C C2C C2P L2C L2P S2C S2P",
-"R    9 C1C L1C S1C C2C C2P L2C L2P S2C S2P                  SYS / # / OBS TYPES"),
-("G   18 C1C L1C S1C C2P C2W C2S C2L C2X L2P L2W L2S L2L L2X         S2P S2W S2S S2L S2X",
-"G   18 C1C L1C S1C C2P C2W C2S C2L C2X L2P L2W L2S L2L L2X  SYS / # / OBS TYPES
-       S2P S2W S2S S2L S2X                                  SYS / # / OBS TYPES"),
+            (
+                "R    9 C1C L1C S1C C2C C2P L2C L2P S2C S2P",
+                "R    9 C1C L1C S1C C2C C2P L2C L2P S2C S2P                  SYS / # / OBS TYPES",
+            ),
+            (
+                "G   18 C1C L1C S1C C2P C2W C2S C2L C2X L2P L2W L2S L2L L2X         S2P S2W S2S S2L S2X",
+                "G   18 C1C L1C S1C C2P C2W C2S C2L C2X L2P L2W L2S L2L L2X  SYS / # / OBS TYPES
+       S2P S2W S2S S2L S2X                                  SYS / # / OBS TYPES",
+            ),
         ] {
             assert_eq!(fmt_rinex(desc, "SYS / # / OBS TYPES"), expected);
         }

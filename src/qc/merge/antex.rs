@@ -1,6 +1,6 @@
 use crate::{
     antex::{FrequencyDependentData, Record},
-    prelude::{qc::MergeError, Carrier},
+    prelude::{Carrier, qc::MergeError},
 };
 
 use std::collections::HashMap;

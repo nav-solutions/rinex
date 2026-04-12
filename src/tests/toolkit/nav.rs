@@ -1,7 +1,7 @@
 use crate::{
     navigation::{HeaderFields, NavMessageType},
     prelude::{Constellation, Rinex, RinexType},
-    tests::toolkit::{generic_rinex_test, sv_csv as sv_csv_parser, TimeFrame},
+    tests::toolkit::{TimeFrame, generic_rinex_test, sv_csv as sv_csv_parser},
 };
 
 // use crate::navigation::KbModel;

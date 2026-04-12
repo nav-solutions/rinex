@@ -843,11 +843,12 @@ mod test {
 
             assert!(
                 standards.version == expected,
-                "closest_nav_standards() converged to wrong revision {}:{}({}) while \"{}\" was expected", 
+                "closest_nav_standards() converged to wrong revision {}:{}({}) while \"{}\" was expected",
                 constellation,
                 desired,
                 msg,
-                expected);
+                expected
+            );
         }
     }
 
