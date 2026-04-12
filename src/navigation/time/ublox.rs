@@ -3,10 +3,10 @@ use crate::{
     prelude::{Epoch, TimeScale},
 };
 
-use ublox::{MgaGalTimeBuilder, MgaGpsUtcBuilder};
+use ublox::{mga_gal_time::MgaGalTimeBuilder, mga_gps_utc::MgaGpsUtcBuilder};
 
 #[cfg(doc)]
-use ublox::{MgaGalTimeRef, MgaGpsUtcRef};
+use ublox::{mga_gal_time::MgaGalTimeRef, mga_gps_utc::MgaGpsUtcRef};
 
 impl TimeOffset {
     /// Encodes this [TimeOffset] as [MgaGpsUtcRef] if it is referenced
@@ -48,7 +48,7 @@ impl TimeOffset {
                 let builder = MgaGalTimeBuilder {
                     msg_type: 1,
                     version: 0,
-                    wn0g: wn0g as f64,
+                    wn0g: wn0g as u8,
                     a0g: self.polynomial.0,
                     a1g: self.polynomial.1,
                     t0g: (t0g / 1_000_000_000) as f64,

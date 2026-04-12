@@ -157,22 +157,55 @@ impl HeaderFields {
         Ok(())
     }
 
-    /// Add "TIME OF FIRST OBS" field
-    pub(crate) fn with_crinex(&self, c: CRINEX) -> Self {
+    /// Introduce the definition of an [Observable] code for this [Constellation]
+    /// system. This is very convenient in the context of data production.
+    /// [Observable] codes are uniquely defined for each GNSS system:
+    /// if this definition alreay exists in the current state, this will simply
+    /// return a copy of the current state.
+    /// If this [Constellation] system was not previously defined, we create
+    /// a new entry for it.
+    pub fn with_observable_code(
+        &self,
+        constellation: Constellation,
+        observable: Observable,
+    ) -> Self {
+        let mut s = self.clone();
+
+        if let Some(codes) = s.codes.get_mut(&constellation) {
+            if !codes.contains(&observable) {
+                codes.push(observable);
+            }
+        } else {
+            s.codes.insert(constellation, vec![observable]);
+        }
+
+        s
+    }
+
+    /// Adds [CRINEX] special header to this file.
+    /// Automatically implies the conversion to a [CRINEX] file
+    /// when originating a readable observation file.
+    pub fn with_crinex(&self, c: CRINEX) -> Self {
         let mut s = self.clone();
         s.crinex = Some(c);
         s
     }
 
-    /// Add "TIME OF FIRST OBS" field
-    pub(crate) fn with_timeof_first_obs(&self, epoch: Epoch) -> Self {
+    /// Adds the "Time of first Observation" header line to this header.
+    /// This marker is utterly important and needs to be defined for any
+    /// valid observation file. For one reason that, it is the definition
+    /// of the timescale for each observations to follow.
+    pub fn with_time_of_first_obs(&self, epoch: Epoch) -> Self {
         let mut s = self.clone();
         s.timeof_first_obs = Some(epoch);
         s
     }
 
-    /// Add "TIME OF LAST OBS" field
-    pub(crate) fn with_timeof_last_obs(&self, epoch: Epoch) -> Self {
+    /// Adds the "Time of last Observation" header line to this header.
+    /// Like the "Time of first Observation" marker, this is utterly important.
+    /// Actually this library (when parsing) tolerates this marker to be
+    /// missing when the "First" marker is defined (which is absolutely mandatory).
+    pub fn with_time_of_last_obs(&self, epoch: Epoch) -> Self {
         let mut s = self.clone();
         s.timeof_last_obs = Some(epoch);
         s

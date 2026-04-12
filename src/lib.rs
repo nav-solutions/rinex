@@ -226,6 +226,17 @@ use crate::{
 #[cfg(docsrs)]
 pub use bibliography::Bibliography;
 
+/// Parse a floating point number from a string, handling Fortran-style 'D'/'d'
+/// exponent notation (e.g. `1.3775D+02`) that Rust's standard `FromStr` does not
+/// recognize. Both uppercase 'D' and lowercase 'd' are replaced before parsing.
+pub(crate) fn parse_f64(s: &str) -> Result<f64, std::num::ParseFloatError> {
+    // Fast path: if the string contains no 'D' or 'd', parse directly
+    if !s.contains('D') && !s.contains('d') {
+        return s.parse();
+    }
+    s.replace('D', "E").replace('d', "e").parse()
+}
+
 /*
  * returns true if given line is a comment
  */

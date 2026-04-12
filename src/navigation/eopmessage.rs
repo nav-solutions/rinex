@@ -1,7 +1,7 @@
 //! `Navigation` new EOP Earth Orientation messages
 use crate::epoch;
+use crate::parse_f64;
 use crate::prelude::*;
-use std::str::FromStr;
 use thiserror::Error;
 
 /// EopMessage Parsing error
@@ -62,20 +62,20 @@ impl EopMessage {
 
         let epoch = epoch::parse_in_timescale(epoch.trim(), ts)?;
         let x = (
-            f64::from_str(xp.trim()).unwrap_or(0.0_f64),
-            f64::from_str(dxp.trim()).unwrap_or(0.0_f64),
-            f64::from_str(ddxp.trim()).unwrap_or(0.0_f64),
+            parse_f64(xp.trim()).unwrap_or(0.0_f64),
+            parse_f64(dxp.trim()).unwrap_or(0.0_f64),
+            parse_f64(ddxp.trim()).unwrap_or(0.0_f64),
         );
         let y = (
-            f64::from_str(yp.trim()).unwrap_or(0.0_f64),
-            f64::from_str(dyp.trim()).unwrap_or(0.0_f64),
-            f64::from_str(ddyp.trim()).unwrap_or(0.0_f64),
+            parse_f64(yp.trim()).unwrap_or(0.0_f64),
+            parse_f64(dyp.trim()).unwrap_or(0.0_f64),
+            parse_f64(ddyp.trim()).unwrap_or(0.0_f64),
         );
-        let t_tm = f64::from_str(t_tm.trim()).unwrap_or(0.0_f64);
+        let t_tm = parse_f64(t_tm.trim()).unwrap_or(0.0_f64);
         let delta_ut1 = (
-            f64::from_str(dut.trim()).unwrap_or(0.0_f64),
-            f64::from_str(ddut.trim()).unwrap_or(0.0_f64),
-            f64::from_str(dddut.trim()).unwrap_or(0.0_f64),
+            parse_f64(dut.trim()).unwrap_or(0.0_f64),
+            parse_f64(ddut.trim()).unwrap_or(0.0_f64),
+            parse_f64(dddut.trim()).unwrap_or(0.0_f64),
         );
 
         Ok((

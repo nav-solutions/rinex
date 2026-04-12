@@ -50,6 +50,7 @@ pub struct Observations {
     /// It describes the receiver state with respect to the GNSS [TimeScale] defined
     /// in [Header].
     pub clock: Option<ClockObservation>,
+
     /// List of [SignalObservation]s.
     pub signals: Vec<SignalObservation>,
 }
@@ -82,14 +83,27 @@ impl Observations {
     }
 }
 
-/// [ObsKey] is used to Index [Observations] in [Record] type definition.
+/// [ObsKey] is used to Index [Observations] in the [Record] dataset.
 #[derive(Default, Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ObsKey {
-    /// Sampling [Epoch]
+    /// Sampling [Epoch].
     pub epoch: Epoch,
-    /// [EpochFlag] gives more information about sampling conditions
+
+    /// [EpochFlag] gives more information about sampling conditions.
     pub flag: EpochFlag,
+}
+
+impl ObsKey {
+    /// Creates a new [ObsKey] at sampling [Epoch] with "OK" sampling conditions,
+    /// which is most useful in data production contexts, and the typical condition
+    /// in which we want to report data.
+    pub fn new_ok(epoch: Epoch) -> Self {
+        Self {
+            epoch,
+            flag: EpochFlag::Ok,
+        }
+    }
 }
 
 /// Observation [Record] are sorted by [Epoch] of observation and may have two different forms.

@@ -1,41 +1,44 @@
 use crate::*;
-use rand::{distr::Alphanumeric, Rng};
+use rand::{distr::Alphanumeric, Rng, RngExt};
 
 use crate::hardware::Antenna;
 
-// OBS RINEX dedicated tools
+pub mod csv;
+pub mod print_debug;
+pub mod timeframe;
+
 mod observation;
-pub use observation::{
-    generic_comparison as generic_observation_comparison, generic_observation_epoch_decoding_test,
-    generic_observation_rinex_test, SignalDataPoint,
-};
 
 // NAV RINEX dedicated tools
 #[cfg(feature = "nav")]
 mod nav;
+
+// Meteo RINEX dedicated tests
+#[cfg(feature = "meteo")]
+mod meteo;
+
+// OBS RINEX dedicated tools
+pub use observation::{
+    generic_comparison as generic_observation_comparison, generic_observation_epoch_decoding_test,
+    generic_observation_rinex_test, SignalDataPoint,
+};
 
 #[cfg(feature = "nav")]
 pub use nav::{
     generic_comparison as generic_navigation_comparison, generic_test as generic_navigation_test,
 };
 
-// Meteo RINEX dedicated tests
-#[cfg(feature = "meteo")]
-mod meteo;
-
 #[cfg(feature = "meteo")]
 pub use meteo::{generic_comparison as generic_meteo_comparison, generic_meteo_rinex_test};
 
-pub mod timeframe;
 pub use timeframe::TimeFrame;
 
-pub mod csv;
 pub use csv::{gnss_csv, observables_csv, sv_csv};
 
 /// Random name generator
 pub fn random_name(size: usize) -> String {
-    rand::thread_rng()
-        .sample_iter(&Alphanumeric)
+    rand::rng()
+        .sample_iter(Alphanumeric)
         .take(size)
         .map(char::from)
         .collect()
