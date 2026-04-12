@@ -127,7 +127,7 @@ features = ["html"]
 [dependencies.binex]
 git = "https://github.com/nav-solutions/binex"
 rev = "95302377cd801e50c9073544eb99d2760b3bb679"
-option = true
+optional = true
 
 [dependencies.gnss-protos]
 version = "0.0.2"
