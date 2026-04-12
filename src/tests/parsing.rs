@@ -109,7 +109,8 @@ mod test {
                                         Some(Constellation::Mixed) | None => {}, // can't test
                                         Some(c) => {
                                             let timescale = c.timescale().unwrap();
-                                            assert!(ts == timescale,
+                                            assert!(
+                                                ts == timescale,
                                                 "interpreted wrong timescale: expecting \"{}\", got \"{}\"",
                                                 timescale,
                                                 ts

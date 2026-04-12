@@ -605,9 +605,10 @@ G09  25493930.890   133971510.403 6        41.250                    25493926.95
             content,
             3,
             Constellation::GPS,
-            &[
-                ("GPS", "C1C, L1C, S1C, C2P, C2W, C2S, C2L, C2X, L2P, L2W, L2S, L2L, L2X, S2P, S2W, S2S, S2L, S2X"),
-            ],
+            &[(
+                "GPS",
+                "C1C, L1C, S1C, C2P, C2W, C2S, C2L, C2X, L2P, L2W, L2S, L2L, L2X, S2P, S2W, S2S, S2L, S2X",
+            )],
             "2022-03-04T00:00:00 GPST",
             30,
             "2022-03-04T00:00:00 GPST",
