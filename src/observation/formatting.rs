@@ -173,8 +173,10 @@ impl Observations {
 
         let observables = &header.codes;
 
-        // retrieve unique constellation list
-        // all geosat regrouped as undifferenced "SBAS"
+        // encode new epoch
+        self.format_epoch_v3(w, key, numsat)?;
+
+        // sorted by constellation: group SBAS together
         let constell_list = sv_list
             .iter()
             .map(|sv| {
@@ -188,13 +190,21 @@ impl Observations {
             .sorted()
             .collect::<Vec<_>>();
 
-        // encode new epoch
-        self.format_epoch_v3(w, key, numsat)?;
-
-        // grouped by constellation,
-        // then sorted by PRN number per system
         for constell in constell_list.iter() {
-            for sv in sv_list.iter().filter(|sv| sv.constellation == *constell) {
+            // then sorted by PRN number per system
+            for sv in sv_list
+                .iter()
+                .filter(|sv| {
+                    if constell.is_sbas() {
+                        // match system class
+                        sv.constellation.is_sbas()
+                    } else {
+                        // exact match
+                        sv.constellation == *constell
+                    }
+                })
+                .sorted()
+            {
                 write!(w, "{:x}", sv)?;
 
                 // following header definitions
@@ -901,6 +911,7 @@ E04         2.000
 S21         4.000  
 S33         4.000  
 S35         4.000  
+S36         4.000  
 "
         );
     }

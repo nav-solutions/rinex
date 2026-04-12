@@ -10,7 +10,7 @@ use crate::{
     },
     tests::toolkit::{
         generic_rinex_test, gnss_csv as gnss_from_csv, observables_csv as observable_from_csv,
-        print_debug::{print_panic_gnss_diffs, print_panic_sv_diffs},
+        print_debug::{print_panic_gnss_diffs, print_panic_observable_diffs, print_panic_sv_diffs},
         sv_csv as sv_from_csv, TimeFrame,
     },
 };
@@ -202,7 +202,7 @@ pub fn generic_comparison(dut: &Rinex, model: &Rinex) {
     // verify observables
     let dut_content = dut.observables_iter().sorted().collect::<Vec<_>>();
     let expected_content = dut.observables_iter().sorted().collect::<Vec<_>>();
-    assert_eq!(dut_content, expected_content);
+    print_panic_observable_diffs(&dut_content, &expected_content);
 
     // TODO : verify carriers
 
