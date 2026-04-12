@@ -40,8 +40,9 @@ other RINEX-like formats have their own parser:
 - Several conversion methods (SERDES operations):
   - to and from JSON with `serde`
   - RTCM protocol (on `rtcm` feature)
-  - to and from Ublox messages with `ublox`
-  - to GNSS binary (currently limited to GPS protocol) with `protos`
+  - BINEX messages (with `binex` feature)
+  - U-Blox (UBX) messages (with `ublox` feature)
+  - to binary GNSS protocols (currently limited to GPS protocol) with `protos`
 
 ## Warnings :warning:
 
