@@ -2,7 +2,7 @@ use itertools::Itertools;
 
 use crate::{
     prelude::{Header, Rinex, RinexType},
-    tests::toolkit::{TimeFrame, generic_rinex_test, observables_csv},
+    tests::toolkit::{generic_rinex_test, observables_csv, TimeFrame},
 };
 
 /// [Rinex] against [Rinex] model verification

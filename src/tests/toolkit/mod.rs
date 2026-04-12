@@ -1,5 +1,5 @@
 use crate::*;
-use rand::{Rng, RngExt, distr::Alphanumeric};
+use rand::{distr::Alphanumeric, Rng, RngExt};
 
 use crate::hardware::Antenna;
 
@@ -19,8 +19,8 @@ mod meteo;
 
 // OBS RINEX dedicated tools
 pub use observation::{
-    SignalDataPoint, generic_comparison as generic_observation_comparison,
-    generic_observation_epoch_decoding_test, generic_observation_rinex_test,
+    generic_comparison as generic_observation_comparison, generic_observation_epoch_decoding_test,
+    generic_observation_rinex_test, SignalDataPoint,
 };
 
 #[cfg(feature = "nav")]

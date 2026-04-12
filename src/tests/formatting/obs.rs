@@ -4,7 +4,7 @@ use std::str::FromStr;
 use crate::{
     observation::HeaderFields,
     prelude::{Constellation, Epoch, Observable},
-    tests::formatting::{Utf8Buffer, generic_formatted_lines_test},
+    tests::formatting::{generic_formatted_lines_test, Utf8Buffer},
 };
 
 use std::io::BufWriter;

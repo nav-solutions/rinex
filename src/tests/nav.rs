@@ -1,7 +1,7 @@
 use crate::{
     navigation::{NavFrameType, NavMessageType},
-    prelude::{Constellation, Epoch, Rinex, SV, TimeScale},
-    tests::toolkit::{TimeFrame, generic_navigation_test},
+    prelude::{Constellation, Epoch, Rinex, TimeScale, SV},
+    tests::toolkit::{generic_navigation_test, TimeFrame},
 };
 
 use hifitime::Unit;

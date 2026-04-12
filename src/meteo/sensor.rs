@@ -8,7 +8,7 @@ use anise::{
 };
 
 #[cfg(feature = "qc")]
-use maud::{Markup, Render, html};
+use maud::{html, Markup, Render};
 
 /// Meteo Observation Sensor
 #[derive(Default, Clone, Debug, PartialEq)]

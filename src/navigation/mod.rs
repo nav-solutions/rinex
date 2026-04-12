@@ -17,7 +17,7 @@ pub(crate) use parsing::{is_new_epoch, parse_epoch};
 
 pub use crate::navigation::{
     earth_orientation::EarthOrientation,
-    ephemeris::{Ephemeris, flags::*, orbits::OrbitItem},
+    ephemeris::{flags::*, orbits::OrbitItem, Ephemeris},
     frame::{NavFrame, NavFrameType},
     header::HeaderFields,
     ionosphere::{BdModel, IonosphereModel, KbModel, KbRegionCode, NgModel, NgRegionFlags},

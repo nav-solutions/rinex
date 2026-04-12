@@ -11,7 +11,7 @@ use crate::{
     navigation::HeaderFields as NavigationHeader,
     navigation::IonosphereModel,
     observation::HeaderFields as ObservationHeader,
-    prelude::{COSPAR, Constellation, Duration, Epoch, SV},
+    prelude::{Constellation, Duration, Epoch, COSPAR, SV},
     types::Type,
     version::Version,
 };

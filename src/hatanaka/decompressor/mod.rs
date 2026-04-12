@@ -359,7 +359,9 @@ impl<const M: usize> DecompressorExpert<M> {
             #[cfg(feature = "log")]
             trace!(
                 "recovered epoch: \"{}\" [size={}, numsat={}]",
-                self.epoch_descriptor, self.epoch_desc_len, self.numsat,
+                self.epoch_descriptor,
+                self.epoch_desc_len,
+                self.numsat,
             );
 
             // proceed
@@ -885,7 +887,9 @@ impl<const M: usize> DecompressorExpert<M> {
                 #[cfg(feature = "log")]
                 trace!(
                     "recovered flags \"{}\" (len={}, numobs={})",
-                    &self.flags_buf, flags_len, self.numobs
+                    &self.flags_buf,
+                    flags_len,
+                    self.numobs
                 );
 
                 // copy all flags to user
@@ -1034,7 +1038,7 @@ mod test {
         hatanaka::decompressor::{Decompressor, State},
         prelude::SV,
     };
-    use std::str::{FromStr, from_utf8};
+    use std::str::{from_utf8, FromStr};
 
     #[test]
     fn epoch_size_to_produce_v1() {

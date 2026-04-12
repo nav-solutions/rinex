@@ -13,7 +13,7 @@ mod zegv0010;
 
 use std::{
     collections::HashMap,
-    str::{FromStr, from_utf8},
+    str::{from_utf8, FromStr},
 };
 
 use crate::{
@@ -91,7 +91,7 @@ pub fn run_raw_decompression_test(
 use crate::{
     observation::EpochFlag,
     prelude::{Epoch, Rinex, SV},
-    tests::toolkit::{SignalDataPoint, TimeFrame, generic_observation_rinex_test},
+    tests::toolkit::{generic_observation_rinex_test, SignalDataPoint, TimeFrame},
 };
 
 use std::{

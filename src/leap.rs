@@ -1,7 +1,7 @@
 //! Leap second counter
 use crate::{
-    FormattingError,
     prelude::{ParsingError, TimeScale},
+    FormattingError,
 };
 
 use std::io::{BufWriter, Write};

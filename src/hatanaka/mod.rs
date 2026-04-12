@@ -16,8 +16,8 @@ pub use compressor::Compressor;
 pub use crinex::CRINEX;
 
 pub use decompressor::{
-    Decompressor, DecompressorExpert,
     io::{DecompressorExpertIO, DecompressorIO},
+    Decompressor, DecompressorExpert,
 };
 
 pub use numdiff::NumDiff;

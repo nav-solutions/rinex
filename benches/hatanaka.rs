@@ -2,7 +2,7 @@
 use rinex::hatanaka::{NumDiff, TextDiff};
 
 extern crate criterion;
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 fn textdiff_decompression(textdiff: &mut TextDiff, data: &[&str]) {
     for data in data {

@@ -1,8 +1,8 @@
 use crate::{
     navigation::{BdModel, Ephemeris, IonosphereModel, KbModel, NavKey, NgModel},
     prelude::{
-        Epoch, Rinex, SV,
         nav::{Almanac, AzElRange, Orbit},
+        Epoch, Rinex, SV,
     },
 };
 

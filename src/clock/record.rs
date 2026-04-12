@@ -5,7 +5,7 @@ use std::{collections::BTreeMap, str::FromStr};
 use crate::{
     epoch::parse_in_timescale as parse_epoch_in_timescale,
     parse_f64,
-    prelude::{Epoch, ParsingError, SV, TimeScale, Version},
+    prelude::{Epoch, ParsingError, TimeScale, Version, SV},
 };
 
 #[cfg(feature = "processing")]

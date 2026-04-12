@@ -1,5 +1,5 @@
 use super::Error;
-use hifitime::{Duration, SECONDS_PER_DAY, SECONDS_PER_HOUR, SECONDS_PER_MINUTE, Unit};
+use hifitime::{Duration, Unit, SECONDS_PER_DAY, SECONDS_PER_HOUR, SECONDS_PER_MINUTE};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct FFU {
@@ -77,7 +77,7 @@ impl std::str::FromStr for FFU {
 #[cfg(test)]
 mod test {
     use super::FFU;
-    use hifitime::{Duration, SECONDS_PER_DAY, Unit};
+    use hifitime::{Duration, Unit, SECONDS_PER_DAY};
     use std::str::FromStr;
     #[test]
     fn ffu_parsing() {

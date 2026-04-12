@@ -12,7 +12,7 @@ use crate::{
     observable::Observable,
     observation::HeaderFields as ObservationHeader,
     parse_f64,
-    prelude::{COSPAR, Constellation, DOMES, Duration, Epoch, ParsingError, SV, TimeScale},
+    prelude::{Constellation, Duration, Epoch, ParsingError, TimeScale, COSPAR, DOMES, SV},
     types::Type,
     version::Version,
 };

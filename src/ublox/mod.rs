@@ -88,7 +88,7 @@ impl<'a> std::io::Read for RNX2UBX<'a> {
     /// As per stardards, we return Ok(0) once the [Rinex] file has been fully consumed.
     fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
         match &mut self.streamer {
-            TypeDependentStreamer::NAV(ref mut streamer) => streamer.read(buffer),
+            TypeDependentStreamer::NAV(streamer) => streamer.read(buffer),
         }
     }
 }

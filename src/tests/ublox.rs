@@ -6,8 +6,8 @@ use crate::{
 };
 
 use ublox::{
-    Parser, UbxPacket, mga_bds_eph::MgaBdsEphRef, mga_glo_eph::MgaGloEphRef,
-    mga_gps_eph::MgaGpsEphRef, packetref_proto23::PacketRef,
+    mga_bds_eph::MgaBdsEphRef, mga_glo_eph::MgaGloEphRef, mga_gps_eph::MgaGpsEphRef,
+    packetref_proto23::PacketRef, Parser, UbxPacket,
 };
 
 // MGA-EPH-XXX

@@ -2,10 +2,10 @@
 use crate::{
     epoch::{parse_in_timescale as parse_epoch_in_timescale, parse_utc as parse_utc_epoch},
     observation::{
-        ClockObservation, EpochFlag, LliFlags, ObsKey, Observations, SNR, SignalObservation,
+        ClockObservation, EpochFlag, LliFlags, ObsKey, Observations, SignalObservation, SNR,
     },
     parse_f64,
-    prelude::{Constellation, Header, Observable, ParsingError, SV, TimeScale, Version},
+    prelude::{Constellation, Header, Observable, ParsingError, TimeScale, Version, SV},
 };
 
 use std::{
@@ -48,7 +48,7 @@ pub fn is_new_epoch(line: &str, v: Version) -> bool {
         match line.chars().next() {
             Some(c) => {
                 c == '>' // epochs always delimited
-                // by this new identifier
+                         // by this new identifier
             },
             _ => false,
         }
@@ -542,8 +542,8 @@ fn parse_signals_v3(
 mod test {
     use super::is_new_epoch;
     use crate::{
-        observation::{EpochFlag, SNR, SignalObservation},
-        prelude::{Constellation, Observable, SV, Version},
+        observation::{EpochFlag, SignalObservation, SNR},
+        prelude::{Constellation, Observable, Version, SV},
         tests::toolkit::generic_observation_epoch_decoding_test,
     };
     use std::str::FromStr;

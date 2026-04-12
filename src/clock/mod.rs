@@ -10,7 +10,7 @@ use std::{
 
 use crate::{
     fmt_rinex, parse_f64,
-    prelude::{DOMES, FormattingError, TimeScale, Version},
+    prelude::{FormattingError, TimeScale, Version, DOMES},
 };
 
 /// Clocks `RINEX` specific header fields

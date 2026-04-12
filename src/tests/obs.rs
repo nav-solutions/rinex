@@ -1,9 +1,9 @@
 use crate::{
-    observation::{EpochFlag, LliFlags, ObsKey, SNR, SignalObservation},
+    observation::{EpochFlag, LliFlags, ObsKey, SignalObservation, SNR},
     prelude::{Epoch, GeodeticMarker, Observable, Rinex, SV},
     tests::toolkit::{
-        SignalDataPoint, TimeFrame, generic_null_rinex_test, generic_observation_rinex_test,
-        generic_rinex_comparison,
+        generic_null_rinex_test, generic_observation_rinex_test, generic_rinex_comparison,
+        SignalDataPoint, TimeFrame,
     },
 };
 

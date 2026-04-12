@@ -1,4 +1,4 @@
-use crate::prelude::{Constellation, Epoch, SV, nav::Orbit};
+use crate::prelude::{nav::Orbit, Constellation, Epoch, SV};
 
 use crate::navigation::Ephemeris;
 

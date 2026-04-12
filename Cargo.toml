@@ -8,7 +8,7 @@ homepage = "https://github.com/nav-solutions"
 repository = "https://github.com/nav-solutions/rinex"
 keywords = ["geo", "gnss", "gps", "galileo"]
 categories = ["science", "science::geo", "parsing"]
-edition = "2024"
+edition = "2021"
 readme = "README.md"
 exclude = [
     "data/*",

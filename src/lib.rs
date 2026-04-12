@@ -93,7 +93,7 @@ use antex::{Antenna, FrequencyDependentData};
 use antex::{AntennaMatcher, AntennaSpecific};
 
 #[cfg(feature = "flate2")]
-use flate2::{Compression as GzCompression, read::GzDecoder, write::GzEncoder};
+use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
 
 #[cfg(feature = "clock")]
 use std::collections::BTreeMap;
@@ -102,24 +102,24 @@ use crate::{
     epoch::epoch_decompose,
     hatanaka::CRINEX,
     observable::Observable,
-    production::{DataSource, DetailedProductionAttributes, FFU, PPU, ProductionAttributes},
+    production::{DataSource, DetailedProductionAttributes, ProductionAttributes, FFU, PPU},
 };
 
 /// Package to include all basic structures
 pub mod prelude {
     // export
     pub use crate::{
-        Rinex,
         carrier::Carrier,
         error::{Error, FormattingError, ParsingError},
         hatanaka::{
-            CRINEX, Decompressor, DecompressorExpert, DecompressorExpertIO, DecompressorIO,
+            Decompressor, DecompressorExpert, DecompressorExpertIO, DecompressorIO, CRINEX,
         },
         header::Header,
         leap::Leap,
         observable::Observable,
         types::Type as RinexType,
         version::Version,
+        Rinex,
     };
 
     pub use crate::marker::{GeodeticMarker, MarkerType};
@@ -130,7 +130,7 @@ pub mod prelude {
     pub use crate::record::{Comments, Record};
 
     // pub re-export
-    pub use gnss::prelude::{COSPAR, Constellation, DOMES, DOMESTrackingPoint, SV};
+    pub use gnss::prelude::{Constellation, DOMESTrackingPoint, COSPAR, DOMES, SV};
     pub use hifitime::{Duration, Epoch, Polynomial, TimeScale, TimeSeries};
 
     #[cfg(feature = "antex")]
@@ -146,7 +146,7 @@ pub mod prelude {
 
         pub use crate::observation::{
             ClockObservation, Combination, CombinationKey, EpochFlag, LliFlags, ObsKey,
-            Observations, SNR, SignalObservation,
+            Observations, SignalObservation, SNR,
         };
     }
 
@@ -206,7 +206,7 @@ pub mod prelude {
 /// Package dedicated to file production.
 pub mod prod {
     pub use crate::production::{
-        DataSource, DetailedProductionAttributes, FFU, PPU, ProductionAttributes,
+        DataSource, DetailedProductionAttributes, ProductionAttributes, FFU, PPU,
     };
 }
 

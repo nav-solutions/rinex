@@ -1,6 +1,6 @@
 use crate::header::Header;
 
-use qc_traits::{Markup, QcHtmlReporting, html};
+use qc_traits::{html, Markup, QcHtmlReporting};
 
 #[cfg(feature = "qc")]
 impl QcHtmlReporting for Header {
