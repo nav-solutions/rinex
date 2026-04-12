@@ -1,9 +1,7 @@
-use std::collections::HashMap;
-
 use hifitime::prelude::{Duration, Unit};
 
 use crate::{
-    navigation::{Ephemeris, OrbitItem},
+    navigation::Ephemeris,
     prelude::{Constellation, Epoch, SV},
 };
 
@@ -155,7 +153,7 @@ impl Ephemeris {
         let glo_m_p_ind = 0; // TODO
         let glo_m_ft_ind = 0; // TODO
         let glo_m_nt_d = 0; // TODO
-        let glo_m_m_d = 0; // TODO
+                            // let glo_m_m_d = 0; // TODO
         let glo_m_delta_tau_n_s = 0.0; // TODO
         let glo_m_p4_flag = 0; // TODO
         let glo_m_n4_year = 0; // TODO
@@ -467,7 +465,7 @@ impl Ephemeris {
         let omega0_sc = self.get_orbit_f64("omega0")?;
         let tgd_s = self.tgd()?.to_unit(Unit::Second) as f32;
         let sv_health_ind = self.get_orbit_f64("health")? as u8;
-        let l2_p_data_flag = self.get_orbit_f64("l2p")? as u8;
+        // let l2_p_data_flag = self.get_orbit_f64("l2p")? as u8;
         let fit_interval_ind = self.get_orbit_f64("fitInt").unwrap_or_default() as u8; // TODO fitInt issue
 
         let code_on_l2_ind = 0; // TODO

@@ -18,13 +18,10 @@ use crate::prelude::Rinex;
 impl Ephemeris {
     /// Decodes this UBX [MgaGpsEphRef] frame as [Ephemeris] structure, ready to format.
     ///
-    /// ## Inputs
-    /// - now: UBX message [Epoch] of reception
-    ///
     /// ## Returns
     /// - Identified [Constellation::GPS] message emitter
     /// - [Ephemeris] structure ready to format.
-    pub fn from_ubx_mga_gps(now: Epoch, ubx: MgaGpsEphRef) -> (SV, Self) {
+    pub fn from_ubx_mga_gps(ubx: MgaGpsEphRef) -> (SV, Self) {
         (
             SV {
                 prn: ubx.sv_id(),
@@ -63,13 +60,10 @@ impl Ephemeris {
 
     /// Decodes this UBX [MgaGpsEphRef] frame as [Ephemeris] structure, ready to format.
     ///
-    /// ## Inputs
-    /// - now: UBX message [Epoch] of reception
-    ///
     /// ## Returns
     /// - Identified [Constellation::QZSS] message emitter
     /// - [Ephemeris] structure ready to format.
-    pub fn from_ubx_mga_qzss(now: Epoch, ubx: MgaGpsEphRef) -> (SV, Self) {
+    pub fn from_ubx_mga_qzss(ubx: MgaGpsEphRef) -> (SV, Self) {
         (
             SV {
                 prn: ubx.sv_id(),
@@ -155,7 +149,7 @@ impl Ephemeris {
             reserved2: 0,
             reserved3: [0, 0],
             sv_health,
-            fit_interval: 0,
+            fit_interval,
             ura_index,
             tgd_s,
             iodc,
@@ -186,13 +180,10 @@ impl Ephemeris {
 
     /// Decodes this UBX [MgaBdsEphRef] frame as [Ephemeris] structure, ready to format.
     ///
-    /// ## Inputs
-    /// - now: UBX message [Epoch] of reception
-    ///
     /// ## Returns
     /// - Identified [Constellation::BeiDou] message emitter
     /// - [Ephemeris] structure ready to format.
-    pub fn from_ubx_mga_bds(now: Epoch, ubx: MgaBdsEphRef) -> (SV, Self) {
+    pub fn from_ubx_mga_bds(ubx: MgaBdsEphRef) -> (SV, Self) {
         (
             SV {
                 prn: ubx.sv_id(),
@@ -264,8 +255,6 @@ impl Ephemeris {
         // TODO (V2/V3)
         let iodc = self.get_orbit_f64("iodc").unwrap_or_default() as u8;
 
-        let ura = self.get_orbit_f64("accuracy")? as u8;
-
         // TODO TGD versus signals
         let tgd_ns = match self.get_orbit_f64("tgd1b1b3") {
             Some(tgd) => tgd * 1.0E9,
@@ -329,13 +318,10 @@ impl Ephemeris {
 
     /// Decodes this UBX [MgaGloEphRef] frame as [Ephemeris] structure, ready to format.
     ///
-    /// ## Inputs
-    /// - now: UBX message [Epoch] of reception
-    ///
     /// ## Returns
     /// - Identified [Constellation::Glonass] message emitter
     /// - [Ephemeris] structure ready to format.
-    pub fn from_ubx_mga_glo(now: Epoch, ubx: MgaGloEphRef) -> (SV, Self) {
+    pub fn from_ubx_mga_glo(ubx: MgaGloEphRef) -> (SV, Self) {
         (
             SV {
                 prn: ubx.sv_id(),
@@ -446,13 +432,10 @@ impl Ephemeris {
 
     /// Decodes this UBX [MgaGalEphRef] frame as [Ephemeris] structure, ready to format.
     ///
-    /// ## Inputs
-    /// - now: UBX message [Epoch] of reception
-    ///
     /// ## Returns
     /// - Identified [Constellation::Galileo] message emitter
     /// - [Ephemeris] structure ready to format.
-    pub fn from_ubx_mga_gal(now: Epoch, ubx: MgaGalEphRef) -> (SV, Self) {
+    pub fn from_ubx_mga_gal(ubx: MgaGalEphRef) -> (SV, Self) {
         (
             SV {
                 prn: ubx.sv_id(),
@@ -538,7 +521,7 @@ impl Ephemeris {
         let toe = self.get_orbit_f64("toe")?;
 
         // TODO exists in V4, check V2 and V3
-        let ura = self.get_orbit_f64("accuracy").unwrap_or_default() as u8;
+        // let ura = self.get_orbit_f64("accuracy").unwrap_or_default() as u8;
 
         let builder = MgaGalEphBuilder {
             msg_type: 0, // TODO
