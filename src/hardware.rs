@@ -21,8 +21,10 @@ use qc_traits::{html, Markup, QcHtmlReporting};
 pub struct Receiver {
     /// Receiver (hardware) model
     pub model: String,
+
     /// Receiver (hardware) identification info
     pub sn: String, // serial #
+
     /// Receiver embedded software info
     pub firmware: String, // firmware #
 }
