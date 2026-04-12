@@ -530,10 +530,10 @@ impl Header {
                 // <o blank field when no corrections applied
             } else if marker.contains("TIME OF FIRST OBS") {
                 let time_of_first_obs = Self::parse_time_of_obs(content)?;
-                observation = observation.with_timeof_first_obs(time_of_first_obs);
+                observation = observation.with_time_of_first_obs(time_of_first_obs);
             } else if marker.contains("TIME OF LAST OBS") {
                 let time_of_last_obs = Self::parse_time_of_obs(content)?;
-                observation = observation.with_timeof_last_obs(time_of_last_obs);
+                observation = observation.with_time_of_last_obs(time_of_last_obs);
             } else if marker.contains("TYPES OF OBS") {
                 // these observations can serve both Observation & Meteo RINEX
                 Self::parse_v2_observables(content, constellation, &mut meteo, &mut observation);

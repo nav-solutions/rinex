@@ -19,8 +19,8 @@ fn obs_v1_single_line_formatting() {
 
     let gps_codes = vec![l1.clone(), l1.clone(), l1.clone(), l1.clone()];
     let mut hd = HeaderFields::default()
-        .with_timeof_first_obs(Epoch::from_str("2020-01-01T00:00:00 GPST").unwrap())
-        .with_timeof_last_obs(Epoch::from_str("2020-01-01T23:30:00 GPST").unwrap());
+        .with_time_of_first_obs(Epoch::from_str("2020-01-01T00:00:00 GPST").unwrap())
+        .with_time_of_last_obs(Epoch::from_str("2020-01-01T23:30:00 GPST").unwrap());
 
     hd.codes.insert(gps, gps_codes);
 
@@ -80,8 +80,8 @@ fn obs_v1_lengthy_formatting() {
         l1.clone(),
     ];
     let mut hd = HeaderFields::default()
-        .with_timeof_first_obs(Epoch::from_str("2020-01-01T00:00:00 GPST").unwrap())
-        .with_timeof_last_obs(Epoch::from_str("2020-01-01T23:30:00 GPST").unwrap());
+        .with_time_of_first_obs(Epoch::from_str("2020-01-01T00:00:00 GPST").unwrap())
+        .with_time_of_last_obs(Epoch::from_str("2020-01-01T23:30:00 GPST").unwrap());
 
     hd.codes.insert(gps, gps_codes);
 
@@ -151,8 +151,8 @@ fn obs_v1_header_formatting() {
     ];
 
     let mut hd = HeaderFields::default()
-        .with_timeof_first_obs(Epoch::from_str("2020-01-01T00:00:00 GPST").unwrap())
-        .with_timeof_last_obs(Epoch::from_str("2020-01-01T23:30:00 GPST").unwrap());
+        .with_time_of_first_obs(Epoch::from_str("2020-01-01T00:00:00 GPST").unwrap())
+        .with_time_of_last_obs(Epoch::from_str("2020-01-01T23:30:00 GPST").unwrap());
 
     hd.codes.insert(gps, gps_codes);
 
@@ -272,8 +272,8 @@ fn obs_v3_header_formatting() {
     ];
 
     let mut hd = HeaderFields::default()
-        .with_timeof_first_obs(Epoch::from_str("2020-01-01T00:00:00 GPST").unwrap())
-        .with_timeof_last_obs(Epoch::from_str("2020-01-01T23:00:00 GPST").unwrap());
+        .with_time_of_first_obs(Epoch::from_str("2020-01-01T00:00:00 GPST").unwrap())
+        .with_time_of_last_obs(Epoch::from_str("2020-01-01T23:00:00 GPST").unwrap());
 
     hd.codes.insert(gps, gps_codes);
     hd.codes.insert(gal, gal_codes);
