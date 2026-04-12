@@ -174,9 +174,16 @@ impl Observations {
         let observables = &header.codes;
 
         // retrieve unique constellation list
+        // all geosat regrouped as undifferenced "SBAS"
         let constell_list = sv_list
             .iter()
-            .map(|sv| sv.constellation)
+            .map(|sv| {
+                if sv.constellation.is_sbas() {
+                    Constellation::SBAS
+                } else {
+                    sv.constellation
+                }
+            })
             .unique()
             .sorted()
             .collect::<Vec<_>>();
@@ -184,13 +191,10 @@ impl Observations {
         // encode new epoch
         self.format_epoch_v3(w, key, numsat)?;
 
-        // grouped by constellation: all SBAS grouped together;
+        // grouped by constellation,
         // then sorted by PRN number per system
-        for constell in constell_list
-            .iter()
-            .map(|c| if c.is_sbas() { Constellation::SBAS } else { *c })
-        {
-            for sv in sv_list.iter().filter(|sv| sv.constellation == constell) {
+        for constell in constell_list.iter() {
+            for sv in sv_list.iter().filter(|sv| sv.constellation == *constell) {
                 write!(w, "{:x}", sv)?;
 
                 // following header definitions
@@ -885,6 +889,19 @@ mod test {
 
         let content = buf.into_inner().unwrap().to_ascii_utf8();
 
-        assert_eq!(content, "> 2021 01 01 00 00  0.0000000  0 10\nG01         1.000  \nG02         1.000  \nR04         3.000  \nR08         3.000  \nE02         2.000  \nE04         2.000  \nS21         4.000  \nS33         4.000  \nS35         4.000  \nS21         4.000  \nS33         4.000  \nS35         4.000  \n");
+        assert_eq!(
+            content,
+            "> 2021 01 01 00 00  0.0000000  0 10
+G01         1.000  
+G02         1.000  
+R04         3.000  
+R08         3.000  
+E02         2.000  
+E04         2.000  
+S21         4.000  
+S33         4.000  
+S35         4.000  
+"
+        );
     }
 }
