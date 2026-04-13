@@ -12,9 +12,7 @@ impl Ephemeris {
     /// We support [Constellation::GPS],
     /// [Constellation::SBAS], [Constellation::Galileo] and [Constellation::Glonass].
     ///
-    /// ## Inputs
-    /// - now: usually the [Epoch] of message reception
-    pub fn from_binex(now: Epoch, message: EphemerisFrame) -> Option<(SV, Self)> {
+    pub fn from_binex(message: EphemerisFrame) -> Option<(SV, Self)> {
         match message {
             EphemerisFrame::GPS(serialized) => Some((
                 SV::new(Constellation::GPS, serialized.sv_prn),

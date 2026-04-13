@@ -4,7 +4,7 @@ use crate::prelude::Rinex;
 use crate::prelude::{Constellation, ParsingError};
 
 /// [Type] describes all supported [Rinex] formats.
-#[derive(Default, Copy, Clone, PartialEq, Debug)]
+#[derive(Default, Copy, Clone, PartialEq, Debug, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Type {
     /// Describes Observation Data (OBS),

@@ -127,6 +127,7 @@ impl Observations {
         const NEW_LINE_PADDING: &str = "                                ";
 
         if let Some(clock) = self.clock {
+            // TODO format clock data!
             write!(
                 w,
                 " {}  {} {:2}",
