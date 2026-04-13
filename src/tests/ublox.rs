@@ -40,7 +40,7 @@ fn esbcdnk_ephv3_to_ubx_mga() {
                                 PacketRef::MgaGpsEph(encoded) => {
                                     // run mirror OP
                                     let (decoded_sv, decoded_eph) =
-                                        Ephemeris::from_ubx_mga_gps(k.epoch, encoded);
+                                        Ephemeris::from_ubx_mga_gps(encoded);
 
                                     assert_eq!(decoded_sv, k.sv);
 
@@ -70,7 +70,7 @@ fn esbcdnk_ephv3_to_ubx_mga() {
                                 PacketRef::MgaGpsEph(encoded) => {
                                     // run mirror OP
                                     let (decoded_sv, decoded_eph) =
-                                        Ephemeris::from_ubx_mga_qzss(k.epoch, encoded);
+                                        Ephemeris::from_ubx_mga_qzss(encoded);
 
                                     assert_eq!(decoded_sv, k.sv);
 
@@ -100,7 +100,7 @@ fn esbcdnk_ephv3_to_ubx_mga() {
                                 PacketRef::MgaBdsEph(encoded) => {
                                     // run mirror OP
                                     let (decoded_sv, decoded_eph) =
-                                        Ephemeris::from_ubx_mga_bds(k.epoch, encoded);
+                                        Ephemeris::from_ubx_mga_bds(encoded);
 
                                     assert_eq!(decoded_sv, k.sv);
 
@@ -130,7 +130,7 @@ fn esbcdnk_ephv3_to_ubx_mga() {
                                 PacketRef::MgaGalEph(encoded) => {
                                     // run mirror OP
                                     let (decoded_sv, decoded_eph) =
-                                        Ephemeris::from_ubx_mga_gal(k.epoch, encoded);
+                                        Ephemeris::from_ubx_mga_gal(encoded);
 
                                     assert_eq!(decoded_sv, k.sv);
 

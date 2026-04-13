@@ -19,8 +19,8 @@ fn esbcdnk_ephv3_binex() {
             Constellation::GPS | Constellation::Galileo => {
                 if let Some(serialized) = ephemeris.to_binex(k.epoch, k.sv) {
                     // mirror
-                    let (decoded_sv, decoded) = Ephemeris::from_binex(k.epoch, serialized)
-                        .unwrap_or_else(|| {
+                    let (decoded_sv, decoded) =
+                        Ephemeris::from_binex(serialized).unwrap_or_else(|| {
                             panic!("Failed to decoded {}({}) BINEX frame", k.epoch, k.sv);
                         });
 
@@ -55,7 +55,7 @@ fn esbcdnk_ephv3_binex() {
                 if constellation.is_sbas() {
                     if let Some(serialized) = ephemeris.to_binex(k.epoch, k.sv) {
                         // mirror
-                        let (decoded_sv, decoded) = Ephemeris::from_binex(k.epoch, serialized)
+                        let (decoded_sv, decoded) = Ephemeris::from_binex(serialized)
                             .unwrap_or_else(|| {
                                 panic!("Failed to decoded {}({}) BINEX frame", k.epoch, k.sv);
                             });
