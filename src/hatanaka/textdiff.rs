@@ -1,11 +1,13 @@
 //! Y. Hatanaka lossless TextDiff algorithm
 
-/// [TextDiff] is a structure that implements the Text diff. algorithm
-/// designed by Y. Hatanaka, which is a lossless text compression algorithm.
+/// [TextDiff] implements Hatakana's text differencing scheme,
+/// which improves compression of text data.
+///
 /// [TextDiff] in its current form does not allow compressing & decompressing (back & forth)
 /// at the same time: you need two dedicated objects.
-/// This does not bother our application because it only operates in one way,
-/// but it is one aspect to keep in mind.
+///
+/// This is not a limitation to the CRX2RNX decompression or RNX2CRNX compression
+/// algorithm, because they only work one way.
 #[derive(Debug)]
 pub struct TextDiff {
     buffer: String,
