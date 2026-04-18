@@ -124,7 +124,7 @@ impl Header {
         let (major, minor) = (self.version.major, self.version.minor);
 
         match self.rinex_type {
-            Type::NavigationData => match self.constellation {
+            Type::Navigation => match self.constellation {
                 Some(Constellation::Glonass) => {
                     writeln!(
                         w,
@@ -165,7 +165,7 @@ impl Header {
                     return Err(FormattingError::UndefinedConstellation);
                 },
             },
-            Type::ObservationData => match self.constellation {
+            Type::Observation => match self.constellation {
                 Some(Constellation::Mixed) => {
                     writeln!(
                         w,
@@ -196,7 +196,7 @@ impl Header {
                     return Err(FormattingError::UndefinedConstellation);
                 },
             },
-            Type::MeteoData => {
+            Type::Meteo => {
                 writeln!(
                     w,
                     "{}",
@@ -206,7 +206,7 @@ impl Header {
                     )
                 )?;
             },
-            Type::ClockData => {
+            Type::Clock => {
                 writeln!(
                     w,
                     "{}",
@@ -216,7 +216,7 @@ impl Header {
                     )
                 )?;
             },
-            Type::AntennaData => {}, // TODO (ANTEX)
+            Type::Antenna => {}, // TODO (ANTEX)
         }
 
         Ok(())

@@ -50,7 +50,7 @@ mod constants;
 mod epoch;
 mod iterators;
 mod leap;
-mod linspace;
+// mod linspace;
 mod observable;
 mod sampling;
 
@@ -486,7 +486,7 @@ impl Rinex {
         let constellation = header.constellation;
 
         let mut filename = match rinextype {
-            RinexType::ObservationData | RinexType::MeteoData | RinexType::NavigationData => {
+            RinexType::Observation | RinexType::Meteo | RinexType::Navigation => {
                 let name = match custom {
                     Some(ref custom) => custom.name.clone(),
                     None => self.production.name.clone(),
@@ -515,15 +515,15 @@ impl Rinex {
                         },
                     };
                     let ext = match rinextype {
-                        RinexType::ObservationData => {
+                        RinexType::Observation => {
                             if is_crinex {
                                 'D'
                             } else {
                                 'O'
                             }
                         },
-                        RinexType::MeteoData => 'M',
-                        RinexType::NavigationData => match constellation {
+                        RinexType::Meteo => 'M',
+                        RinexType::Navigation => match constellation {
                             Some(Constellation::Glonass) => 'G',
                             _ => 'N',
                         },
@@ -629,7 +629,7 @@ impl Rinex {
 
                     // ffu only in OBS file names
                     let ffu = match rinextype {
-                        RinexType::ObservationData => Some(ffu),
+                        RinexType::Observation => Some(ffu),
                         _ => None,
                     };
 
@@ -652,9 +652,9 @@ impl Rinex {
                     };
 
                     let fmt = match rinextype {
-                        RinexType::ObservationData => "MO".to_string(),
-                        RinexType::MeteoData => "MM".to_string(),
-                        RinexType::NavigationData => match constellation {
+                        RinexType::Observation => "MO".to_string(),
+                        RinexType::Meteo => "MM".to_string(),
+                        RinexType::Navigation => match constellation {
                             Some(Constellation::Mixed) | None => "MN".to_string(),
                             Some(constell) => format!("M{:x}", constell),
                         },
@@ -716,7 +716,7 @@ impl Rinex {
         // - CLK RINEX: name of the local clock
         // - IONEX: agency
         match self.header.rinex_type {
-            RinexType::ClockData => match &self.header.clock {
+            RinexType::Clock => match &self.header.clock {
                 Some(clk) => match &clk.ref_clock {
                     Some(refclock) => attributes.name = refclock.to_string(),
                     _ => {
@@ -943,12 +943,12 @@ impl Rinex {
 
     /// Returns true if this is an ATX RINEX
     pub fn is_antex(&self) -> bool {
-        self.header.rinex_type == types::Type::AntennaData
+        self.header.rinex_type == types::Type::Antenna
     }
 
     /// Returns true if this is a CLOCK RINEX
     pub fn is_clock_rinex(&self) -> bool {
-        self.header.rinex_type == types::Type::ClockData
+        self.header.rinex_type == types::Type::Clock
     }
 
     /// Returns true if Differential Code Biases (DCBs)

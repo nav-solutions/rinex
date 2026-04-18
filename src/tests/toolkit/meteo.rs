@@ -68,7 +68,7 @@ pub fn generic_meteo_rinex_test(dut: &Rinex, version: &str, obs_csv: &str, _time
         dut,
         version,
         None,
-        RinexType::MeteoData,
+        RinexType::Meteo,
         //Some(time_frame), //TODO
         None,
     );

@@ -34,7 +34,7 @@ pub(crate) fn format(epoch: Epoch, t: Type, revision: u8) -> String {
     let (y, m, d, hh, mm, ss, nanos) = epoch_decompose(epoch);
 
     match t {
-        Type::ObservationData => {
+        Type::Observation => {
             if revision < 3 {
                 // old RINEX wants 2 digit YY field
                 let mut y = y - 2000;
@@ -65,7 +65,7 @@ pub(crate) fn format(epoch: Epoch, t: Type, revision: u8) -> String {
                 )
             }
         },
-        Type::NavigationData => {
+        Type::Navigation => {
             if revision < 3 {
                 // old RINEX wants 2 digit YY field
                 let mut y = y - 2000;
@@ -238,7 +238,7 @@ mod test {
         assert_eq!(ss, 0);
         assert_eq!(ns, 0);
         assert_eq!(e.time_scale, TimeScale::UTC);
-        assert_eq!(format(e, Type::NavigationData, 2), "20 12 31 23 45  0.0");
+        assert_eq!(format(e, Type::Navigation, 2), "20 12 31 23 45  0.0");
 
         let e = parse_utc("21  1  1 16 15  0.0");
         assert!(e.is_ok());
@@ -252,7 +252,7 @@ mod test {
         assert_eq!(ss, 0);
         assert_eq!(ns, 0);
         assert_eq!(e.time_scale, TimeScale::UTC);
-        assert_eq!(format(e, Type::NavigationData, 2), "21  1  1 16 15  0.0");
+        assert_eq!(format(e, Type::Navigation, 2), "21  1  1 16 15  0.0");
     }
 
     #[test]
@@ -263,7 +263,7 @@ mod test {
         let (_, _, _, _, _, ss, ns) = e.to_gregorian_utc();
         assert_eq!(ss, 0);
         assert_eq!(ns, 100_000_000);
-        assert_eq!(format(e, Type::NavigationData, 2), "20 12 31 23 45  0.1");
+        assert_eq!(format(e, Type::Navigation, 2), "20 12 31 23 45  0.1");
     }
 
     #[test]
@@ -280,7 +280,7 @@ mod test {
         assert_eq!(ss, 0);
         assert_eq!(ns, 0);
         assert_eq!(e.time_scale, TimeScale::UTC);
-        assert_eq!(format(e, Type::NavigationData, 3), "2021 01 01 00 00 00");
+        assert_eq!(format(e, Type::Navigation, 3), "2021 01 01 00 00 00");
 
         let e = parse_utc("2021 01 01 09 45 00 ");
         assert!(e.is_ok());
@@ -293,7 +293,7 @@ mod test {
         assert_eq!(mm, 45);
         assert_eq!(ss, 0);
         assert_eq!(ns, 0);
-        assert_eq!(format(e, Type::NavigationData, 3), "2021 01 01 09 45 00");
+        assert_eq!(format(e, Type::Navigation, 3), "2021 01 01 09 45 00");
 
         let e = parse_utc("2020 06 25 00 00 00");
         assert!(e.is_ok());
@@ -306,7 +306,7 @@ mod test {
         assert_eq!(mm, 00);
         assert_eq!(ss, 0);
         assert_eq!(ns, 0);
-        assert_eq!(format(e, Type::NavigationData, 3), "2020 06 25 00 00 00");
+        assert_eq!(format(e, Type::Navigation, 3), "2020 06 25 00 00 00");
 
         let e = parse_utc("2020 06 25 09 49 04");
         assert!(e.is_ok());
@@ -319,7 +319,7 @@ mod test {
         assert_eq!(mm, 49);
         assert_eq!(ss, 04);
         assert_eq!(ns, 0);
-        assert_eq!(format(e, Type::NavigationData, 3), "2020 06 25 09 49 04");
+        assert_eq!(format(e, Type::Navigation, 3), "2020 06 25 09 49 04");
     }
 
     #[test]
@@ -336,10 +336,7 @@ mod test {
         assert_eq!(ss, 0);
         assert_eq!(ns, 0);
         assert_eq!(e.time_scale, TimeScale::UTC);
-        assert_eq!(
-            format(e, Type::ObservationData, 2),
-            "21 12 21  0  0  0.0000000"
-        );
+        assert_eq!(format(e, Type::Observation, 2), "21 12 21  0  0  0.0000000");
 
         let e = parse_utc(" 21 12 21  0  0 30.0000000");
         assert!(e.is_ok());
@@ -352,10 +349,7 @@ mod test {
         assert_eq!(mm, 00);
         assert_eq!(ss, 30);
         assert_eq!(ns, 0);
-        assert_eq!(
-            format(e, Type::ObservationData, 2),
-            "21 12 21  0  0 30.0000000"
-        );
+        assert_eq!(format(e, Type::Observation, 2), "21 12 21  0  0 30.0000000");
 
         let e = parse_utc(" 21  1  1  0  0  0.0000000");
         assert!(e.is_ok());
@@ -368,10 +362,7 @@ mod test {
         assert_eq!(mm, 00);
         assert_eq!(ss, 0);
         assert_eq!(ns, 0);
-        assert_eq!(
-            format(e, Type::ObservationData, 2),
-            "21  1  1  0  0  0.0000000"
-        );
+        assert_eq!(format(e, Type::Observation, 2), "21  1  1  0  0  0.0000000");
 
         let e = parse_utc(" 21  1  1  0  7 30.0000000");
         assert!(e.is_ok());
@@ -384,10 +375,7 @@ mod test {
         assert_eq!(mm, 7);
         assert_eq!(ss, 30);
         assert_eq!(ns, 0);
-        assert_eq!(
-            format(e, Type::ObservationData, 2),
-            "21  1  1  0  7 30.0000000"
-        );
+        assert_eq!(format(e, Type::Observation, 2), "21  1  1  0  7 30.0000000");
     }
 
     #[test]
@@ -404,7 +392,7 @@ mod test {
         assert_eq!(ss, 00);
         assert_eq!(ns, 0);
         assert_eq!(
-            format(e, Type::ObservationData, 3),
+            format(e, Type::Observation, 3),
             "2022 01 09 00 00  0.0000000"
         );
 
@@ -420,7 +408,7 @@ mod test {
         assert_eq!(ss, 30);
         assert_eq!(ns, 0);
         assert_eq!(
-            format(e, Type::ObservationData, 3),
+            format(e, Type::Observation, 3),
             "2022 01 09 00 13 30.0000000"
         );
 
@@ -436,7 +424,7 @@ mod test {
         assert_eq!(ss, 30);
         assert_eq!(ns, 0);
         assert_eq!(
-            format(e, Type::ObservationData, 3),
+            format(e, Type::Observation, 3),
             "2022 03 04 00 52 30.0000000"
         );
 
@@ -452,7 +440,7 @@ mod test {
         assert_eq!(ss, 30);
         assert_eq!(ns, 0);
         assert_eq!(
-            format(e, Type::ObservationData, 3),
+            format(e, Type::Observation, 3),
             "2022 03 04 00 02 30.0000000"
         );
     }
@@ -465,10 +453,7 @@ mod test {
         let (_, _, _, _, _, ss, ns) = e.to_gregorian_utc();
         assert_eq!(ss, 39);
         assert_eq!(ns, 123_456_700);
-        assert_eq!(
-            format(e, Type::ObservationData, 2),
-            "21  1  1  0  7 39.1234567"
-        );
+        assert_eq!(format(e, Type::Observation, 2), "21  1  1  0  7 39.1234567");
     }
 
     #[test]
@@ -480,7 +465,7 @@ mod test {
         assert_eq!(ss, 0);
         assert_eq!(ns, 100_000_000);
         assert_eq!(
-            format(e, Type::ObservationData, 3),
+            format(e, Type::Observation, 3),
             "2022 01 09 00 00  0.1000000"
         );
 
@@ -491,7 +476,7 @@ mod test {
         assert_eq!(ss, 0);
         assert_eq!(ns, 123_400_000);
         assert_eq!(
-            format(e, Type::ObservationData, 3),
+            format(e, Type::Observation, 3),
             "2022 01 09 00 00  0.1234000"
         );
 
@@ -502,7 +487,7 @@ mod test {
         assert_eq!(ss, 8);
         assert_eq!(ns, 765_432_100);
         assert_eq!(
-            format(e, Type::ObservationData, 3),
+            format(e, Type::Observation, 3),
             "2022 01 09 00 00  8.7654321"
         );
     }
@@ -520,7 +505,7 @@ mod test {
         assert_eq!(mm, 00);
         assert_eq!(ss, 00);
         assert_eq!(ns, 0);
-        assert_eq!(format(e, Type::MeteoData, 2), "22  1  4  0  0  0");
+        assert_eq!(format(e, Type::Meteo, 2), "22  1  4  0  0  0");
     }
 
     #[test]

@@ -7,7 +7,7 @@ mod feature; // feature dependent, high level methods
 use std::collections::btree_map::{Iter, IterMut, Keys};
 
 impl Rinex {
-    /// Returns true if this [Rinex] format is [RinexType::MeteoData].
+    /// Returns true if this [Rinex] format is [RinexType::Meteo].
     /// ```
     /// use rinex::prelude::Rinex;
     /// let rinex = Rinex::from_file("data/MET/V2/abvi0010.15m")
@@ -15,7 +15,7 @@ impl Rinex {
     /// assert!(rinex.is_meteo_rinex());
     /// ```
     pub fn is_meteo_rinex(&self) -> bool {
-        self.header.rinex_type == RinexType::MeteoData
+        self.header.rinex_type == RinexType::Meteo
     }
 
     /// Returns [MeteoKey] Iterator.

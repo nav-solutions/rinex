@@ -62,8 +62,10 @@ bitflags! {
 pub struct ObservationData {
     /// physical measurement
     pub obs: f64,
+
     /// Lock loss indicator
     pub lli: Option<LliFlags>,
+
     /// Signal strength indicator
     pub snr: Option<SNR>,
 }

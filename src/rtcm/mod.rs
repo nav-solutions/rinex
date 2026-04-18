@@ -59,7 +59,7 @@ impl Rinex {
     /// }
     pub fn rnx2rtcm<'a>(&'a self) -> Option<RNX2RTCM<'a>> {
         let type_dependent = match self.header.rinex_type {
-            RinexType::NavigationData => TypeDependentStreamer::NAV(NavStreamer::new(self)),
+            RinexType::Navigation => TypeDependentStreamer::NAV(NavStreamer::new(self)),
             _ => {
                 return None;
             },

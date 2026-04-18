@@ -173,7 +173,7 @@ impl Default for Header {
     fn default() -> Self {
         Self {
             version: Version::new(4, 0),
-            rinex_type: Type::ObservationData,
+            rinex_type: Type::Observation,
             constellation: Some(Constellation::Mixed),
             program: Some(format!(
                 "rs-rinex v{}",
@@ -222,21 +222,21 @@ impl Header {
     /// Builds a basic [Header] to describe a Multi-GNSS Navigation RINEX
     pub fn basic_nav() -> Self {
         Self::default()
-            .with_type(Type::NavigationData)
+            .with_type(Type::Navigation)
             .with_constellation(Constellation::Mixed)
     }
 
     /// Builds a basic [Header] to describe a Multi-GNSS Observation RINEX
     pub fn basic_obs() -> Self {
         Self::default()
-            .with_type(Type::ObservationData)
+            .with_type(Type::Observation)
             .with_constellation(Constellation::Mixed)
     }
 
     /// Builds a basic [Header] to describe a Multi-GNSS Compressed Observation RINEX
     pub fn basic_crinex() -> Self {
         Self::default()
-            .with_type(Type::ObservationData)
+            .with_type(Type::Observation)
             .with_constellation(Constellation::Mixed)
             .with_observation_fields(ObservationHeader::default().with_crinex(CRINEX::default()))
     }

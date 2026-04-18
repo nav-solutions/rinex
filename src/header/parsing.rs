@@ -204,7 +204,7 @@ impl Header {
                 //  1. NAV SPECIAL CASE
                 //  2. OTHER
                 match rinex_type {
-                    Type::NavigationData => {
+                    Type::Navigation => {
                         if type_str.contains("GLONASS") {
                             // old GLONASS NAV : no constellation field
                             constellation = Some(Constellation::Glonass);
@@ -226,7 +226,7 @@ impl Header {
                             }
                         }
                     },
-                    Type::MeteoData => {
+                    Type::Meteo => {
                         // no constellation associated to them
                     },
                     _ => {
@@ -522,7 +522,7 @@ impl Header {
             } else if marker.contains("SYS / PHASE SHIFT") {
                 //TODO
             } else if marker.contains("SYS / PVCS APPLIED") {
-                // RINEX::ClockData specific
+                // RINEX::Clock specific
                 // + satellite system (G/R/E/C/I/J/S)
                 // + programe name to apply Phase Center Variation
                 // + source of corrections (url)
@@ -774,35 +774,35 @@ impl Header {
             sv_antenna,
             // RINEX specific
             obs: {
-                if rinex_type == Type::ObservationData {
+                if rinex_type == Type::Observation {
                     Some(observation)
                 } else {
                     None
                 }
             },
             nav: {
-                if rinex_type == Type::NavigationData {
+                if rinex_type == Type::Navigation {
                     Some(nav)
                 } else {
                     None
                 }
             },
             meteo: {
-                if rinex_type == Type::MeteoData {
+                if rinex_type == Type::Meteo {
                     Some(meteo)
                 } else {
                     None
                 }
             },
             clock: {
-                if rinex_type == Type::ClockData {
+                if rinex_type == Type::Clock {
                     Some(clock)
                 } else {
                     None
                 }
             },
             antex: {
-                if rinex_type == Type::AntennaData {
+                if rinex_type == Type::Antenna {
                     Some(antex)
                 } else {
                     None

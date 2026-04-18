@@ -11,7 +11,7 @@ pub(crate) mod feature; // feature dependent, high level methods
 use std::collections::btree_map::{Iter, IterMut, Keys};
 
 impl Rinex {
-    /// Returns true if [Rinex] format is [RinexType::ObservationData].
+    /// Returns true if [Rinex] format is [RinexType::Observation].
     /// ```
     /// use rinex::prelude::Rinex;
     /// let rinex = Rinex::from_file("data/OBS/V3/DUTH0630.22O")
@@ -19,7 +19,7 @@ impl Rinex {
     /// assert!(rinex.is_observation_rinex());
     /// ```
     pub fn is_observation_rinex(&self) -> bool {
-        self.header.rinex_type == RinexType::ObservationData
+        self.header.rinex_type == RinexType::Observation
     }
 
     /// Returns [ObsKey] Iterator.

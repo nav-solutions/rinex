@@ -35,7 +35,9 @@ To contribute to either of our project or join our community, you way
 - Supports Observation, Navigation, Meteo and Clock RINEX,
 other RINEX-like formats have their own parser:
   - [IONEX (Ionosphere Maps)](https://github.com/nav-solutions/ionex)
+  - [ANTEX (Antenna Calibration)](https://github.com/nav-solutions/antex)
   - [DORIS (special observations)](https://github.com/nav-solutions/doris)
+  - [SINEX (daily corrections) is work in progress](https://github.com/nav-solutions/sinex)
 - Many pre-processing algorithms including Filter Designer
 - Several file operations: merging, splitting, time binning (batch)
 - Several conversion methods (SERDES operations):
@@ -117,9 +119,9 @@ RINEX formats & applications
 |  CRINEX  (Compressed OBS)  | :heavy_check_mark:| :heavy_check_mark:  | Phase, Pseudo Range, Doppler, SSI             | [ObsKey](https://docs.rs/rinex/latest/rinex/observation/struct.ObsKey.html)      | GNSS (any) |
 |  Meteorological data (MET) | :heavy_check_mark:| :heavy_check_mark:  | Meteo sensors data (Temperature, Moisture..)  | [MeteoKey](https://docs.rs/rinex/latest/rinex/meteo/struct.MeteoKey.html)        | UTC | 
 |  Clocks (CLK)              | :heavy_check_mark:| :construction:      | Precise temporal states                       | [ClockKey](https://docs.rs/rinex/latest/rinex/clock/record/struct.ClockKey.html) | GNSS (any) |
-|  Antenna (ATX)             | :heavy_check_mark:| :construction:      | Precise RX/SV Antenna calibration | `antex::Antenna` | :heavy_minus_sign: |
-|  Ionosphere Maps  (IONEX)  | [Moved to dedicated parser](https://github.com/nav-solutions/ionex) |  :heavy_check_mark:     | Ionosphere Electron density | [Record Key](https://docs.rs/ionex/latest/ionex/key/struct.Key.html) | UTC |
-|  DORIS RINEX               | [Moved to dedicated parser](https://github.com/nav-solutions/doris) |  :heavy_check_mark:     | Temperature, Moisture, Pseudo Range and Phase observations | [Record Key](https://docs.rs/doris-rs/latest/doris_rs/record/struct.Key.html) | TAI / "DORIS" timescale |
+|  ANTEX (ATX)               | [Moved to dedicated parser](https://github.com/nav-solutions/antex) :heavy_check_mark | - | Database for precise Ground/Space Antenna calibrations | [Record Key](https://docs.rs/antex-rs/latest) |
+|  Ionosphere Maps  (IONEX)  | [Moved to dedicated parser](https://github.com/nav-solutions/ionex) :heavy_check_mark: | -  | Ionosphere Electron density | [Record Key](https://docs.rs/ionex/latest/ionex/key/struct.Key.html) | UTC |
+|  DORIS RINEX               | [Moved to dedicated parser](https://github.com/nav-solutions/doris) :heavy_check_mark: | - | Temperature, Moisture, Pseudo Range and Phase observations | [Record Key](https://docs.rs/doris-rs/latest/doris_rs/record/struct.Key.html) | TAI / "DORIS" timescale |
 
 Contributions
 =============

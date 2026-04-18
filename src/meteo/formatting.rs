@@ -23,7 +23,7 @@ pub fn format<W: Write>(
         write!(
             w,
             " {}",
-            format_epoch(epoch, RinexType::MeteoData, header.version.major)
+            format_epoch(epoch, RinexType::Meteo, header.version.major)
         )?;
 
         // follow header definitions

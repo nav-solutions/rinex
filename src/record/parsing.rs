@@ -211,14 +211,14 @@ impl Record {
                     //println!("***MATCH***");
 
                     match &header.rinex_type {
-                        Type::NavigationData => {
+                        Type::Navigation => {
                             if let Ok((k, v)) = parse_nav_epoch(&header, &epoch_buf) {
                                 nav_rec.insert(k, v);
                                 // println!("nav_epoch={:?}", k); // DEBUG
                                 comment_ts = k.epoch; // for comments storage
                             }
                         },
-                        Type::ObservationData => {
+                        Type::Observation => {
                             match parse_observation_epoch(
                                 header,
                                 &epoch_buf,
@@ -241,7 +241,7 @@ impl Record {
                             observations.signals.clear(); // reset for next parsing (single alloc)
                         },
 
-                        Type::MeteoData => {
+                        Type::Meteo => {
                             if let Ok(items) = parse_meteo_epoch(header, &epoch_buf) {
                                 for (k, v) in items.iter() {
                                     met_rec.insert(k.clone(), *v);
@@ -250,7 +250,7 @@ impl Record {
                             }
                         },
 
-                        Type::ClockData => {
+                        Type::Clock => {
                             if let Ok((epoch, key, profile)) =
                                 parse_clock_epoch(header.version, &epoch_buf, clk_ts)
                             {
@@ -266,7 +266,7 @@ impl Record {
                             }
                         },
 
-                        Type::AntennaData => {
+                        Type::Antenna => {
                             if let Ok((antenna, content)) = parse_antex_antenna(&epoch_buf) {
                                 atx_rec.push((antenna, content));
                             }
@@ -292,11 +292,11 @@ impl Record {
 
         // wrap content and exit
         let record = match &header.rinex_type {
-            Type::AntennaData => Record::AntexRecord(atx_rec),
-            Type::ClockData => Record::ClockRecord(clk_rec),
-            Type::MeteoData => Record::MeteoRecord(met_rec),
-            Type::NavigationData => Record::NavRecord(nav_rec),
-            Type::ObservationData => Record::ObsRecord(obs_rec),
+            Type::Antenna => Record::AntexRecord(atx_rec),
+            Type::Clock => Record::ClockRecord(clk_rec),
+            Type::Meteo => Record::MeteoRecord(met_rec),
+            Type::Navigation => Record::NavRecord(nav_rec),
+            Type::Observation => Record::ObsRecord(obs_rec),
         };
         Ok((record, comments))
     }
@@ -306,11 +306,11 @@ impl Record {
             return false;
         }
         match &header.rinex_type {
-            Type::AntennaData => is_new_antex_epoch(line),
-            Type::ClockData => is_new_clock_epoch(line),
-            Type::NavigationData => is_new_nav_epoch(line, header.version),
-            Type::ObservationData => is_new_observation_epoch(line, header.version),
-            Type::MeteoData => is_new_meteo_epoch(line, header.version),
+            Type::Antenna => is_new_antex_epoch(line),
+            Type::Clock => is_new_clock_epoch(line),
+            Type::Navigation => is_new_nav_epoch(line, header.version),
+            Type::Observation => is_new_observation_epoch(line, header.version),
+            Type::Meteo => is_new_meteo_epoch(line, header.version),
         }
     }
 }

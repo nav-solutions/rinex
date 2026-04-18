@@ -22,9 +22,9 @@ use std::collections::btree_map::Keys;
 use super::IonosphereModel;
 
 impl Rinex {
-    /// Returns true if this [Rinex] is [RinexType::NavigationData].
+    /// Returns true if this [Rinex] is [RinexType::Navigation].
     pub fn is_navigation_rinex(&self) -> bool {
-        self.header.rinex_type == RinexType::NavigationData
+        self.header.rinex_type == RinexType::Navigation
     }
 
     /// [NavKey]s [Iterator]

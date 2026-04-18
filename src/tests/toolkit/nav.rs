@@ -50,7 +50,7 @@ pub fn generic_test(
         dut,
         version,
         Some(header_constellation),
-        RinexType::NavigationData,
+        RinexType::Navigation,
         time_frame,
     );
 

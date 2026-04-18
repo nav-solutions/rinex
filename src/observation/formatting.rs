@@ -131,7 +131,7 @@ impl Observations {
             write!(
                 w,
                 " {}  {} {:2}",
-                epoch_format(key.epoch, RinexType::ObservationData, 2),
+                epoch_format(key.epoch, RinexType::Observation, 2),
                 key.flag,
                 numsat,
             )?;
@@ -139,7 +139,7 @@ impl Observations {
             write!(
                 w,
                 " {}  {} {:2}",
-                epoch_format(key.epoch, RinexType::ObservationData, 2),
+                epoch_format(key.epoch, RinexType::Observation, 2),
                 key.flag,
                 numsat,
             )?;
@@ -269,7 +269,7 @@ impl Observations {
             writeln!(
                 w,
                 "> {}  {} {:2}  {:13.4}",
-                epoch_format(key.epoch, RinexType::ObservationData, 3),
+                epoch_format(key.epoch, RinexType::Observation, 3),
                 key.flag,
                 numsat,
                 clock.offset_s,
@@ -278,7 +278,7 @@ impl Observations {
             writeln!(
                 w,
                 "> {}  {} {:2}",
-                epoch_format(key.epoch, RinexType::ObservationData, 3),
+                epoch_format(key.epoch, RinexType::Observation, 3),
                 key.flag,
                 numsat,
             )?;

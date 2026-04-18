@@ -7,54 +7,72 @@ use crate::prelude::{Constellation, ParsingError};
 #[derive(Default, Copy, Clone, PartialEq, Debug, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Type {
-    /// Describes Observation Data (OBS),
-    /// Phase & Pseudo range measurements
+    /// Observation RINEX ("Observation Data") describes
+    /// signal observations and measurements. These files
+    /// carry the raw measurements that the navigation process requires.
     #[default]
-    ObservationData,
+    Observation,
 
-    /// Describes Navigation Data (NAV)
-    /// Ephemeris data, and other possible
-    /// modern declinations
-    NavigationData,
+    /// Navigation RINEX ("Navigation Data") describes
+    /// data (messages) broadcasted by satellites over radio.
+    /// This is why it is oftentimes referred to as "Broadcast" navigation.
+    /// This contains all data required by the navigation process:
+    /// - Ephemeris to describe the state of each satellite
+    /// - Description of the timescales
+    /// - Description of some of the biases like
+    Navigation,
 
-    /// Describes Meteorological data (MET)
-    MeteoData,
+    /// Meteo RINEX ("Meteo Data") describes meteo sensor measurements
+    /// specifically. They can be used to enhance a possible
+    /// environmental bias model by real field data.
+    Meteo,
 
-    /// Clock Data (CLK)
-    ClockData,
+    /// Clock RINEX ("Clock Data") describe the state of ground
+    /// or satellite clocks precisely.
+    Clock,
 
-    /// Antenna Data (ATX or Antex) special RINEX format,
-    /// contains sets of Antenna characterization coefficients.
-    /// No database is furnished by this lib (way too big).
-    /// Users interested in such calibrations / conversions / calculations,
-    /// should use this parser as a mean to extract the antenna coefficients solely
-    AntennaData,
+    /// Antenna RINEX (or ANTEX) are special RINEX and serve
+    /// as a database to describe and compensate antenna characteristics precisely.
+    Antenna,
 }
 
 impl std::fmt::Display for Type {
+    /// Formats this [Type] in a readable fashion
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::ObservationData => write!(fmt, "OBS DATA"),
-            Self::NavigationData => write!(fmt, "NAVIGATION DATA"),
-            Self::MeteoData => write!(fmt, "METEO DATA"),
-            Self::ClockData => write!(fmt, "CLOCK DATA"),
-            Self::AntennaData => write!(fmt, "ANTEX"),
+            Self::Observation => write!(fmt, "Signal Observations"),
+            Self::Navigation => write!(fmt, "Navigation Messages"),
+            Self::Meteo => write!(fmt, "Meteo observations"),
+            Self::Clock => write!(fmt, "Clock data"),
+            Self::Antenna => write!(fmt, "Antenna database"),
         }
     }
 }
 
-impl Type {
-    /// Converts [Type] to standard descriptor
-    pub fn to_standard_string(&self, constellation: Option<Constellation>) -> String {
-        match *self {
-            Self::ObservationData => String::from("OBSERVATION DATA"),
-            Self::NavigationData => match constellation {
-                Some(Constellation::Glonass) => String::from("Glonass NAV"),
-                _ => String::from("NAV DATA"),
-            },
-            Self::MeteoData => String::from("METEOROLOGICAL DATA"),
-            Self::ClockData => String::from("CLOCK DATA"),
-            Self::AntennaData => String::from("ANTEX"),
+impl std::fmt::UpperHex for Type {
+    /// Formats this [Type] like in a RINEX Header
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Observation => write!(f, "OBSERVATION DATA"),
+            Self::Navigation => write!(f, "NAVIGATION DATA"),
+            Self::Meteo => write!(f, "METEOROLOGICAL DATA"),
+            Self::Clock => write!(f, "CLOCK DATA"),
+            Self::Antenna => write!(f, "ANTEX"),
+        }
+    }
+}
+
+impl std::fmt::LowerHex for Type {
+    /// Formats this [Type] in a shortened (3 letter) fashion
+    /// but similar to a RINEX header. For example, "OBS" for Observation data,
+    /// or "NAV" for navigation data.
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Observation => write!(f, "OBS"),
+            Self::Navigation => write!(f, "NAV"),
+            Self::Meteo => write!(f, "MET"),
+            Self::Clock => write!(f, "CLK"),
+            Self::Antenna => write!(f, "ATX"),
         }
     }
 }
@@ -63,16 +81,17 @@ impl std::str::FromStr for Type {
     type Err = ParsingError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = s.to_lowercase();
+
         if s.eq("navigation data") || s.contains("nav data") {
-            Ok(Self::NavigationData)
+            Ok(Self::Navigation)
         } else if s.eq("observation data") {
-            Ok(Self::ObservationData)
+            Ok(Self::Observation)
         } else if s.eq("meteorological data") {
-            Ok(Self::MeteoData)
+            Ok(Self::Meteo)
         } else if s.eq("clock data") || s.eq("c") {
-            Ok(Self::ClockData)
+            Ok(Self::Clock)
         } else if s.eq("antex") {
-            Ok(Self::AntennaData)
+            Ok(Self::Antenna)
         } else {
             Err(ParsingError::TypeParsing)
         }
