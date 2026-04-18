@@ -7,11 +7,13 @@ use crate::{
 
 use std::io::{BufRead, BufReader, Lines, Read};
 
-/// [DecompressorIO] is a [Decompressor] implementation that works directly
-/// on any [Read]ble I/O interface. Use it if your application to decompress
-/// CRINEX to parsable RINEX efficiently. Refer to [Decompressor] for its
-/// limitations. It implements the same internal parameters as the historical
-/// CRX2RNX tool.
+/// [DecompressorIO] emplements [DecompressorExpert] internally and works
+/// directly on any [Read]able I/O interface.
+///
+/// Use it if your application to decompress CRINEX to readable RINEX efficiently.
+/// Refer to [Decompressor] for more information on the algorithm and the limitations.
+/// The historical CRX2RNX tool uses M=5 as the maximal compression order to ever be supported:
+/// this implementation uses the same setup.
 pub type DecompressorIO<R> = DecompressorExpertIO<5, R>;
 
 /// Unlike [DecompressorIO], [DecompressorExpertIO] is not limited in the decompression

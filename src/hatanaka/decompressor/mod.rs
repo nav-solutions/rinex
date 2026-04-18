@@ -100,12 +100,19 @@ impl State {
     }
 }
 
-/// [DecompressorExpert] gives you full control over the maximal compression ratio.
-/// When decoding, we adapt to the compression ratio applied when the stream was encoded.
-/// RNX2CRX is historically limited to M<=3 while 5 is said to be the optimal.
-/// With [DecompressorExpert] you can support any value.
-/// Keep in mind that CRINEX is not a lossless compression for signal observations.
-/// The higher the compression order, the larger the error over the signal observations.
+/// [DecompressorExpert] is a structure to decompress CRINEX files.
+///
+/// The CRINEX file format supports mixing levels of compression in the same file, in
+/// anticipation of a clever compressor that adapts the compression level to the data.
+///
+/// The actual diff-order is read from the file; as
+/// long as it does not exceed M in this implementation, it will be decompressed correctly.
+///
+/// The sole member `M` is inherited from [NumDiff] and controls the maximum diff-order
+/// for decompressing numerical data.
+///
+/// The historical RNX2CRX program and our implementation only use a level of 3.
+/// This structure supports any M integer number.
 pub struct DecompressorExpert<const M: usize> {
     /// Whether this is a V3 parser or not
     v3: bool,

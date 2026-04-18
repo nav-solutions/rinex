@@ -1,17 +1,25 @@
-//! Y. Hatanaka lossy Numerical compression algorithm
+//! Y. Hatanaka lossless numerical compression algorithm
 
-/// [NumDiff] is dedicated to numerical (de-)compression, following
-/// the algorithm developped by Y. Hatanaka. This compression
-/// is not lossless: the more efficient the data compression, the bigger the error.
-/// M specifies the maximal compression to ever be supported by the object.
-/// The compression level may vary freely during the object's lifetime, but exceeding M
-/// will cause a panic. Note that m = 5 was determined as best compromise.
-/// [NumDiff] does not support M>6!! it will panic in higher orders.
-/// Set M = 6 in your application (when building the object) and you'll be fine.
-/// Note that m=3 seems to be hardcoded in the historical RNX2CRX program.
-/// If you want to produce compatible data, you should respect that.
-/// Note that we support m<=(M=6), therefore if you remain within our application,
-/// you can use higher compression order.
+/// This module implements the Hatanaka scheme for numerical (de)-compression.
+/// Values are multiplied by a factor of 10^N (N is the number of decimals in the
+/// original data) to turn them into integers.
+/// These integers are then put through a higher-order delta-compression scheme.
+///
+/// There are two tunable parameters:
+/// - M: the maximum order accepted by the decompressor. The historical CRX2RNX
+///   program supports M=5, but we support M=6.
+/// - level (m): the actual order used for compression. It must be <= M. The
+///   historical RNX2CRX program uses m=3, which is a good choice for 1-30s
+///   sampling rates.
+///
+/// A higher m does not necessarily mean better compression, since at a high-enough
+/// level random noise dominates over any differential trend.
+///
+/// If you want to produce compatible data, you should respect M = 5.
+/// If your remain within our application, you can use higher compression order
+/// (m <= M = 6).
+///
+/// Currently compressor.rs uses level = 3 ([CompressorExpert::format()]).
 #[derive(Debug, Clone)]
 pub struct NumDiff<const M: usize> {
     /// iteration counter
