@@ -115,9 +115,6 @@ impl std::fmt::Display for Carrier {
             Self::B3 => write!(f, "B3"),
             Self::B3a => write!(f, "B3a"),
             Self::S => write!(f, "S"),
-            // DORIS
-            Self::S1 => write!(f, "S1"),
-            Self::U2 => write!(f, "U2"),
         }
     }
 }
@@ -176,11 +173,6 @@ impl std::str::FromStr for Carrier {
             Ok(Self::B3)
         } else if content.eq("B3A") {
             Ok(Self::B3a)
-        // DORIS
-        } else if content.eq("S1") {
-            Ok(Self::S1)
-        } else if content.eq("U2") {
-            Ok(Self::U2)
         } else {
             Err(ParsingError::ObservableParsing)
         }
@@ -213,8 +205,6 @@ impl Carrier {
             Self::G2(None) => 1246.060_f64,
             Self::G2(Some(c)) => 1246.060_f64 + (*c as f64 * 7.0 / 16.0),
             Self::G3 => 1202.025_f64,
-            Self::S1 => 2036.250,
-            Self::U2 => 401.250,
         }
     }
 
@@ -273,8 +263,6 @@ impl Carrier {
                 todo!("B2 bandwidth is not known to this day")
             },
             Self::B3 | Self::B3a => todo!("B3 bandwidth is not known to this day"),
-            Self::S1 => panic!("DORIS signal bandwidth"),
-            Self::U2 => panic!("DORIS signal bandwidth"),
         }
     }
 
