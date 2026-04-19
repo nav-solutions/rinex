@@ -1,4 +1,4 @@
-//! RINEX compression module
+//! Compression (RNX2CRX) module
 
 use crate::{
     epoch::epoch_decompose as epoch_decomposition,

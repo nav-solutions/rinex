@@ -72,11 +72,4 @@ pub enum ObsRINEXParsingError {
     /// the parser proposed more than 3 UTF-8 caracters to be parsed.
     #[error("Incorrect Observable")]
     ObservableSizeError,
-
-    /// Invalid or corrupt Observation RINEX "Observable".
-    /// We support all valid Observables:
-    /// [https://docs.rs/rinex/latest/rinex/prelude/enum.Observable.html].
-    /// This is raised by a corruption in the text file.
-    #[error("Invalid Observable")]
-    IncorrectObservable,
 }

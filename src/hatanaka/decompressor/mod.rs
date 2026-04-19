@@ -1,6 +1,6 @@
 //! CRINEX decompression module
 use crate::{
-    hatanaka::{Error, NumDiff, TextDiff},
+    hatanaka::{errors::CRX2RNXError, NumDiff, TextDiff},
     prelude::{Constellation, Observable, SV},
 };
 
@@ -207,52 +207,87 @@ impl<const M: usize> DecompressorExpert<M> {
     }
 
     /// Tries to return next satellite from epoch descriptor.
-    fn next_satellite(&self) -> Option<SV> {
+    fn next_satellite(&self) -> Result<SV, CRX2RNXError> {
         let start = Self::sv_slice_start(self.v3, self.sv_ptr);
         let end = (start + 3).min(self.epoch_desc_len);
 
         let content = &self.epoch_descriptor[start..end].trim();
 
-        // satellite parsing
+        // satellite identification
         if let Ok(sv) = SV::from_str(content) {
-            Some(sv)
+            Ok(sv)
         } else {
-            // in old RINEX, single satellite system may omit the constellation,
-            // we need to parse the digits and rely on the header specs
+            // In old RINEX, files with a unique satellite system
+            // may omit the constellation in the description.
+            // We need to tolerate the missing constellation, rely
+            // on the description previously found in the Header,
+            // and still parse the correct PRN digits.
             if !self.v3 {
                 match self.constellation {
-                    Constellation::Mixed => None,
+                    Constellation::Mixed => {
+                        // This combination is illegal:
+                        // constellation must be explicitly defined in CRINEX1
+                        Err(CRX2RNXError::IncorrectCRINEX1GnssHeader)
+                    },
                     constellation => {
-                        // PRN# parsing attempt
-                        if let Ok(prn) = &self.epoch_descriptor[start..end].trim().parse::<u8>() {
-                            Some(SV {
-                                prn: *prn,
-                                constellation,
-                            })
-                        } else {
-                            None
-                        }
+                        // PRN parsing must always pass
+                        // TODO:
+                        // why is there not a +1 here on the start index
+                        // since we tolerate a missing constellation
+                        #[cfg(feature = "log")]
+                        let prn = &self.epoch_descriptor[start..end]
+                            .trim()
+                            .parse::<u8>()
+                            .map_err(|e| {
+                                error!("corrupt satellite prn number: {}", e);
+                                CRX2RNXError::SatellitePrnIntegerParsing
+                            })?;
+
+                        #[cfg(not(feature = "log"))]
+                        let prn = &self.epoch_descriptor[start..end]
+                            .trim()
+                            .parse::<u8>()
+                            .map_err(|_| CRX2RNXError::SallitePrnIntegerParsing)?;
+
+                        Ok(SV {
+                            prn: *prn,
+                            constellation,
+                        })
                     },
                 }
             } else {
-                None
+                // CRINEX3 while satellite identification did not pass
+                #[cfg(feature = "log")]
+                error!("incorrect CRINEX3 satellite: \"{}\"", content);
+                Err(CRX2RNXError::InvalidCRINEX3Satellite)
             }
         }
     }
 
     /// Macro to directly parse numsat from recovered descriptor
-    fn epoch_numsat(&self) -> Option<usize> {
+    fn epoch_numsat(&self) -> Result<usize, CRX2RNXErorr> {
         let start = if self.v3 {
             Self::V3_NUMSAT_OFFSET
         } else {
             Self::V1_NUMSAT_OFFSET
         };
 
-        if let Ok(numsat) = &self.epoch_descriptor[start..start + 3].trim().parse::<u8>() {
-            Some(*numsat as usize)
-        } else {
-            None
-        }
+        #[cfg(not(feature = "log"))]
+        let numsat = &self.epoch_descriptor[start..start + 3]
+            .trim()
+            .parse::<u8>()
+            .map_err(|_| CRX2RNXError::NumsatIntegerParsing)?;
+
+        #[cfg(feature = "log")]
+        let numsat = &self.epoch_descriptor[start..start + 3]
+            .trim()
+            .parse::<u8>()
+            .map_err(|e| {
+                error!("numsat parsing: {}", e);
+                CRX2RNXError::NumsatIntegerParsing
+            })?;
+
+        Ok(numsat as usize)
     }
 
     /// Builds new CRINEX decompressor.
@@ -305,13 +340,13 @@ impl<const M: usize> DecompressorExpert<M> {
         len: usize,
         buf: &mut [u8],
         size: usize,
-    ) -> Result<usize, Error> {
+    ) -> Result<usize, CRX2RNXError> {
         if size
             < self
                 .state
                 .size_to_produce(self.v3, self.numsat, self.numobs)
         {
-            return Err(Error::BufferOverflow);
+            return Err(CRX2RNXError::BufferOverflow);
         }
 
         match self.state {
@@ -322,7 +357,7 @@ impl<const M: usize> DecompressorExpert<M> {
     }
 
     /// Process the given line, during [State::Epoch] state.
-    fn run_epoch(&mut self, line: &str, len: usize) -> Result<usize, Error> {
+    fn run_epoch(&mut self, line: &str, len: usize) -> Result<usize, CRX2RNXError> {
         let min_len = if self.v3 {
             State::MIN_COMPRESSED_EPOCH_SIZE_V3
         } else {
@@ -330,7 +365,7 @@ impl<const M: usize> DecompressorExpert<M> {
         };
 
         if len < min_len {
-            return Err(Error::EpochFormat);
+            return Err(CRX2RNXError::InputEpochUnderflow);
         }
 
         let trimmed = &line[1..].trim_end();
@@ -339,7 +374,7 @@ impl<const M: usize> DecompressorExpert<M> {
             if self.v3 {
                 #[cfg(feature = "log")]
                 error!("CRINEX-V3: illegal start of line");
-                return Err(Error::BadV3Format);
+                return Err(CRX2RNXError::CorruptV3ContextOrContent);
             }
 
             self.epoch_diff.force_init(trimmed);
@@ -349,7 +384,7 @@ impl<const M: usize> DecompressorExpert<M> {
             if !self.v3 {
                 #[cfg(feature = "log")]
                 error!("CRINEX-V1: illegal start of line");
-                return Err(Error::BadV1Format);
+                return Err(CRX2RNXError::CorruptV1ContextOrContent);
             }
 
             self.epoch_diff.force_init(trimmed);
@@ -362,25 +397,20 @@ impl<const M: usize> DecompressorExpert<M> {
 
         // numsat needs to be recovered right away,
         // because it is used to determine the next production size
-        if let Some(numsat) = self.epoch_numsat() {
-            #[cfg(feature = "log")]
-            trace!(
-                "recovered epoch: \"{}\" [size={}, numsat={}]",
-                self.epoch_descriptor,
-                self.epoch_desc_len,
-                self.numsat,
-            );
+        let numsat = self.epoch_numsat()?;
 
-            // proceed
-            self.numsat = numsat;
-            self.state = State::Clock;
-            Ok(0)
-        } else {
-            // corrupt epoch numsat
-            #[cfg(feature = "log")]
-            error!("corrupt numsat");
-            Err(Error::CorruptNumsat)
-        }
+        #[cfg(feature = "log")]
+        trace!(
+            "recovered epoch: \"{}\" [size={}, numsat={}]",
+            self.epoch_descriptor,
+            self.epoch_desc_len,
+            self.numsat,
+        );
+
+        // proceed to next state
+        self.numsat = numsat;
+        self.state = State::Clock;
+        Ok(0)
     }
 
     /// Fills user buffer with recovered epoch, following either V1 or V3 standards
@@ -475,7 +505,7 @@ impl<const M: usize> DecompressorExpert<M> {
     }
 
     /// Process following line, in [State::Clock]
-    fn run_clock(&mut self, line: &str, len: usize, buf: &mut [u8]) -> Result<usize, Error> {
+    fn run_clock(&mut self, line: &str, len: usize, buf: &mut [u8]) -> Result<usize, CRX2RNXError> {
         let mut clock_data = Option::<i64>::None;
 
         // attempts to recover clock data (if it exists)
