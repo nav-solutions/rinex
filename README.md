@@ -28,6 +28,10 @@ To contribute to either of our project or join our community, you way
 - Time scales: GPST, QZSST, BDT, GST, UTC, TAI
 - Efficient seamless compression and decompression
   - modern rewrite of the Hatanaka compression algorithm
+- Numerous and detailed errors
+  - Read the reported errors and refer to the Error enum
+  documented online, to exactly understand any potential
+  issue during parsing.
 - RINEX V4 full support, including
   - new Ionospheric coorections
   - new Time offset corrections

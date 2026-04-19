@@ -1,11 +1,12 @@
 //! Observation RINEX parsing
 use crate::{
     epoch::{parse_in_timescale as parse_epoch_in_timescale, parse_utc as parse_utc_epoch},
+    errors::ObsRINEXParsingError,
     observation::{
         ClockObservation, EpochFlag, LliFlags, ObsKey, Observations, SignalObservation, SNR,
     },
     parse_f64,
-    prelude::{Constellation, Header, Observable, ParsingError, TimeScale, Version, SV},
+    prelude::{Constellation, Header, Observable, TimeScale, Version, SV},
 };
 
 use std::{
@@ -68,12 +69,12 @@ pub fn parse_epoch(
     content: &str,
     ts: TimeScale,
     observations: &mut Observations,
-) -> Result<ObsKey, ParsingError> {
+) -> Result<ObsKey, ObsRINEXParsingError> {
     let mut lines = content.lines();
 
     let mut line = match lines.next() {
         Some(l) => l,
-        _ => return Err(ParsingError::EmptyEpoch),
+        _ => return Err(ObsRINEXParsingError::MissingLine),
     };
 
     // epoch::
@@ -106,7 +107,7 @@ pub fn parse_epoch(
     let num_sat = num_sat
         .trim()
         .parse::<u16>()
-        .map_err(|_| ParsingError::NumSatParsing)?;
+        .map_err(|_| ObsRINEXParsingError::EpochNumsat)?;
 
     // grab possible clock offset
     let offs: Option<&str> = match header.version.major < 2 {
@@ -151,7 +152,7 @@ pub fn parse_epoch(
         },
         _ => {
             // Hardware events are not supported yet (coming soon)
-            return Err(ParsingError::ObsHardwareEvent);
+            return Err(ObsRINEXParsingError::NonSupportedReceiverEvent);
         },
     }
 
@@ -164,7 +165,7 @@ fn parse_observations(
     rem: &str,
     mut lines: Lines<'_>,
     signals: &mut Vec<SignalObservation>,
-) -> Result<(), ParsingError> {
+) -> Result<(), ObsRINEXParsingError> {
     // retrieve header specs
     let constellation = header.constellation;
 
@@ -192,7 +193,7 @@ fn parse_observations(
                 systems_str_len += trimmed.len();
                 systems_str.push_str(trimmed);
             } else {
-                return Err(ParsingError::BadV2SatellitesDescription);
+                return Err(ObsRINEXParsingError::V2SatellitesDescription);
             }
         }
 

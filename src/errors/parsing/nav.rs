@@ -1,8 +1,8 @@
 //! Errors specific to Navigation RINEX files parsing
 use thiserror::Error;
 
-/// Errors that may arise during the parsing of a navigation
-/// RINEX file, whether this is in the Header section (mandatory prior
+/// Errors that may arise during the parsing of navigation
+/// RINEX files, either in the Header section (mandatory prior
 /// file processing) or during Record section.
 #[derive(Debug, Error)]
 pub enum NavRINEXParsingError {
@@ -12,6 +12,15 @@ pub enum NavRINEXParsingError {
     /// Klobuchar model, that require several lines to be fully described.
     #[error("Missing line")]
     MissingLine,
+
+    /// This library has a built-in Navigation message database
+    /// which is fully integrated at build time, that we
+    /// to retrieve the correct interpretation for each supported
+    /// message. You will run into this when either
+    /// - the entrypoint of the message is corrupt
+    /// - we don't have any reference for this message in our database.
+    #[error("No known standard specs for this radio message")]
+    MissingStandardSpecifications,
 
     /// Invalid Navigation frame type description.
     /// We support all possible radio message categories:
@@ -62,9 +71,6 @@ pub enum NavRINEXParsingError {
     TimerefOffsetParsing,
 
     // not tested
-    #[error("unknown radio message")]
-    NoNavigationDefinition,
-
     #[error("invalid health flag definition")]
     NavHealthFlagDefinition,
 

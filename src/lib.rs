@@ -50,7 +50,6 @@ mod epoch;
 mod iterators;
 mod leap;
 // mod linspace;
-mod observable;
 mod sampling;
 
 #[cfg(feature = "qc")]

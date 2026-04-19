@@ -1,50 +1,37 @@
-use crate::prelude::{Carrier, Constellation, Error, ParsingError};
+//! Radio signal Observables
+use crate::{
+    errors::ObsRINEXParsingError,
+    prelude::{Carrier, Constellation, Error},
+};
 
-/// Observable describes all possible observations,
-/// forming Observation and Meteo RINEX epoch content.
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
+/// [Observable] describes all possible Radio signal observations.
+/// These are specific to Observation RINEX (or compressed CRINEX) files.
+/// Meteo RINEX files have their dedicated list of observables.
 #[derive(Debug, Clone, PartialEq, PartialOrd, Hash, Ord, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Observable {
     /// Carrier phase range converted to [m] (not cycles!)
     PhaseRange(String),
+
     /// Doppler shift observation
     Doppler(String),
+
     /// SSI: Receiver signal strength observation [dB]
     SSI(String),
+
     /// Received Power [dBm]
     Power(String),
+
     /// Decoded Pseudo range converted to [m]
     PseudoRange(String),
-    /// Channel number Pseudo Observable.
-    /// Attached to Phase or PseudoRange observable to accurately
-    /// described how they were sampled.
-    ChannelNumber(String),
-    /// Pressure observation in hPa
-    Pressure,
-    /// Dry temperature measurement in Celcius degrees
-    Temperature,
-    /// Relative humidity measurement in %
-    HumidityRate,
-    /// Wet Zenith Path delay in mm
-    ZenithWetDelay,
-    /// Zenith path delay, dry component in mm
-    ZenithDryDelay,
-    /// Total zenith path delay (dry + wet) in mm
-    ZenithTotalDelay,
-    /// Wind direction azimuth in degrees
-    WindDirection,
-    /// Wind speed in m.s⁻¹
-    WindSpeed,
-    /// Rain Increment: rain accumulation
-    /// since previous measurement, in 10th of mm
-    RainIncrement,
-    /// Hail Indicator
-    HailIndicator,
-    /// Frequency Ratio (dimensionless)
-    FrequencyRatio,
 }
 
 impl Default for Observable {
+    /// Builds a default "L1C" [Observable] to describe
+    /// the phase of the L1 signal.
     fn default() -> Self {
         Self::PhaseRange("L1C".to_string())
     }
@@ -52,7 +39,8 @@ impl Default for Observable {
 
 impl Observable {
     /// Returns true if Self and rhs describe the same physical observation.
-    /// For example, both are phase observations.
+    /// For example, L1C and L2C would return true, because they are both
+    /// carrier phase observations.
     pub fn same_physics(&self, rhs: &Observable) -> bool {
         match self {
             Self::SSI(_) => matches!(rhs, Self::SSI(_)),
@@ -99,11 +87,6 @@ impl Observable {
         matches!(self, Self::Power(_))
     }
 
-    /// Returns true if this [Observable] is a channel number (usually for Glonass FDMA)
-    pub fn is_channel_number(&self) -> bool {
-        matches!(self, Self::ChannelNumber(_))
-    }
-
     /// Returns the 2 or 3 letter code, in RINEX standardized format
     pub fn code(&self) -> Option<String> {
         match self {
@@ -128,9 +111,9 @@ impl Observable {
     /// This requires a 1kHz accuracy on given frequency.
     pub fn from_pseudo_range_frequency_mega_hz(
         constellation: Constellation,
-        freq_mhz: f64,
+        frequency_mega_hz: f64,
     ) -> Result<Self, Error> {
-        let carrier = Carrier::from_frequency_mega_hz(freq_mhz)?;
+        let carrier = Carrier::from_frequency_mega_hz(frequency_mega_hz)?;
 
         match constellation {
             Constellation::GPS => match carrier {
@@ -195,9 +178,9 @@ impl Observable {
     /// This requires a 1kHz accuracy on given frequency.
     pub fn from_phase_range_frequency_mega_hz(
         constellation: Constellation,
-        freq_mhz: f64,
+        frequency_mega_hz: f64,
     ) -> Result<Self, Error> {
-        let carrier = Carrier::from_frequency_mega_hz(freq_mhz)?;
+        let carrier = Carrier::from_frequency_mega_hz(frequency_mega_hz)?;
 
         match constellation {
             Constellation::GPS => match carrier {
@@ -441,56 +424,38 @@ impl Observable {
             _ => None,
         }
     }
-
-    /// Returns true if this is the L1 pivot Ph or Code signal observation,
-    /// used in signal combinations
-    pub(crate) fn is_l1_pivot(&self, constellation: Constellation) -> bool {
-        if self.is_phase_range_observable() || self.is_pseudo_range_observable() {
-            if let Ok(carrier) = self.to_carrier(constellation) {
-                matches!(
-                    carrier,
-                    Carrier::L1
-                        | Carrier::E1
-                        | Carrier::G1(_)
-                        | Carrier::S1
-                        | Carrier::B1c
-                        | Carrier::B1a
-                )
-            } else {
-                false
-            }
-        } else {
-            false
-        }
-    }
 }
 
 impl std::fmt::Display for Observable {
+    /// Formats this [Observable] in a readable fashion,
+    /// not as found in RINEX records
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::Pressure => write!(f, "PR"),
-            Self::Temperature => write!(f, "TD"),
-            Self::HumidityRate => write!(f, "HR"),
-            Self::ZenithWetDelay => write!(f, "ZW"),
-            Self::ZenithDryDelay => write!(f, "ZD"),
-            Self::ZenithTotalDelay => write!(f, "ZT"),
-            Self::WindDirection => write!(f, "WD"),
-            Self::WindSpeed => write!(f, "WS"),
-            Self::RainIncrement => write!(f, "RI"),
-            Self::HailIndicator => write!(f, "HI"),
-            Self::FrequencyRatio => write!(f, "F"),
             Self::PseudoRange(c)
             | Self::PhaseRange(c)
             | Self::Doppler(c)
             | Self::SSI(c)
             | Self::Power(c)
-            | Self::ChannelNumber(c) => write!(f, "{}", c),
+        }
+    }
+}
+
+impl std::fmt::UpperHex for Observable {
+    /// Formats this [Observable] in standardized 2 or 3 letter code,
+    /// as found in RINEX records
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::PseudoRange(c) => write!(f, "{}", c),
+            Self::PhaseRange(c) => write!(f, "{}", c),
+            Self::Doppler(c) => write!(f, "{}", c),
+            Self::SSI(c) => write!(f, "{}", c),
+            Self::Power(c) => write!(f, "{}", c),
         }
     }
 }
 
 impl std::str::FromStr for Observable {
-    type Err = ParsingError;
+    type Err = ObsRINEXParsingError;
     fn from_str(content: &str) -> Result<Self, Self::Err> {
         let content = content.to_uppercase();
         let content = content.trim();

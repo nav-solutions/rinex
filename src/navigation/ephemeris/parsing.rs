@@ -1,17 +1,22 @@
 use crate::{
     epoch::parse_in_timescale as parse_epoch_in_timescale,
+    errors::NavRINEXParsingError,
     navigation::{
         ephemeris::orbits::{closest_nav_standards, OrbitItem},
         Ephemeris, NavMessageType,
     },
     parse_f64,
-    prelude::{Constellation, Epoch, ParsingError, TimeScale, Version, SV},
+    prelude::{Constellation, Epoch, TimeScale, Version, SV},
 };
 
 use std::{collections::HashMap, str::Lines};
 
-/// Parses all orbital elements.
-/// Descriptor is retrieved from database db/NAV/orbits.
+/// Parses all orbital data fields.
+///
+/// This has a built in database (db/NAV/orbits.json)
+/// which is a descriptor integrated at build time,
+/// that contains all supported standard specs.
+///
 /// ## Inputs
 /// - version: database [Version] filter
 /// - msgtype: database [NavMessageType] filter
@@ -21,17 +26,19 @@ fn parse_orbits(
     msgtype: NavMessageType,
     constell: Constellation,
     lines: Lines<'_>,
-) -> Result<HashMap<String, OrbitItem>, ParsingError> {
-    // convert SBAS constell to compatible "sbas" (undetermined/general constell)
-    let constell = match constell.is_sbas() {
-        true => Constellation::SBAS,
-        false => constell,
+) -> Result<HashMap<String, OrbitItem>, NavRINEXParsingError> {
+    // Converts any SBAS to a generic SBAS, so we can match
+    // the standard specs.
+    let constell = if constell.is_sbas() {
+        Constellation::SBAS
+    } else {
+        constell
     };
 
-    // Determine data fields to parse, from database
+    // Grab closes standard specs from the integreted database.
     let nav_standards = match closest_nav_standards(constell, version, msgtype) {
         Some(v) => v,
-        _ => return Err(ParsingError::NoNavigationDefinition),
+        _ => return Err(NavRINEXParsingError::MissingStandardSpecifications),
     };
 
     // println!("FIELD : {:?} \n", nav_standards.items); // DEBUG
@@ -101,10 +108,10 @@ impl Ephemeris {
         version: Version,
         constellation: Constellation,
         mut lines: Lines<'_>,
-    ) -> Result<(Epoch, SV, Self), ParsingError> {
+    ) -> Result<(Epoch, SV, Self), NavRINEXParsingError> {
         let line = match lines.next() {
             Some(l) => l,
-            _ => return Err(ParsingError::EmptyEpoch),
+            _ => return Err(NavRINEXParsingError::EmptyEpoch),
         };
 
         let svnn_offset: usize = match version.major < 3 {
@@ -133,16 +140,18 @@ impl Ephemeris {
         let ts = sv
             .constellation
             .timescale()
-            .ok_or(ParsingError::NoTimescaleDefinition)?;
+            .ok_or(NavRINEXParsingError::NoTimescaleDefinition)?;
 
         let epoch = parse_epoch_in_timescale(date.trim(), ts)?;
 
-        let clock_bias = parse_f64(clk_bias.trim()).map_err(|_| ParsingError::ClockParsing)?;
+        let clock_bias =
+            parse_f64(clk_bias.trim()).map_err(|_| NavRINEXParsingError::ClockParsing)?;
 
-        let clock_drift = parse_f64(clk_dr.trim()).map_err(|_| ParsingError::ClockParsing)?;
+        let clock_drift =
+            parse_f64(clk_dr.trim()).map_err(|_| NavRINEXParsingError::ClockParsing)?;
 
         let mut clock_drift_rate =
-            parse_f64(clk_drr.trim()).map_err(|_| ParsingError::ClockParsing)?;
+            parse_f64(clk_drr.trim()).map_err(|_| NavRINEXParsingError::ClockParsing)?;
 
         // parse orbits :
         //  only Legacy Frames in V2 and V3 (old) RINEX
@@ -176,10 +185,10 @@ impl Ephemeris {
         msg: NavMessageType,
         mut lines: Lines<'_>,
         ts: TimeScale,
-    ) -> Result<(Epoch, SV, Self), ParsingError> {
+    ) -> Result<(Epoch, SV, Self), NavRINEXParsingError> {
         let line = match lines.next() {
             Some(l) => l,
-            _ => return Err(ParsingError::EmptyEpoch),
+            _ => return Err(NavRINEXParsingError::EmptyEpoch),
         };
 
         let (svnn, rem) = line.split_at(4);
@@ -190,12 +199,14 @@ impl Ephemeris {
         let (clk_bias, rem) = rem.split_at(19);
         let (clk_dr, clk_drr) = rem.split_at(19);
 
-        let clock_bias = parse_f64(clk_bias.trim()).map_err(|_| ParsingError::ClockParsing)?;
+        let clock_bias =
+            parse_f64(clk_bias.trim()).map_err(|_| NavRINEXParsingError::ClockParsing)?;
 
-        let clock_drift = parse_f64(clk_dr.trim()).map_err(|_| ParsingError::ClockParsing)?;
+        let clock_drift =
+            parse_f64(clk_dr.trim()).map_err(|_| NavRINEXParsingError::ClockParsing)?;
 
         let mut clock_drift_rate =
-            parse_f64(clk_drr.trim()).map_err(|_| ParsingError::ClockParsing)?;
+            parse_f64(clk_drr.trim()).map_err(|_| NavRINEXParsingError::ClockParsing)?;
 
         let mut orbits =
             parse_orbits(Version { major: 4, minor: 0 }, msg, sv.constellation, lines)?;

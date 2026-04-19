@@ -4,6 +4,7 @@ mod flag;
 mod formatting; // formatter
 mod header;
 mod lli;
+mod observables;
 mod parsing; // parser
 mod rinex; // high level methods
 mod signal;
@@ -28,6 +29,7 @@ pub use clock::ClockObservation;
 pub use flag::EpochFlag;
 pub use header::HeaderFields;
 pub use lli::LliFlags;
+pub use observables::Observable;
 pub use signal::SignalObservation;
 pub use snr::SNR;
 

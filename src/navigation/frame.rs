@@ -1,6 +1,6 @@
 use crate::{
+    errors::NavRINEXParsingError,
     navigation::{EarthOrientation, Ephemeris, IonosphereModel, TimeOffset},
-    prelude::ParsingError,
 };
 
 #[cfg(doc)]
@@ -39,7 +39,7 @@ impl std::fmt::Display for NavFrameType {
 }
 
 impl std::str::FromStr for NavFrameType {
-    type Err = ParsingError;
+    type Err = NavRINEXParsingError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let c = s.to_uppercase();
         let c = c.trim();
@@ -48,7 +48,7 @@ impl std::str::FromStr for NavFrameType {
             "STO" => Ok(Self::SystemTimeOffset),
             "EOP" => Ok(Self::EarthOrientation),
             "ION" => Ok(Self::IonosphereModel),
-            _ => Err(ParsingError::NavFrameClass),
+            _ => Err(NavRINEXParsingError::InvalidFrameClass),
         }
     }
 }

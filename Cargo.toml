@@ -148,6 +148,7 @@ thiserror = "2"
 bitflags = "2"
 lazy_static = "1"
 itertools = "0.14"
+arrayvec = { version = "0.7" }
 flate2 = { version = "1", optional = true }
 maud = { version = "0.26", optional = true }
 rtcm-rs = { version = "0.11", optional = true }
