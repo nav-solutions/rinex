@@ -1,9 +1,9 @@
 use crate::{
     epoch::parse_in_timescale as parse_epoch_in_timescale,
-    error::FormattingError,
+    errors::{FormattingError, NavRINEXParsingError},
     fmt_rinex,
     navigation::formatting::NavFormatter,
-    prelude::{Constellation, Epoch, ParsingError, TimeScale},
+    prelude::{Constellation, Epoch, TimeScale},
 };
 
 use std::{
@@ -50,10 +50,10 @@ impl KbModel {
     pub(crate) fn parse(
         mut lines: std::str::Lines<'_>,
         ts: TimeScale,
-    ) -> Result<(Epoch, Self), ParsingError> {
+    ) -> Result<(Epoch, Self), NavRINEXParsingError> {
         let line = match lines.next() {
             Some(l) => l,
-            _ => return Err(ParsingError::EmptyEpoch),
+            _ => return Err(NavRINEXParsingError::MissingLine),
         };
 
         let (epoch, rem) = line.split_at(23);
@@ -62,7 +62,7 @@ impl KbModel {
 
         let line = match lines.next() {
             Some(l) => l,
-            _ => return Err(ParsingError::EmptyEpoch),
+            _ => return Err(NavRINEXParsingError::MissingLine),
         };
         let (a3, rem) = line.split_at(23);
         let (b0, rem) = rem.split_at(19);
@@ -70,7 +70,7 @@ impl KbModel {
 
         let line = match lines.next() {
             Some(l) => l,
-            _ => return Err(ParsingError::EmptyEpoch),
+            _ => return Err(NavRINEXParsingError::MissingLine),
         };
         let (b3, region) = line.split_at(23);
 
@@ -92,16 +92,24 @@ impl KbModel {
 
         let epoch = parse_epoch_in_timescale(epoch.trim(), ts)?;
         let alpha = (
-            f64::from_str(a0.trim()).map_err(|_| ParsingError::KlobucharData)?,
-            f64::from_str(a1.trim()).map_err(|_| ParsingError::KlobucharData)?,
-            f64::from_str(a2.trim()).map_err(|_| ParsingError::KlobucharData)?,
-            f64::from_str(a3.trim()).map_err(|_| ParsingError::KlobucharData)?,
+            f64::from_str(a0.trim())
+                .map_err(|_| NavRINEXParsingError::IonospereKlobucharParameter)?,
+            f64::from_str(a1.trim())
+                .map_err(|_| NavRINEXParsingError::IonospereKlobucharParameter)?,
+            f64::from_str(a2.trim())
+                .map_err(|_| NavRINEXParsingError::IonospereKlobucharParameter)?,
+            f64::from_str(a3.trim())
+                .map_err(|_| NavRINEXParsingError::IonospereKlobucharParameter)?,
         );
         let beta = (
-            f64::from_str(b0.trim()).map_err(|_| ParsingError::KlobucharData)?,
-            f64::from_str(b1.trim()).map_err(|_| ParsingError::KlobucharData)?,
-            f64::from_str(b2.trim()).map_err(|_| ParsingError::KlobucharData)?,
-            f64::from_str(b3.trim()).map_err(|_| ParsingError::KlobucharData)?,
+            f64::from_str(b0.trim())
+                .map_err(|_| NavRINEXParsingError::IonospereKlobucharParameter)?,
+            f64::from_str(b1.trim())
+                .map_err(|_| NavRINEXParsingError::IonospereKlobucharParameter)?,
+            f64::from_str(b2.trim())
+                .map_err(|_| NavRINEXParsingError::IonospereKlobucharParameter)?,
+            f64::from_str(b3.trim())
+                .map_err(|_| NavRINEXParsingError::IonospereKlobucharParameter)?,
         );
 
         Ok((

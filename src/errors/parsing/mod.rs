@@ -1,3 +1,4 @@
+//! RINEX file parsing errors
 use thiserror::Error;
 
 use gnss_rs::{
@@ -11,139 +12,138 @@ use std::io::Error as IoError;
 
 use crate::hatanaka::Error as HatanakaError;
 
+mod nav;
+
+pub use nav::NavRINEXParsingError;
+
 /// Errors that may rise in Parsing process
 #[derive(Debug, Error)]
 pub enum ParsingError {
-    #[error("header line too short (invalid)")]
+    #[error("Invalid header line: too short")]
     HeaderLineTooShort,
-    #[error("empty epoch")]
-    EmptyEpoch,
-    #[error("invalid epoch flag")]
+
+    /// ANTEX (Antenna parameters record) are
+    /// supported by a dedicated parser: https://github.com/nav-solutions/antex
+    #[error("ANTEX format requires dedicated parser")]
+    ANTEXFile,
+
+    #[error("Invalid epoch flag")]
     EpochFlag,
+
     #[error("number of sat")]
     NumSat,
+
     #[error("marker type")]
     MarkerType,
+
     #[error("nav: clock parsing")]
     ClockParsing,
+
     #[error("invalid epoch format")]
     EpochFormat,
+
     #[error("epoch parsing")]
     EpochParsing,
+
     #[error("datime parsing")]
     DatetimeParsing,
+
     #[error("datime invalid format")]
     DatetimeFormat,
+
     #[error("bad rinex revision format")]
     VersionFormat,
+
     #[error("rinex revision parsing")]
     VersionParsing,
+
     #[error("rinex format identification")]
     TypeParsing,
+
     #[error("observable parsing")]
     ObservableParsing,
+
     #[error("constellation parsing")]
     ConstellationParsing(#[from] ConstellationParsingError),
+
     #[error("undefined constellation: bad header?")]
     UndefinedConstellation,
+
     #[error("sv parsing")]
     SVParsing(#[from] SVParsingError),
+
     #[error("cospar parsing")]
     COSPAR(#[from] CosparParsingError),
-    #[error("nav: eop missing line")]
-    EopMissingData,
+
     #[error("clock TYPE OF DATA parsing")]
     ClockTypeofData,
+
     #[error("OBS RINEX invalid timescale")]
     BadObsBadTimescaleDefinition,
+
     #[error("bad RINEX: missing timescale specs")]
     NoTimescaleDefinition,
+
     #[error("SYS / SCALE FACTOR parsing")]
     SystemScalingFactor,
+
     #[error("REF CLOCK OFFS parsing")]
     RcvClockOffsApplied,
+
     #[error("header coordinates parsing")]
     Coordinates,
+
     #[error("antenna coordinates parsing")]
     AntennaCoordinates,
+
     #[error("sensor coordinates parsing")]
     SensorCoordinates,
-    #[error("ANTEX version parsing")]
-    AntexVersion,
+
     #[error("non supported rinex revision")]
     NonSupportedVersion,
+
     #[error("unknown / non supported observable")]
     UnknownObservable,
+
     #[error("invalid observable")]
     BadObservable,
+
     #[error("invalid leap second specs")]
     LeapFormat,
+
     #[error("leap second parsing")]
     LeapParsing,
+
     #[error("hifitime parsing")]
     HifitimeParsing(#[from] HifitimeParsingError),
+
     #[error("hifitime error")]
     Hifitime(#[from] HifitimeError),
-    #[error("DORIS L1/L2 date offset")]
-    NumberOfCalibratedAntennasParsing,
-    #[error("antex: antenna calibration #")]
-    AntexAntennaCalibrationNumber,
-    #[error("antex: apc coordinates")]
-    AntexAPCCoordinates,
-    #[error("antex: zenith grid")]
-    AntexZenithGrid,
-    #[error("antex: frequency")]
-    AntexFrequency,
-    #[error("obs/doris: missing observable specs")]
-    MissingObservableDefinition,
+
     #[error("clock profile type parsing")]
     ClockProfileType,
+
     #[error("clock profile parsing")]
     ClockProfile,
+
     #[error("DOMES parsing")]
     DOMES(#[from] DOMESParsingError),
-    #[error("nav: invalid frame class")]
-    NavFrameClass,
-    #[error("nav: invalid timescale")]
-    NavInvalidTimescale,
-    #[error("nav: invalid message type")]
-    NavMsgType,
-    #[error("nav: (ref) epoch week counter parsing")]
-    NavEpochWeekCounter,
-    #[error("nav: time offset parsing")]
-    NavTimeOffsetParinsg,
-    #[error("nav: unknown radio message")]
-    NoNavigationDefinition,
-    #[error("nav: invalid health flag definition")]
-    NavHealthFlagDefinition,
-    #[error("nav: invalid bitfield")]
-    NavFlagsMapping,
-    #[error("nav: invalid data source flag definition")]
-    NavDataSourceDefinition,
-    #[error("nav: unknown complex type")]
-    NavUnknownComplexType,
-    #[error("nav: invalid / missing flag definition")]
-    NavFlagsDefinition,
-    #[error("nav: illegal null orbit field")]
-    NavNullOrbit,
-    #[error("nav:ion klobuchar data")]
-    KlobucharData,
-    #[error("nav:ion nequick-g data")]
-    NequickGData,
-    #[error("nav:ion bdgim data")]
-    BdgimData,
-    #[error("nav:sto data")]
-    SystemTimeData,
-    #[error("antex: calibration method")]
-    AntexCalibrationMethod,
+
+    #[error("NAV RINEX: {0}")]
+    NavRINEXError(#[from] NavRINEXParsingError),
+
     #[error("obs: hardware events not supported yet")]
     ObsHardwareEvent,
+
     #[error("obs: bad v2 satellites description")]
     BadV2SatellitesDescription,
+
     #[error("obs: numsat parsing")]
     NumSatParsing,
+
     #[error("CRINEX error: {0}")]
     CRINEX(HatanakaError),
+
     #[error("bad utf-8 generated by CRINEX recovering process")]
     BadUtf8Crinex,
 }

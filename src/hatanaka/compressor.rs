@@ -2,7 +2,7 @@
 
 use crate::{
     epoch::epoch_decompose as epoch_decomposition,
-    error::FormattingError,
+    errors::FormattingError,
     hatanaka::{NumDiff, TextDiff},
     observation::{HeaderFields, Record},
     prelude::{Constellation, Observable, SV},
@@ -19,17 +19,23 @@ pub struct CompressorExpert<const M: usize> {
     /// True (by default) if this a CRINEX3 compressor.
     /// Modify this before getting started!
     pub v3: bool,
+
     /// True when epoch descriptor should be compressed.
     /// True on first epoch.
     epoch_compression: bool,
+
     /// Readable Epoch being compressed
     epoch_buf: String,
+
     /// Readable flags being compressed
     flags_buf: String,
+
     /// Epoch [TextDiff]
     epoch_diff: TextDiff,
+
     /// Flags kernel, per SV
     flags_diff: HashMap<SV, TextDiff>,
+
     /// Flag textdiff
     /// Compression kernels (per SV and signal)
     sv_kernels: HashMap<(SV, Observable), NumDiff<M>>,

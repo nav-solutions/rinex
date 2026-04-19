@@ -1,4 +1,4 @@
-use crate::{error::FormattingError, navigation::TimeOffset, prelude::TimeScale};
+use crate::{errors::FormattingError, navigation::TimeOffset, prelude::TimeScale};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};

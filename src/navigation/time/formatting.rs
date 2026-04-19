@@ -1,6 +1,6 @@
 use crate::{
     epoch::epoch_decompose,
-    error::FormattingError,
+    errors::FormattingError,
     fmt_rinex,
     navigation::{formatting::NavFormatter, time::TimeOffset},
     prelude::{Epoch, TimeScale},

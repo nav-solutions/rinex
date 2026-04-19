@@ -1,7 +1,8 @@
 use crate::{
     epoch::parse_in_timescale as parse_epoch_in_timescale,
+    errors::NavRINEXParsingError,
     parse_f64,
-    prelude::{Epoch, ParsingError, TimeScale},
+    prelude::{Epoch, TimeScale},
 };
 
 /// BDGIM Model payload
@@ -17,10 +18,10 @@ impl BdModel {
     pub(crate) fn parse(
         mut lines: std::str::Lines<'_>,
         ts: TimeScale,
-    ) -> Result<(Epoch, Self), ParsingError> {
+    ) -> Result<(Epoch, Self), NavRINEXParsingError> {
         let line = match lines.next() {
             Some(l) => l,
-            _ => return Err(ParsingError::EmptyEpoch),
+            _ => return Err(NavRINEXParsingError::MissingLine),
         };
 
         let (epoch, rem) = line.split_at(23);
@@ -29,7 +30,7 @@ impl BdModel {
 
         let line = match lines.next() {
             Some(l) => l,
-            _ => return Err(ParsingError::EmptyEpoch),
+            _ => return Err(NavRINEXParsingError::MissingLine),
         };
         let (a3, rem) = line.split_at(23);
         let (a4, rem) = rem.split_at(19);
@@ -37,22 +38,22 @@ impl BdModel {
 
         let line = match lines.next() {
             Some(l) => l,
-            _ => return Err(ParsingError::EmptyEpoch),
+            _ => return Err(NavRINEXParsingError::MissingLine),
         };
         let (a7, a8) = line.split_at(23);
 
         let epoch = parse_epoch_in_timescale(epoch.trim(), ts)?;
 
         let alpha = (
-            parse_f64(a0.trim()).map_err(|_| ParsingError::BdgimData)?,
-            parse_f64(a1.trim()).map_err(|_| ParsingError::BdgimData)?,
-            parse_f64(a2.trim()).map_err(|_| ParsingError::BdgimData)?,
-            parse_f64(a3.trim()).map_err(|_| ParsingError::BdgimData)?,
-            parse_f64(a4.trim()).map_err(|_| ParsingError::BdgimData)?,
-            parse_f64(a5.trim()).map_err(|_| ParsingError::BdgimData)?,
-            parse_f64(a6.trim()).map_err(|_| ParsingError::BdgimData)?,
-            parse_f64(a7.trim()).map_err(|_| ParsingError::BdgimData)?,
-            parse_f64(a8.trim()).map_err(|_| ParsingError::BdgimData)?,
+            parse_f64(a0.trim()).map_err(|_| NavRINEXParsingError::IonosphereBdgimParameter)?,
+            parse_f64(a1.trim()).map_err(|_| NavRINEXParsingError::IonosphereBdgimParameter)?,
+            parse_f64(a2.trim()).map_err(|_| NavRINEXParsingError::IonosphereBdgimParameter)?,
+            parse_f64(a3.trim()).map_err(|_| NavRINEXParsingError::IonosphereBdgimParameter)?,
+            parse_f64(a4.trim()).map_err(|_| NavRINEXParsingError::IonosphereBdgimParameter)?,
+            parse_f64(a5.trim()).map_err(|_| NavRINEXParsingError::IonosphereBdgimParameter)?,
+            parse_f64(a6.trim()).map_err(|_| NavRINEXParsingError::IonosphereBdgimParameter)?,
+            parse_f64(a7.trim()).map_err(|_| NavRINEXParsingError::IonosphereBdgimParameter)?,
+            parse_f64(a8.trim()).map_err(|_| NavRINEXParsingError::IonosphereBdgimParameter)?,
         );
 
         Ok((epoch, Self { alpha }))

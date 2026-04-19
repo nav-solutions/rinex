@@ -56,9 +56,6 @@ meteo = []
 # CLOCK (Special RINEX) dedicated Iterators & methods.
 clock = []
 
-# ANTEX for accurate antenna characteristics: dedicated Iterators & methods.
-antex = []
-
 # RINEX2BIN serializer
 binex = [
     "dep:binex"
@@ -94,7 +91,6 @@ processing = [
 
 # Unlock all features, at once
 full = [
-    "antex",
     "clock",
     "flate2",
     "meteo",

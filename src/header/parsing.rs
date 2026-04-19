@@ -1,6 +1,5 @@
 //! Describes a `RINEX` file header.
 use crate::{
-    antex::{HeaderFields as AntexHeader, Pcv},
     clock::{ClockProfileType, HeaderFields as ClockHeader, WorkClock},
     hardware::{Antenna, Receiver, SvAntenna},
     hatanaka::CRINEX,
@@ -62,7 +61,6 @@ impl Header {
         let mut nav = NavigationHeader::default();
         let mut meteo = MeteoHeader::default();
         let mut clock = ClockHeader::default();
-        let mut antex = AntexHeader::default();
 
         for line in reader.lines() {
             if line.is_err() {
@@ -108,6 +106,16 @@ impl Header {
                 }
 
                 ///////////////////////////////////////////////////////
+                // invalid cases
+                // Catch other standards and emphasize that the user
+                // should use another parser, not this one
+                ///////////////////////////////////////////////////////
+            } else if marker.contains("ANTEX VERSION / SYST") {
+                return Err(ParsingError::ANTEXFile);
+            } else if marker.contains("PCV TYPE / REFANT") {
+                return Err(ParsingError::ANTEXFile);
+
+                ///////////////////////////////////////////////////////
                 // Unhandled cases: TODO
                 ///////////////////////////////////////////////////////
             } else if marker.contains("ANTENNA: B.SIGHT XYZ") {
@@ -120,32 +128,6 @@ impl Header {
                 ///////////////////////////////////////////////////////
                 // Handled cases
                 ///////////////////////////////////////////////////////
-            } else if marker.contains("ANTEX VERSION / SYST") {
-                let (vers, system) = content.split_at(8);
-                let vers = vers.trim();
-                version = Version::from_str(vers).or(Err(ParsingError::AntexVersion))?;
-
-                if let Ok(constell) = Constellation::from_str(system.trim()) {
-                    constellation = Some(constell)
-                }
-
-                rinex_type = Type::AntennaData;
-            } else if marker.contains("PCV TYPE / REFANT") {
-                let (pcv_str, rem) = content.split_at(20);
-                let (rel_type, rem) = rem.split_at(20);
-                let (ref_sn, _) = rem.split_at(20);
-                if let Ok(mut pcv) = Pcv::from_str(pcv_str.trim()) {
-                    if pcv.is_relative() {
-                        // try to parse "Relative Type"
-                        if !rel_type.trim().is_empty() {
-                            pcv = pcv.with_relative_type(rel_type.trim());
-                        }
-                    }
-                    antex = antex.with_pcv_type(pcv);
-                }
-                if !ref_sn.trim().is_empty() {
-                    antex = antex.with_reference_antenna_sn(ref_sn.trim());
-                }
             } else if marker.contains("TYPE / SERIAL NO") {
                 let items: Vec<&str> = content.split_ascii_whitespace().collect();
                 if items.len() == 2 {
@@ -797,13 +779,6 @@ impl Header {
             clock: {
                 if rinex_type == Type::Clock {
                     Some(clock)
-                } else {
-                    None
-                }
-            },
-            antex: {
-                if rinex_type == Type::Antenna {
-                    Some(antex)
                 } else {
                     None
                 }

@@ -1,7 +1,6 @@
 //! integrated tests
 pub mod toolkit;
 
-mod antex;
 mod compression;
 mod crinex;
 mod filename;

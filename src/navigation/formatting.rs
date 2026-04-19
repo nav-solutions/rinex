@@ -4,7 +4,7 @@ use std::io::{BufWriter, Write};
 
 use crate::{
     epoch::epoch_decompose as epoch_decomposition,
-    error::FormattingError,
+    errors::FormattingError,
     navigation::{NavFrame, NavFrameType, NavKey, Record},
     prelude::{Constellation, Header},
 };

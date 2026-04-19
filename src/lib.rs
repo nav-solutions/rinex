@@ -29,10 +29,9 @@ extern crate num;
 #[cfg(feature = "qc")]
 extern crate gnss_qc_traits as qc_traits;
 
-pub mod antex;
 pub mod carrier;
 pub mod clock;
-pub mod error;
+pub mod errors;
 pub mod hardware;
 pub mod hatanaka;
 pub mod header;
@@ -78,7 +77,7 @@ mod ublox;
 mod tests;
 
 use std::{
-    collections::HashMap,
+    // collections::HashMap,
     fs::File,
     io::{BufReader, BufWriter, Read, Write},
     path::Path,
@@ -88,9 +87,6 @@ use std::{
 use itertools::Itertools;
 
 use antex::{Antenna, FrequencyDependentData};
-
-#[cfg(feature = "antex")]
-use antex::{AntennaMatcher, AntennaSpecific};
 
 #[cfg(feature = "flate2")]
 use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
@@ -110,7 +106,7 @@ pub mod prelude {
     // export
     pub use crate::{
         carrier::Carrier,
-        error::{Error, FormattingError, ParsingError},
+        errors::{Error, FormattingError, ParsingError},
         hatanaka::{
             Decompressor, DecompressorExpert, DecompressorExpertIO, DecompressorIO, CRINEX,
         },
@@ -133,17 +129,9 @@ pub mod prelude {
     pub use gnss::prelude::{Constellation, DOMESTrackingPoint, COSPAR, DOMES, SV};
     pub use hifitime::{Duration, Epoch, Polynomial, TimeScale, TimeSeries};
 
-    #[cfg(feature = "antex")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "antex")))]
-    pub mod antex {
-        pub use crate::antex::AntennaMatcher;
-    }
-
     #[cfg(feature = "obs")]
     #[cfg_attr(docsrs, doc(cfg(feature = "obs")))]
     pub mod obs {
-        pub use crate::carrier::Carrier;
-
         pub use crate::observation::{
             ClockObservation, Combination, CombinationKey, EpochFlag, LliFlags, ObsKey,
             Observations, SignalObservation, SNR,
@@ -941,11 +929,6 @@ impl Rinex {
         Ok(())
     }
 
-    /// Returns true if this is an ATX RINEX
-    pub fn is_antex(&self) -> bool {
-        self.header.rinex_type == types::Type::Antenna
-    }
-
     /// Returns true if this is a CLOCK RINEX
     pub fn is_clock_rinex(&self) -> bool {
         self.header.rinex_type == types::Type::Clock
@@ -1171,18 +1154,6 @@ impl Rinex {
         } else {
             Box::new([].into_iter())
         }
-    }
-
-    /// ANTEX antennas specifications browsing
-    pub fn antennas(
-        &self,
-    ) -> Box<dyn Iterator<Item = &(Antenna, HashMap<Carrier, FrequencyDependentData>)> + '_> {
-        Box::new(
-            self.record
-                .as_antex()
-                .into_iter()
-                .flat_map(|record| record.iter()),
-        )
     }
 
     /// Copies and returns new [Rinex] that is the result

@@ -1,8 +1,4 @@
 use crate::{
-    antex::{
-        record::{is_new_epoch as is_new_antex_epoch, parse_antenna as parse_antex_antenna},
-        Record as AntexRecord,
-    },
     clock::{
         record::{is_new_epoch as is_new_clock_epoch, parse_epoch as parse_clock_epoch},
         ClockKey, ClockProfile, Record as ClockRecord,
@@ -55,9 +51,6 @@ impl Record {
         let mut comments: Comments = Comments::new();
         let mut comment_ts = Epoch::default();
         let mut comment_content = Vec::<String>::with_capacity(4);
-
-        // ANTEX
-        let mut atx_rec = AntexRecord::new();
 
         // NAV
         let mut nav_rec = NavRecord::new();
@@ -265,12 +258,6 @@ impl Record {
                                 comment_ts = epoch; // for comments storage
                             }
                         },
-
-                        Type::Antenna => {
-                            if let Ok((antenna, content)) = parse_antex_antenna(&epoch_buf) {
-                                atx_rec.push((antenna, content));
-                            }
-                        },
                     }
                 }
             }
@@ -292,7 +279,6 @@ impl Record {
 
         // wrap content and exit
         let record = match &header.rinex_type {
-            Type::Antenna => Record::AntexRecord(atx_rec),
             Type::Clock => Record::ClockRecord(clk_rec),
             Type::Meteo => Record::MeteoRecord(met_rec),
             Type::Navigation => Record::NavRecord(nav_rec),
@@ -306,7 +292,6 @@ impl Record {
             return false;
         }
         match &header.rinex_type {
-            Type::Antenna => is_new_antex_epoch(line),
             Type::Clock => is_new_clock_epoch(line),
             Type::Navigation => is_new_nav_epoch(line, header.version),
             Type::Observation => is_new_observation_epoch(line, header.version),

@@ -1,7 +1,6 @@
 //! RINEX file Header
 
 use crate::{
-    antex::HeaderFields as AntexHeader,
     clock::HeaderFields as ClockHeader,
     hardware::{Antenna, Receiver, SvAntenna},
     hatanaka::CRINEX,
@@ -163,10 +162,6 @@ pub struct Header {
     /// High Precision Clock RINEX specific fields
     #[cfg_attr(feature = "serde", serde(default))]
     pub clock: Option<ClockHeader>,
-
-    /// ANTEX specific fields
-    #[cfg_attr(feature = "serde", serde(default))]
-    pub antex: Option<AntexHeader>,
 }
 
 impl Default for Header {
@@ -199,7 +194,6 @@ impl Default for Header {
             meteo: None,
             nav: None,
             clock: None,
-            antex: None,
             rcvr: None,
             rcvr_antenna: None,
             sv_antenna: None,

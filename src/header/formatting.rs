@@ -216,7 +216,6 @@ impl Header {
                     )
                 )?;
             },
-            Type::Antenna => {}, // TODO (ANTEX)
         }
 
         Ok(())
@@ -235,8 +234,6 @@ impl Header {
             meteo.format(w)
         } else if let Some(clock) = &self.clock {
             clock.format(w)
-        } else if let Some(antex) = &self.antex {
-            antex.format(w)
         } else {
             Ok(()) // should not happen
         }

@@ -1,7 +1,7 @@
 #[cfg(doc)]
 use crate::prelude::Rinex;
 
-use crate::prelude::{Constellation, ParsingError};
+use crate::prelude::ParsingError;
 
 /// [Type] describes all supported [Rinex] formats.
 #[derive(Default, Copy, Clone, PartialEq, Debug, Eq, Hash)]
@@ -30,10 +30,6 @@ pub enum Type {
     /// Clock RINEX ("Clock Data") describe the state of ground
     /// or satellite clocks precisely.
     Clock,
-
-    /// Antenna RINEX (or ANTEX) are special RINEX and serve
-    /// as a database to describe and compensate antenna characteristics precisely.
-    Antenna,
 }
 
 impl std::fmt::Display for Type {
@@ -44,7 +40,6 @@ impl std::fmt::Display for Type {
             Self::Navigation => write!(fmt, "Navigation Messages"),
             Self::Meteo => write!(fmt, "Meteo observations"),
             Self::Clock => write!(fmt, "Clock data"),
-            Self::Antenna => write!(fmt, "Antenna database"),
         }
     }
 }
@@ -57,7 +52,6 @@ impl std::fmt::UpperHex for Type {
             Self::Navigation => write!(f, "NAVIGATION DATA"),
             Self::Meteo => write!(f, "METEOROLOGICAL DATA"),
             Self::Clock => write!(f, "CLOCK DATA"),
-            Self::Antenna => write!(f, "ANTEX"),
         }
     }
 }
@@ -72,7 +66,6 @@ impl std::fmt::LowerHex for Type {
             Self::Navigation => write!(f, "NAV"),
             Self::Meteo => write!(f, "MET"),
             Self::Clock => write!(f, "CLK"),
-            Self::Antenna => write!(f, "ATX"),
         }
     }
 }
@@ -90,8 +83,6 @@ impl std::str::FromStr for Type {
             Ok(Self::Meteo)
         } else if s.eq("clock data") || s.eq("c") {
             Ok(Self::Clock)
-        } else if s.eq("antex") {
-            Ok(Self::Antenna)
         } else {
             Err(ParsingError::TypeParsing)
         }

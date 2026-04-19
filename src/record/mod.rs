@@ -1,6 +1,6 @@
 use crate::{
-    antex::Record as AntexRecord, clock::Record as ClockRecord, meteo::Record as MeteoRecord,
-    navigation::Record as NavRecord, observation::Record as ObservationRecord, prelude::Epoch,
+    clock::Record as ClockRecord, meteo::Record as MeteoRecord, navigation::Record as NavRecord,
+    observation::Record as ObservationRecord, prelude::Epoch,
 };
 
 use std::collections::BTreeMap;
@@ -15,9 +15,6 @@ mod parsing;
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum Record {
-    /// [AntexRecord] contains antenna calibration profile
-    AntexRecord(AntexRecord),
-
     /// [ClockRecord] contains SV and ground clock states
     ClockRecord(ClockRecord),
 
@@ -37,22 +34,6 @@ pub enum Record {
 pub type Comments = BTreeMap<Epoch, Vec<String>>;
 
 impl Record {
-    /// [AntexRecord] unwrapping attempt.
-    pub fn as_antex(&self) -> Option<&AntexRecord> {
-        match self {
-            Record::AntexRecord(r) => Some(r),
-            _ => None,
-        }
-    }
-
-    /// Mutable [AntexRecord] unwrapping attempt.
-    pub fn as_mut_antex(&mut self) -> Option<&mut AntexRecord> {
-        match self {
-            Record::AntexRecord(r) => Some(r),
-            _ => None,
-        }
-    }
-
     /// [ClockRecord] unwrapping attempt.
     pub fn as_clock(&self) -> Option<&ClockRecord> {
         match self {

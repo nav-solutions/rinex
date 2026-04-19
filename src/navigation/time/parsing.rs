@@ -1,6 +1,6 @@
 use crate::{
     epoch::parse_in_timescale as parse_epoch_in_timescale,
-    error::ParsingError,
+    errors::NavRINEXParsingError,
     navigation::time::TimeOffset,
     parse_f64,
     prelude::{Epoch, TimeScale},
@@ -8,7 +8,9 @@ use crate::{
 
 impl TimeOffset {
     /// Parse left hand side and right hand side [TimeScale]s
-    fn parse_lhs_rhs_timescales(content: &str) -> Result<(TimeScale, TimeScale), ParsingError> {
+    fn parse_lhs_rhs_timescales(
+        content: &str,
+    ) -> Result<(TimeScale, TimeScale), NavRINEXParsingError> {
         match content {
             // gps
             "GPGA" => Ok((TimeScale::GPST, TimeScale::GST)),
@@ -25,12 +27,12 @@ impl TimeOffset {
             "BDGP" => Ok((TimeScale::BDT, TimeScale::GPST)),
             // "SBAS"
             "SBUT" => Ok((TimeScale::GPST, TimeScale::UTC)),
-            _ => Err(ParsingError::NavInvalidTimescale),
+            _ => Err(NavRINEXParsingError::InvalidTimerefTimescale),
         }
     }
 
     /// Parse [TimeOffset] from RINEXv2 standard
-    pub fn parse_v2_delta_utc(line: &str) -> Result<Self, ParsingError> {
+    pub fn parse_v2_delta_utc(line: &str) -> Result<Self, NavRINEXParsingError> {
         let (a0, rem) = line.split_at(22);
         let (a1, rem) = rem.split_at(19);
         let (seconds, rem) = rem.split_at(9);
@@ -39,16 +41,16 @@ impl TimeOffset {
         let week = week
             .trim()
             .parse::<u32>()
-            .map_err(|_| ParsingError::NavEpochWeekCounter)?;
+            .map_err(|_| NavRINEXParsingError::TimerefEpochWeekCounter)?;
 
         let seconds = seconds
             .trim()
             .parse::<u64>()
-            .map_err(|_| ParsingError::NavEpochWeekCounter)?;
+            .map_err(|_| NavRINEXParsingError::TimerefEpochWeekCounter)?;
 
-        let a0 = parse_f64(a0.trim()).map_err(|_| ParsingError::NavTimeOffsetParinsg)?;
+        let a0 = parse_f64(a0.trim()).map_err(|_| NavRINEXParsingError::NavTimeOffsetParinsg)?;
 
-        let a1 = parse_f64(a1.trim()).map_err(|_| ParsingError::NavTimeOffsetParinsg)?;
+        let a1 = parse_f64(a1.trim()).map_err(|_| NavRINEXParsingError::NavTimeOffsetParinsg)?;
 
         Ok(Self::from_time_of_week(
             week,
@@ -60,7 +62,7 @@ impl TimeOffset {
     }
 
     /// Parse [TimeOffset] from RINEXv2 standard
-    pub fn parse_v2_corr_to_system_time(line: &str) -> Result<Self, ParsingError> {
+    pub fn parse_v2_corr_to_system_time(line: &str) -> Result<Self, NavRINEXParsingError> {
         let (year, rem) = line.split_at(6);
         let (month, rem) = rem.split_at(6);
         let (day, rem) = rem.split_at(6);
@@ -69,21 +71,21 @@ impl TimeOffset {
         let year = year
             .trim()
             .parse::<i32>()
-            .map_err(|_| ParsingError::NavTimeOffsetParinsg)?;
+            .map_err(|_| NavRINEXParsingError::TimerefOffsetParsing)?;
 
         let month = month
             .trim()
             .parse::<u8>()
-            .map_err(|_| ParsingError::NavTimeOffsetParinsg)?;
+            .map_err(|_| NavRINEXParsingError::TimerefOffsetParsing)?;
 
         let day = day
             .trim()
             .parse::<u8>()
-            .map_err(|_| ParsingError::NavTimeOffsetParinsg)?;
+            .map_err(|_| NavRINEXParsingError::TimerefOffsetParsing)?;
 
         let t_ref = Epoch::from_gregorian_utc_at_midnight(year, month, day);
 
-        let a0 = parse_f64(tau.trim()).map_err(|_| ParsingError::NavTimeOffsetParinsg)?;
+        let a0 = parse_f64(tau.trim()).map_err(|_| NavRINEXParsingError::TimerefOffsetParsing)?;
 
         Ok(Self::from_epoch(
             t_ref,
@@ -94,7 +96,7 @@ impl TimeOffset {
     }
 
     /// Parse [TimeOffset] from RINEXv3 standard
-    pub fn parse_v3(line: &str) -> Result<Self, ParsingError> {
+    pub fn parse_v3(line: &str) -> Result<Self, NavRINEXParsingError> {
         let (timescales, rem) = line.split_at(4);
         let (a0, rem) = rem.split_at(18);
         let (a1, rem) = rem.split_at(16);
@@ -106,16 +108,16 @@ impl TimeOffset {
         let week = week
             .trim()
             .parse::<u32>()
-            .map_err(|_| ParsingError::NavEpochWeekCounter)?;
+            .map_err(|_| NavRINEXParsingError::TimerefEpochWeekCounter)?;
 
         let seconds = seconds
             .trim()
             .parse::<u64>()
-            .map_err(|_| ParsingError::NavEpochWeekCounter)?;
+            .map_err(|_| NavRINEXParsingError::TimerefEpochWeekCounter)?;
 
-        let a0 = parse_f64(a0.trim()).map_err(|_| ParsingError::NavTimeOffsetParinsg)?;
+        let a0 = parse_f64(a0.trim()).map_err(|_| NavRINEXParsingError::TimerefOffsetParsing)?;
 
-        let a1 = parse_f64(a1.trim()).map_err(|_| ParsingError::NavTimeOffsetParinsg)?;
+        let a1 = parse_f64(a1.trim()).map_err(|_| NavRINEXParsingError::TimerefOffsetParsing)?;
 
         Ok(Self::from_time_of_week(
             week,
@@ -127,7 +129,7 @@ impl TimeOffset {
     }
 
     /// Parse [TimeOffset] from RINEXv4 standard
-    pub fn parse_v4(line_1: &str, line_2: &str) -> Result<Self, ParsingError> {
+    pub fn parse_v4(line_1: &str, line_2: &str) -> Result<Self, NavRINEXParsingError> {
         let (epoch, rem) = line_1.split_at(24);
         let (timescales, _) = rem.split_at(4);
 
@@ -146,12 +148,12 @@ impl TimeOffset {
         //     .trim()
         //     .replace('D', "e")
         //     .parse::<f64>()
-        //     .map_err(|_| ParsingError::NavTimeOffsetParinsg)?;
+        //     .map_err(|_| NavRINEXParsingError::NavTimeOffsetParinsg)?;
 
         let (a0, a1, a2) = (
-            parse_f64(a0.trim()).map_err(|_| ParsingError::NavTimeOffsetParinsg)?,
-            parse_f64(a1.trim()).map_err(|_| ParsingError::NavTimeOffsetParinsg)?,
-            parse_f64(a2.trim()).map_err(|_| ParsingError::NavTimeOffsetParinsg)?,
+            parse_f64(a0.trim()).map_err(|_| NavRINEXParsingError::TimerefOffsetParsing)?,
+            parse_f64(a1.trim()).map_err(|_| NavRINEXParsingError::TimerefOffsetParsing)?,
+            parse_f64(a2.trim()).map_err(|_| NavRINEXParsingError::TimerefOffsetParsing)?,
         );
 
         let time_offset = Self::from_time_of_week(t_week, t_nanos, lhs, rhs, (a0, a1, a2));

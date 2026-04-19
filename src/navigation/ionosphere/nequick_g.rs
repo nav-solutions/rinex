@@ -1,20 +1,23 @@
 use crate::{
     epoch::parse_in_timescale as parse_epoch_in_timescale,
-    error::FormattingError,
+    errors::{FormattingError, NavRINEXParsingError},
     fmt_rinex,
     navigation::formatting::NavFormatter,
     parse_f64,
-    prelude::{Constellation, Epoch, ParsingError, TimeScale},
+    prelude::{Constellation, Epoch, TimeScale},
 };
 
 use bitflags::bitflags;
 
 use std::io::{BufWriter, Write};
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 bitflags! {
     #[derive(Debug, Default, Clone, Copy)]
     #[derive(PartialEq, PartialOrd)]
-    #[cfg_attr(feature = "serde", derive(Serialize))]
+    #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
     pub struct NgRegionFlags: u16 {
         const REGION5 = 0x01;
         const REGION4 = 0x02;
@@ -26,7 +29,7 @@ bitflags! {
 
 /// Nequick-G Model payload
 #[derive(Debug, Clone, Default, Copy, PartialEq, PartialOrd)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct NgModel {
     /// a_i coefficients
     /// (sfu, (sfu.semi-circle⁻¹), (sfu.semi-circle⁻²))
@@ -41,10 +44,10 @@ impl NgModel {
     pub(crate) fn parse(
         mut lines: std::str::Lines<'_>,
         ts: TimeScale,
-    ) -> Result<(Epoch, Self), ParsingError> {
+    ) -> Result<(Epoch, Self), NavRINEXParsingError> {
         let line = match lines.next() {
             Some(l) => l,
-            _ => return Err(ParsingError::EmptyEpoch),
+            _ => return Err(NavRINEXParsingError::MissingLine),
         };
         let (epoch, rem) = line.split_at(23);
         let (a0, rem) = rem.split_at(19);
@@ -52,16 +55,16 @@ impl NgModel {
 
         let line = match lines.next() {
             Some(l) => l,
-            _ => return Err(ParsingError::EmptyEpoch),
+            _ => return Err(NavRINEXParsingError::MissingLine),
         };
 
         let epoch = parse_epoch_in_timescale(epoch.trim(), ts)?;
         let a = (
-            parse_f64(a0.trim()).map_err(|_| ParsingError::NequickGData)?,
-            parse_f64(a1.trim()).map_err(|_| ParsingError::NequickGData)?,
-            parse_f64(rem.trim()).map_err(|_| ParsingError::NequickGData)?,
+            parse_f64(a0.trim()).map_err(|_| NavRINEXParsingError::NequickGData)?,
+            parse_f64(a1.trim()).map_err(|_| NavRINEXParsingError::NequickGData)?,
+            parse_f64(rem.trim()).map_err(|_| NavRINEXParsingError::NequickGData)?,
         );
-        let f = parse_f64(line.trim()).map_err(|_| ParsingError::NequickGData)?;
+        let f = parse_f64(line.trim()).map_err(|_| NavRINEXParsingError::NequickGData)?;
         Ok((
             epoch,
             Self {
