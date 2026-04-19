@@ -247,7 +247,7 @@ impl<const M: usize> DecompressorExpert<M> {
                         let prn = &self.epoch_descriptor[start..end]
                             .trim()
                             .parse::<u8>()
-                            .map_err(|_| CRX2RNXError::SallitePrnIntegerParsing)?;
+                            .map_err(|_| CRX2RNXError::SatellitePrnIntegerParsing)?;
 
                         Ok(SV {
                             prn: *prn,
@@ -287,7 +287,7 @@ impl<const M: usize> DecompressorExpert<M> {
                 CRX2RNXError::NumsatIntegerParsing
             })?;
 
-        Ok(numsat as usize)
+        Ok(*numsat as usize)
     }
 
     /// Builds new CRINEX decompressor.
@@ -549,13 +549,11 @@ impl<const M: usize> DecompressorExpert<M> {
         self.first_epoch = false;
 
         // this actually grabs the first satellite
-        if let Some(sv) = self.next_satellite() {
-            self.sv = sv;
-        } else {
-            // failed to grab one: corrupt content.
-            #[cfg(feature = "log")]
-            error!("failed to grab 1st sat");
-            return Err(Error::SatelliteIdentification);
+        match self.next_satellite() {
+            Ok(sv) => self.sv,
+            Err(e) => {
+                return Err(Error::SatelliteIdentification(e));
+            },
         }
 
         // This prepares the compression kernel for new rising satellites.

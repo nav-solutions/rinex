@@ -1,6 +1,46 @@
 /// Errors possibly raised during the CRX2RNX or RNX2CRNX algorithms
 use thiserror::Error;
 
+/// Satellite Identification errors during the CRX2RNX (RINEX decompression) algorithm
+#[derive(Debug, Error)]
+pub enum CRX2RNXSatError {
+    /// This error may arise when the internal state machine is trying to recover the epoch descriptor.
+    /// The recovered numsat (number of satellite in epoch to follow) is corrupt and does not match an unsigned integer.
+    /// This can be due to either
+    /// - corruption in the CRINEX description that led to the state machine
+    /// to this state
+    /// - this decoder behaving incorrectly (should not happen).
+    #[error("numsat integer number parsing error")]
+    NumsatIntegerParsing,
+
+    /// This error may arise as the state machine is trying
+    /// to recover new observations inside the epoch, as it progresses
+    /// from one satellite to the next, we need to progress in the
+    /// epoch descriptor and identify the satellites the next data points will
+    /// refer to. This error is raised in CRINEX3 files, where the satelite
+    /// identification should always pass "as is".
+    #[error("invalid CRINEX 3 satellite")]
+    InvalidCRINEX3Satellite,
+
+    /// This error may arise as the state machine is trying
+    /// to recover new observations inside the epoch, as it progresses
+    /// from one satellite to the next, we need to progress in the
+    /// epoch descriptor and identify the satellites the next data points will
+    /// refer to. This error is raised because this CRINEX 1 Header
+    /// did not define a GNSS system explicitly.
+    #[error("Illegal CRINEX-1 header with out explicit constellation")]
+    IncorrectCRINEX1GnssHeader,
+
+    /// This error may arise as the state machine is trying
+    /// to recover new observations inside the epoch, as it progresses
+    /// from one satellite to the next, we need to progress in the
+    /// epoch descriptor and identify the satellites the next data points will
+    /// refer to.
+    /// This error is raised when the PRN number does not match a valid 2-digit unsigned number.
+    #[error("satellite PRN number parsing error")]
+    SatellitePrnIntegerParsing,
+}
+
 /// Errors possibly raised during the CRX2RNX (RINEX decompression) algorithm
 #[derive(Debug, Error)]
 pub enum CRX2RNXError {
@@ -41,41 +81,19 @@ pub enum CRX2RNXError {
     #[error("corrupt v3 context or content")]
     CorruptV3ContextOrContent,
 
-    /// This error may arise when the internal state machine is trying to recover the epoch descriptor.
-    /// The recovered numsat (number of satellite in epoch to follow) is corrupt and does not match an unsigned integer.
-    /// This can be due to either
-    /// - corruption in the CRINEX description that led to the state machine
-    /// to this state
-    /// - this decoder behaving incorrectly (should not happen).
-    #[error("numsat integer number parsing error")]
-    NumsatIntegerParsing,
+    /// Errors that may arise during the data points recovering process,
+    /// specifically when we try to identify the satellite vehicle
+    /// the next points will be referenced to.
+    #[error("satellite identification issue: {0}")]
+    SatelliteError(CRNX2RNXSatError),
 
-    /// This error may arise as the state machine is trying
-    /// to recover new observations inside the epoch, as it progresses
-    /// from one satellite to the next, we need to progress in the
-    /// epoch descriptor and identify the satellites the next data points will
-    /// refer to. This error is raised in CRINEX3 files, where the satelite
-    /// identification should always pass "as is".
-    #[error("invalid CRINEX 3 sallite")]
-    InvalidCRINEX3Satellite,
-
-    /// This error may arise as the state machine is trying
-    /// to recover new observations inside the epoch, as it progresses
-    /// from one satellite to the next, we need to progress in the
-    /// epoch descriptor and identify the satellites the next data points will
-    /// refer to. This error is raised because this CRINEX 1 Header
-    /// did not define a GNSS system explicitly.
-    #[error("Illegal CRINEX-1 header with out explicit constellation")]
-    IncorrectCRINEX1GnssHeader,
-
-    /// This error may arise as the state machine is trying
-    /// to recover new observations inside the epoch, as it progresses
-    /// from one satellite to the next, we need to progress in the
-    /// epoch descriptor and identify the satellites the next data points will
-    /// refer to.
-    /// This error is raised when the PRN number does not match a valid 2-digit unsigned number.
-    #[error("satellite PRN number parsing error")]
-    SatellitePrnIntegerParsing,
+    /// This error may arise as we're about to transition from the
+    /// Epoch descriptor recovery to the observations recovery,
+    /// and we try to identify the first satellite to which the first series
+    /// of data points relate to.
+    /// Any satellite identification issues can lead to this very error.
+    #[error("failed to identify first satellite: {0}")]
+    FirstSatelliteIdentification(CRX2RNXSatError),
 
     /// Observable identification failure: when decompressing,
     /// we need to identify which physical observables relate to the pending

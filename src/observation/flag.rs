@@ -1,5 +1,6 @@
-use crate::prelude::ParsingError;
 use std::str::FromStr;
+
+use crate::errors::ObsRINEXParsingError;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -62,7 +63,7 @@ impl EpochFlag {
 }
 
 impl FromStr for EpochFlag {
-    type Err = ParsingError;
+    type Err = ObsRINEXParsingError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "0" => Ok(EpochFlag::Ok),
@@ -72,7 +73,7 @@ impl FromStr for EpochFlag {
             "4" => Ok(EpochFlag::HeaderInformationFollows),
             "5" => Ok(EpochFlag::ExternalEvent),
             "6" => Ok(EpochFlag::CycleSlip),
-            _ => Err(ParsingError::EpochFlag),
+            _ => Err(ObsRINEXParsingError::EpochFlag),
         }
     }
 }

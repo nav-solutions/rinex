@@ -85,8 +85,6 @@ use std::{
 
 use itertools::Itertools;
 
-use antex::{Antenna, FrequencyDependentData};
-
 #[cfg(feature = "flate2")]
 use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
 
@@ -1293,87 +1291,6 @@ impl Rinex {
                 })
             })
         }))
-    }
-}
-
-/*
- * ANTEX specific feature
- */
-#[cfg(feature = "antex")]
-#[cfg_attr(docsrs, doc(cfg(feature = "antex")))]
-impl Rinex {
-    /// Iterates over antenna specifications that are still valid
-    pub fn antex_valid_calibrations(
-        &self,
-        now: Epoch,
-    ) -> Box<dyn Iterator<Item = (&Antenna, &HashMap<Carrier, FrequencyDependentData>)> + '_> {
-        Box::new(self.antennas().filter_map(move |(ant, data)| {
-            if ant.is_valid(now) {
-                Some((ant, data))
-            } else {
-                None
-            }
-        }))
-    }
-    /// Returns APC offset for given spacecraft, expressed in NEU coordinates [mm] for given
-    /// frequency. "now" is used to determine calibration validity (in time).
-    pub fn sv_antenna_apc_offset(
-        &self,
-        now: Epoch,
-        sv: SV,
-        freq: Carrier,
-    ) -> Option<(f64, f64, f64)> {
-        self.antex_valid_calibrations(now)
-            .filter_map(|(ant, freqdata)| match &ant.specific {
-                AntennaSpecific::SvAntenna(sv_ant) => {
-                    if sv_ant.sv == sv {
-                        freqdata
-                            .get(&freq)
-                            .map(|freqdata| freqdata.apc_eccentricity)
-                    } else {
-                        None
-                    }
-                },
-                _ => None,
-            })
-            .reduce(|k, _| k) // we're expecting a single match here
-    }
-    /// Returns APC offset for given RX Antenna model (ground station model).
-    /// Model name is the IGS code, which has to match exactly but we're case insensitive.
-    /// The APC offset is expressed in NEU coordinates
-    /// [mm]. "now" is used to determine calibration validity (in time).
-    pub fn rx_antenna_apc_offset(
-        &self,
-        now: Epoch,
-        matcher: AntennaMatcher,
-        freq: Carrier,
-    ) -> Option<(f64, f64, f64)> {
-        let to_match = matcher.to_lowercase();
-        self.antex_valid_calibrations(now)
-            .filter_map(|(ant, freqdata)| match &ant.specific {
-                AntennaSpecific::RxAntenna(rx_ant) => match &to_match {
-                    AntennaMatcher::IGSCode(code) => {
-                        if rx_ant.igs_type.to_lowercase().eq(code) {
-                            freqdata
-                                .get(&freq)
-                                .map(|freqdata| freqdata.apc_eccentricity)
-                        } else {
-                            None
-                        }
-                    },
-                    AntennaMatcher::SerialNumber(sn) => {
-                        if rx_ant.igs_type.to_lowercase().eq(sn) {
-                            freqdata
-                                .get(&freq)
-                                .map(|freqdata| freqdata.apc_eccentricity)
-                        } else {
-                            None
-                        }
-                    },
-                },
-                _ => None,
-            })
-            .reduce(|k, _| k) // we're expecting a single match here
     }
 }
 
