@@ -60,7 +60,6 @@ impl MeteoObservable {
             Self::WindDirection => matches!(rhs, Self::WindDirection),
             Self::RainIncrement => matches!(rhs, Self::RainIncrement),
             Self::HailIndicator => matches!(rhs, Self::RainIncrement),
-            Self::FrequencyRatio => matches!(rhs, Self::FrequencyRatio),
         }
     }
 }
@@ -98,7 +97,6 @@ impl std::fmt::UpperHex for MeteoObservable {
             Self::WindSpeed => write!(f, "WS"),
             Self::RainIncrement => write!(f, "RI"),
             Self::HailIndicator => write!(f, "HI"),
-            Self::FrequencyRatio => write!(f, "F"),
         }
     }
 }
@@ -121,7 +119,6 @@ impl std::str::FromStr for MeteoObservable {
             "P" | "PR" => Ok(Self::Pressure),
             "T" | "TD" => Ok(Self::Temperature),
             "H" | "HR" => Ok(Self::HumidityRate),
-            "F" => Ok(Self::FrequencyRatio),
             "ZW" => Ok(Self::ZenithWetDelay),
             "ZD" => Ok(Self::ZenithDryDelay),
             "ZT" => Ok(Self::ZenithTotalDelay),

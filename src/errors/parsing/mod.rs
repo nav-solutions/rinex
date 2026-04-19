@@ -10,11 +10,13 @@ use hifitime::{HifitimeError, ParsingError as HifitimeParsingError};
 
 use std::io::Error as IoError;
 
-use crate::hatanaka::errors::CRX2RNXError;
+use crate::hatanaka::CRX2RNXError;
 
+mod meteo;
 mod nav;
 mod obs;
 
+pub use meteo::MeteoRINEXParsingError;
 pub use nav::NavRINEXParsingError;
 pub use obs::ObsRINEXParsingError;
 
@@ -43,6 +45,9 @@ pub enum ParsingError {
 
     #[error("OBS RINEX: {0}")]
     ObsRINEXError(#[from] ObsRINEXParsingError),
+
+    #[error("Meteo RINEX: {0}")]
+    MeteoRINEXError(#[from] MeteoRINEXParsingError),
 
     #[error("marker type")]
     MarkerType,

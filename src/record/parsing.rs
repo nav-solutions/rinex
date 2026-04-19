@@ -98,9 +98,10 @@ impl Record {
             if let Some(t) = obs.timeof_first_obs {
                 obs_ts = t.time_scale;
             } else {
-                let t = obs
-                    .timeof_last_obs
-                    .ok_or(ParsingError::BadObsBadTimescaleDefinition)?;
+                let t = obs.timeof_last_obs.ok_or(ParsingError::ObsRINEXError(
+                    ObsRINEXParsingError::UndefinedTimescale,
+                ))?;
+
                 obs_ts = t.time_scale;
             }
         }

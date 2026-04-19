@@ -6,29 +6,52 @@ use serde::{Deserialize, Serialize};
 
 /// `EpochFlag` validates an epoch,
 /// or describes possible events that occurred
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Copy, Default, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum EpochFlag {
-    /// Epoch is sane
+    /// Epoch is sane. All observations to follow
+    /// can safely be used in a navigation algorithm.
+    #[default]
     Ok,
-    /// Power failure since previous epoch
+
+    /// Power failure since previous epoch: the receiver
+    /// might be in unstable state and you should expect a loss of precision.
+    /// It is not recommended to use the following observations
+    /// in a precise navigation algorithm.
     PowerFailure,
-    /// Antenna is being moved at current epoch
+
+    /// Antenna is being moved at current epoch yet the receiver
+    /// is still providing data: you should expect a degradation in the precision.
+    /// It is not recommended to use the following observations
+    /// in a precise navigation algorithm.
     AntennaBeingMoved,
-    /// Site has changed, received has moved since last epoch
+
+    /// Site has changed, received has moved since last epoch, possibly
+    /// after a long dap (period without any measurements).
+    /// The parser should expect the presence of special Header
+    /// markers and update the new site position accordingly.
+    /// The number of measurements describes the number of header lines
+    /// to follow. Comments may still exist.
+    /// Once all possible markers have been parsed and updated, the
+    /// parser should continue the parsing process.
+    /// This is currently not supported by this library.
+    /// Track our github issues to see the progress on that.
     NewSiteOccupation,
-    /// New information to come after this epoch
+
+    /// New information to come after this epoch. This is used
+    /// to update the information provided by the Header (static information)
+    /// and is currently not supported by this library.
+    /// Track our github issues to see the progress on that.
+    /// The number of measurements describes the number of header fields to follow.
+    /// The reader should grab all following static information and then continue
+    /// the parsing process.
     HeaderInformationFollows,
+
     /// External event - significant event in this epoch
     ExternalEvent,
-    /// Cycle slip at this epoch
-    CycleSlip,
-}
 
-impl Default for EpochFlag {
-    fn default() -> Self {
-        Self::Ok
-    }
+    /// Cycle slip event declared at this epoch.
+    CycleSlip,
 }
 
 impl EpochFlag {
@@ -71,10 +94,12 @@ impl std::fmt::Display for EpochFlag {
 #[cfg(test)]
 mod test {
     use super::*;
+
     #[test]
     fn test_default() {
         assert_eq!(EpochFlag::default(), EpochFlag::Ok);
     }
+
     #[test]
     fn from_str() {
         assert_eq!(EpochFlag::from_str("0").unwrap(), EpochFlag::Ok);
@@ -95,6 +120,7 @@ mod test {
         assert_eq!(EpochFlag::from_str("6").unwrap(), EpochFlag::CycleSlip);
         assert!(EpochFlag::from_str("7").is_err());
     }
+
     #[test]
     fn to_str() {
         assert_eq!(format!("{}", EpochFlag::Ok), "0");

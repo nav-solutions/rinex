@@ -35,7 +35,7 @@ impl Default for Observable {
     /// Builds a default "L1C" [Observable] to describe
     /// the phase of the L1 signal.
     fn default() -> Self {
-        Self::PhaseRange("L1C".to_string())
+        Self::from_str("L1C").unwrap()
     }
 }
 
@@ -149,8 +149,8 @@ impl Observable {
 
         if constellation.is_sbas() {
             match carrier {
-                Carrier::L1 => Ok(Self::PseudoRange::from_str("C1C").unwrap()),
-                Carrier::L5 => Ok(Self::PseudoRange::from_str("C5X").unwrap()),
+                Carrier::L1 => Ok(Self::from_str("C1C").unwrap()),
+                Carrier::L5 => Ok(Self::from_str("C5X").unwrap()),
                 _ => Err(Error::UnknownSBASFrequency),
             }
         } else {

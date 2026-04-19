@@ -6,6 +6,15 @@ use thiserror::Error;
 /// file processing) or during Record section.
 #[derive(Debug, Error)]
 pub enum ObsRINEXParsingError {
+    /// This error is raised when we just finished parsing
+    /// the header, and the Timescale to select for future measurements
+    /// is not clear. It should have been described in the "TIME OF FIRST"
+    /// mandatory marker. This library is 'very' tolerant and
+    /// accepts the lack of such, as long as "TIME OF LAST" is then provided,
+    /// but we wind up here when that is not the case.
+    #[error("Undefined timescale")]
+    UndefinedTimescale,
+
     /// Parsing failed to grab one more line from the file reader.
     /// This is most likely due to a corruption in the file,
     /// where the epoch description does not match the actual epoch content
