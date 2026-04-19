@@ -48,11 +48,36 @@ pub enum ObsRINEXParsingError {
     #[error("Non supported receiver event")]
     NonSupportedReceiverEvent,
 
+    /// The provided content does not fit the description of a valid
+    /// RINEX Observable, because it must be 2 or 3 UTF-8 character
+    /// descriptor.
+    #[error("Invalid Observable")]
+    InvalidObservable,
+
+    /// The parser failed when it encountered an invalid signal Observable.
+    /// We support all valid Observables:
+    /// [https://docs.rs/rinex/latest/rinex/prelude/enum.Observable.html].
+    /// A valid observable starts with either:
+    /// - 'C' for pseudo-range measurements
+    /// - 'L' for phase-range measurements
+    /// - 'S' for SSI measurements
+    /// - 'P' for glonass legacy pseudo-range measurements
+    /// This is most likely due to corruption in the text file.
+    #[error("Incorrect Observable")]
+    IncorrectObservable,
+
+    /// The proposed "Observable" descriptor does not match
+    /// the correct definition of an "Observable". This is due
+    /// to an internal error (that should never happen) where
+    /// the parser proposed more than 3 UTF-8 caracters to be parsed.
+    #[error("Incorrect Observable")]
+    ObservableSizeError,
+
     /// Invalid or corrupt Observation RINEX "Observable".
     /// We support all valid Observables:
     /// [https://docs.rs/rinex/latest/rinex/prelude/enum.Observable.html].
     /// This is raised by a corruption in the text file.
     #[error("Invalid Observable")]
-    InvalidObservable,
+    IncorrectObservable,
     // not tested
 }

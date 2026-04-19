@@ -2,6 +2,7 @@
 use std::str::FromStr;
 
 use crate::{
+    errors::NavRINEXParsingError,
     navigation::ephemeris::flags::{
         bds::{
             BdsB1cIntegrity, BdsB2aB1cIntegrity, BdsB2bIntegrity, BdsHealth, BdsSatH1,
@@ -14,7 +15,6 @@ use crate::{
         irnss::IrnssHealth,
     },
     parse_f64,
-    prelude::ParsingError,
 };
 
 #[cfg(feature = "serde")]
@@ -138,15 +138,15 @@ impl OrbitItem {
         val_str: &str,
         msgtype: &NavMessageType,
         constellation: Constellation,
-    ) -> Result<OrbitItem, ParsingError> {
-        // make it "rust" compatible
-        let float = parse_f64(val_str).map_err(|_| ParsingError::NavNullOrbit)?;
+    ) -> Result<OrbitItem, NavRINEXParsingError> {
+        // makes the f64 description "rust" compatible
+        let float = parse_f64(val_str).map_err(|_| NavRINEXParsingError::FloatingPointParsing)?;
 
         // do not tolerate zero values for native types
         match type_str {
             "u8" | "i8" | "u32" | "f64" => {
                 if float == 0.0 {
-                    return Err(ParsingError::NavNullOrbit);
+                    return Err(NavRINEXParsingError::NavNullOrbit);
                 }
             },
             _ => {}, // non-native types
@@ -173,7 +173,7 @@ impl OrbitItem {
                 return Ok(OrbitItem::F64(float));
             },
             _ => {},
-        };
+        }
 
         // handle complex types
         match type_str {
@@ -190,11 +190,15 @@ impl OrbitItem {
                             match msgtype {
                                 NavMessageType::LNAV | NavMessageType::SBAS => {
                                     let flags = GeoHealth::from_bits(unsigned)
-                                        .ok_or(ParsingError::NavFlagsMapping)?;
+                                        .ok_or(NavRINEXParsingError::LnavSbasHealthFlags)?;
 
                                     return Ok(OrbitItem::GeoHealth(flags));
                                 },
-                                _ => return Err(ParsingError::NavHealthFlagDefinition),
+                                _ => {
+                                    return Err(
+                                        NavRINEXParsingError::LnavSbasHealthInvalidCombination,
+                                    )
+                                },
                             }
                         }
 
@@ -210,7 +214,7 @@ impl OrbitItem {
                             },
                             (NavMessageType::CNV2, Constellation::GPS | Constellation::QZSS) => {
                                 let flags = GpsQzssl1cHealth::from_bits(unsigned)
-                                    .ok_or(ParsingError::NavFlagsMapping)?;
+                                    .ok_or(NavRINEXParsingError::Cnv2GpsQzssHealthFlags)?;
 
                                 Ok(OrbitItem::GpsQzssl1cHealth(flags))
                             },
@@ -219,7 +223,7 @@ impl OrbitItem {
                                 Constellation::Galileo,
                             ) => {
                                 let flags = GalHealth::from_bits(unsigned)
-                                    .ok_or(ParsingError::NavFlagsMapping)?;
+                                    .ok_or(NavRINEXParsingError::LnavInavFnavGalHealthFlags)?;
 
                                 Ok(OrbitItem::GalHealth(flags))
                             },
@@ -228,7 +232,7 @@ impl OrbitItem {
                                 Constellation::Glonass,
                             ) => {
                                 let flags = GlonassHealth::from_bits(unsigned)
-                                    .ok_or(ParsingError::NavFlagsMapping)?;
+                                    .ok_or(NavRINEXParsingError::LnavFDMAGloHealthFlags)?;
 
                                 Ok(OrbitItem::GlonassHealth(flags))
                             },
@@ -238,7 +242,7 @@ impl OrbitItem {
                             ) => {
                                 // BDS H1 flag
                                 let flags = BdsSatH1::from_bits(unsigned)
-                                    .ok_or(ParsingError::NavFlagsMapping)?;
+                                    .ok_or(NavRINEXParsingError::LnavD1D2BdsHealthFlags)?;
 
                                 Ok(OrbitItem::BdsSatH1(flags))
                             },
@@ -251,7 +255,10 @@ impl OrbitItem {
 
                                 Ok(OrbitItem::BdsHealth(flags))
                             },
-                            _ => Err(ParsingError::NavHealthFlagDefinition),
+                            _ => Err(NavRINEXParsingError::NavHealthFlagDefinition((
+                                msgtype,
+                                constellation,
+                            ))),
                         }
                     },
                     "health2" => {
@@ -259,11 +266,13 @@ impl OrbitItem {
                         match (msgtype, constellation) {
                             (NavMessageType::FDMA, Constellation::Glonass) => {
                                 let flags = GlonassHealth2::from_bits(unsigned)
-                                    .ok_or(ParsingError::NavFlagsMapping)?;
+                                    .ok_or(NavRINEXParsingError::GloFDMASubsidaryFlags)?;
 
                                 Ok(OrbitItem::GlonassHealth2(flags))
                             },
-                            _ => Err(ParsingError::NavHealthFlagDefinition),
+                            _ => Err(NavRINEXParsingError::MissingSubsidaryHealthFlagsDefinition(
+                                (msgtype, constellation),
+                            )),
                         }
                     },
                     "source" => {
@@ -274,11 +283,14 @@ impl OrbitItem {
                                 Constellation::Galileo,
                             ) => {
                                 let flags = GalDataSource::from_bits(unsigned)
-                                    .ok_or(ParsingError::NavFlagsMapping)?;
+                                    .ok_or(NavRINEXParsingError::LnavInavFnavGalSourceFlags)?;
 
                                 Ok(OrbitItem::GalDataSource(flags))
                             },
-                            _ => Err(ParsingError::NavDataSourceDefinition),
+                            _ => Err(NavRINEXParsingError::MissingSourceFlags((
+                                msgtype,
+                                constellation,
+                            ))),
                         }
                     },
                     "satType" => match (msgtype, constellation) {
@@ -287,28 +299,34 @@ impl OrbitItem {
 
                             Ok(OrbitItem::BdsSatelliteType(flags))
                         },
-                        _ => Err(ParsingError::NavDataSourceDefinition),
+                        _ => Err(NavRINEXParsingError::MissingBeiDouSatTypeDefinition((
+                            msgtype,
+                            constellation,
+                        ))),
                     },
                     "integrity" => match (msgtype, constellation) {
                         (NavMessageType::CNV1, Constellation::BeiDou) => {
                             let flags = BdsB1cIntegrity::from_bits(unsigned)
-                                .ok_or(ParsingError::NavFlagsMapping)?;
+                                .ok_or(NavRINEXParsingError::Cnv1BeiDouB1cIntegrityFlags)?;
 
                             Ok(OrbitItem::BdsB1cIntegrity(flags))
                         },
                         (NavMessageType::CNV2, Constellation::BeiDou) => {
                             let flags = BdsB2aB1cIntegrity::from_bits(unsigned)
-                                .ok_or(ParsingError::NavFlagsMapping)?;
+                                .ok_or(NavRINEXParsingError::Cnv2BeiDouB2aB1cIntegrityFlags)?;
 
                             Ok(OrbitItem::BdsB2aB1cIntegrity(flags))
                         },
                         (NavMessageType::CNV3, Constellation::BeiDou) => {
                             let flags = BdsB2bIntegrity::from_bits(unsigned)
-                                .ok_or(ParsingError::NavFlagsMapping)?;
+                                .ok_or(NavRINEXParsingError::Cnv3BeiDouB2bIntegrityFlags)?;
 
                             Ok(OrbitItem::BdsB2bIntegrity(flags))
                         },
-                        _ => Err(ParsingError::NavDataSourceDefinition),
+                        _ => Err(NavRINEXParsingError::MissingIntegrityDefinition((
+                            msgtype,
+                            constellation,
+                        ))),
                     },
                     "status" => {
                         // complex status indication
@@ -318,19 +336,22 @@ impl OrbitItem {
 
                                 Ok(OrbitItem::GlonassStatus(flags))
                             },
-                            _ => Err(ParsingError::NavHealthFlagDefinition),
+                            _ => Err(NavRINEXParsingError::MissingStatusFlagsDefinition((
+                                msgtype,
+                                constellation,
+                            ))),
                         }
                     },
                     "l2p" => {
                         // l2p flag from GPS navigation message
                         Ok(OrbitItem::Gpsl2pFlag(unsigned > 0))
                     },
-                    _ => Err(ParsingError::NavFlagsDefinition),
+                    _ => Err(NavRINEXParsingError::InvalidComplexFlagType),
                 }
             },
             _ => {
-                // unknown complex type
-                Err(ParsingError::NavUnknownComplexType)
+                // unknown complex type: corrupt database
+                Err(NavRINEXParsingError::InvalidComplexType)
             },
         }
     }

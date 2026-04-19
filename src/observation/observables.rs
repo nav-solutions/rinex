@@ -4,29 +4,29 @@ use crate::{
     prelude::{Carrier, Constellation, Error},
 };
 
+use arrayvec::ArrayString;
+
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// [Observable] describes all possible Radio signal observations.
 /// These are specific to Observation RINEX (or compressed CRINEX) files.
 /// Meteo RINEX files have their dedicated list of observables.
-#[derive(Debug, Clone, PartialEq, PartialOrd, Hash, Ord, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Hash, Ord, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Observable {
-    /// Carrier phase range converted to [m] (not cycles!)
-    PhaseRange(String),
+    /// Doppler shift.
+    Doppler(ArrayString<3>),
 
-    /// Doppler shift observation
-    Doppler(String),
+    /// Carrier phase range (not cycles!) as meters of signal propagation.
+    PhaseRange(ArrayString<3>),
 
-    /// SSI: Receiver signal strength observation [dB]
-    SSI(String),
+    /// Decoded pseudo range expressed in meters of signal propoagation.
+    PseudoRange(ArrayString<3>),
 
-    /// Received Power [dBm]
-    Power(String),
-
-    /// Decoded Pseudo range converted to [m]
-    PseudoRange(String),
+    /// SSI: signal received strength estimated at the receiver level,
+    /// in decibels.
+    SSI(ArrayString<3>),
 }
 
 impl Default for Observable {
@@ -48,18 +48,6 @@ impl Observable {
             Self::Power(_) => matches!(rhs, Self::Power(_)),
             Self::Doppler(_) => matches!(rhs, Self::Doppler(_)),
             Self::PseudoRange(_) => matches!(rhs, Self::PseudoRange(_)),
-            Self::ChannelNumber(_) => matches!(rhs, Self::ChannelNumber(_)),
-            Self::Pressure => matches!(rhs, Self::Pressure),
-            Self::Temperature => matches!(rhs, Self::Temperature),
-            Self::HumidityRate => matches!(rhs, Self::HumidityRate),
-            Self::ZenithWetDelay => matches!(rhs, Self::ZenithWetDelay),
-            Self::ZenithDryDelay => matches!(rhs, Self::ZenithDryDelay),
-            Self::ZenithTotalDelay => matches!(rhs, Self::ZenithTotalDelay),
-            Self::WindSpeed => matches!(rhs, Self::WindSpeed),
-            Self::WindDirection => matches!(rhs, Self::WindDirection),
-            Self::RainIncrement => matches!(rhs, Self::RainIncrement),
-            Self::HailIndicator => matches!(rhs, Self::RainIncrement),
-            Self::FrequencyRatio => matches!(rhs, Self::FrequencyRatio),
         }
     }
 
@@ -81,10 +69,6 @@ impl Observable {
     /// Returns true if this [Observable] is an SSI measurement
     pub fn is_ssi_observable(&self) -> bool {
         matches!(self, Self::SSI(_))
-    }
-
-    pub fn is_power_observable(&self) -> bool {
-        matches!(self, Self::Power(_))
     }
 
     /// Returns the 2 or 3 letter code, in RINEX standardized format
@@ -240,7 +224,7 @@ impl Observable {
         }
     }
 
-    /// Returns the code length (repetition period), expressed in seconds,
+    /// Returns the period of provided code length (repetition period), expressed in seconds,
     /// of self: a valid Pseudo Range observable. This is not intended to be used
     /// on phase observables, although they are also determined from PRN codes.
     /// This is mostly used in fractional pseudo range determination.
@@ -426,20 +410,6 @@ impl Observable {
     }
 }
 
-impl std::fmt::Display for Observable {
-    /// Formats this [Observable] in a readable fashion,
-    /// not as found in RINEX records
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Self::PseudoRange(c)
-            | Self::PhaseRange(c)
-            | Self::Doppler(c)
-            | Self::SSI(c)
-            | Self::Power(c)
-        }
-    }
-}
-
 impl std::fmt::UpperHex for Observable {
     /// Formats this [Observable] in standardized 2 or 3 letter code,
     /// as found in RINEX records
@@ -456,41 +426,52 @@ impl std::fmt::UpperHex for Observable {
 
 impl std::str::FromStr for Observable {
     type Err = ObsRINEXParsingError;
+
+    /// Parses an [Observable] from a 2 (RINEX v2) or 3 (RINEX v3) character
+    /// description, that must fit the standard specifications,
+    /// including case sensitivity.
+    ///
+    /// For example:
+    /// - "L1" may represent a valid sample of the code or phase
+    /// of the L1 signal, in a RINEX v2 file.
+    /// - "C1C" represents a valid decoded range using the L1 signal,
+    /// in a RINEX v3 file.
+    /// - "L1C" represents a valid sample of the phase
+    /// of the L1 signal, in a RINEX v3 file.
+    ///
+    /// This methods identifieds both V2 and V3 observables correctly.
     fn from_str(content: &str) -> Result<Self, Self::Err> {
-        let content = content.to_uppercase();
-        let content = content.trim();
-        match content {
-            "P" | "PR" => Ok(Self::Pressure),
-            "T" | "TD" => Ok(Self::Temperature),
-            "H" | "HR" => Ok(Self::HumidityRate),
-            "F" => Ok(Self::FrequencyRatio),
-            "ZW" => Ok(Self::ZenithWetDelay),
-            "ZD" => Ok(Self::ZenithDryDelay),
-            "ZT" => Ok(Self::ZenithTotalDelay),
-            "WD" => Ok(Self::WindDirection),
-            "WS" => Ok(Self::WindSpeed),
-            "RI" => Ok(Self::RainIncrement),
-            "HI" => Ok(Self::HailIndicator),
-            _ => {
-                let len = content.len();
-                if len > 1 && len < 4 {
-                    if content.starts_with('L') {
-                        Ok(Self::PhaseRange(content.to_string()))
-                    } else if content.starts_with('C') || content.starts_with('P') {
-                        Ok(Self::PseudoRange(content.to_string()))
-                    } else if content.starts_with('S') {
-                        Ok(Self::SSI(content.to_string()))
-                    } else if content.starts_with('W') {
-                        Ok(Self::Power(content.to_string()))
-                    } else if content.starts_with('D') {
-                        Ok(Self::Doppler(content.to_string()))
-                    } else {
-                        Err(ParsingError::UnknownObservable)
-                    }
-                } else {
-                    Err(ParsingError::BadObservable)
-                }
-            },
+        let len = content.len();
+        if len < 1 || len > 3 {
+            return ObsRINEXParsingError::InvalidObservable;
+        }
+
+        if content.starts_with('L') {
+            // phase-range
+            Ok(Self::PhaseRange(
+                ArrayString::<3>::from_str(content)
+                    .map_err(|_| ObsRINEXParsingError::ObservableSizeError),
+            ))
+        } else if content.starts_with('C') {
+            // pseudo-range
+            Ok(Self::PseudoRange(
+                ArrayString::<3>::from_str(content)
+                    .map_err(|_| ObsRINEXParsingError::ObservableSizeError),
+            ))
+        } else if content.starts_with('P') {
+            // legacy glonass pseudo-range
+            Ok(Self::PseudoRange(
+                ArrayString::<3>::from_str(content)
+                    .map_err(|_| ObsRINEXParsingError::ObservableSizeError),
+            ))
+        } else if content.starts_with('S') {
+            // SSI
+            Ok(Self::SSI(
+                ArrayString::<3>::from_str(content)
+                    .map_err(|_| ObsRINEXParsingError::ObservableSizeError),
+            ))
+        } else {
+            Err(ObsRINEXParsingError::IncorrectObservable)
         }
     }
 }

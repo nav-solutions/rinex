@@ -1,19 +1,20 @@
 use crate::{
+    errors::NavRINEXParsingError,
     navigation::{
         BdModel, EarthOrientation, Ephemeris, IonosphereModel, KbModel, NavFrame, NavFrameType,
         NavKey, NavMessageType, NgModel, TimeOffset,
     },
-    prelude::{Constellation, Epoch, ParsingError, SV},
+    prelude::{Constellation, Epoch, SV},
 };
 
 /// ([NavKey], [NavFrame]) parsing attempt for a V4 frame.
 /// In modern Navigation, all forms may exist.
-pub fn parse(content: &str) -> Result<(NavKey, NavFrame), ParsingError> {
+pub fn parse(content: &str) -> Result<(NavKey, NavFrame), NavRINEXParsingError> {
     let mut lines = content.lines();
 
     let line = match lines.next() {
         Some(l) => l,
-        _ => return Err(ParsingError::EmptyEpoch),
+        _ => return Err(NavRINEXParsingError::MissingLine),
     };
 
     let (_, rem) = line.split_at(2);
@@ -28,7 +29,7 @@ pub fn parse(content: &str) -> Result<(NavKey, NavFrame), ParsingError> {
     let ts = sv
         .constellation
         .timescale()
-        .ok_or(ParsingError::NoTimescaleDefinition)?;
+        .ok_or(NavRINEXParsingError::NoTimescaleDefinition)?;
 
     // Parses navframe type dependent and epoch of publication
     let (epoch, fr) = match frmtype {
@@ -61,8 +62,8 @@ pub fn parse(content: &str) -> Result<(NavKey, NavFrame), ParsingError> {
         },
         NavFrameType::SystemTimeOffset => {
             // grab next lines
-            let line_1 = lines.next().ok_or(ParsingError::EmptyEpoch)?;
-            let line_2 = lines.next().ok_or(ParsingError::EmptyEpoch)?;
+            let line_1 = lines.next().ok_or(NavRINEXParsingError::MissingLine)?;
+            let line_2 = lines.next().ok_or(NavRINEXParsingError::MissingLine)?;
             let time_offset = TimeOffset::parse_v4(line_1, line_2)?;
 
             let epoch =
@@ -72,9 +73,9 @@ pub fn parse(content: &str) -> Result<(NavKey, NavFrame), ParsingError> {
         },
         NavFrameType::EarthOrientation => {
             // grab next lines
-            let line_1 = lines.next().ok_or(ParsingError::EmptyEpoch)?;
-            let line_2 = lines.next().ok_or(ParsingError::EmptyEpoch)?;
-            let line_3 = lines.next().ok_or(ParsingError::EmptyEpoch)?;
+            let line_1 = lines.next().ok_or(NavRINEXParsingError::MissingLine)?;
+            let line_2 = lines.next().ok_or(NavRINEXParsingError::MissingLine)?;
+            let line_3 = lines.next().ok_or(NavRINEXParsingError::MissingLine)?;
             let (epoch, eop) = EarthOrientation::parse(line_1, line_2, line_3, ts)?;
             (epoch, NavFrame::EOP(eop))
         },

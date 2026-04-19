@@ -10,62 +10,82 @@ lazy_static! {
     ];
 }
 
+/// [Carrier] frequency we can identify from valid [Observable]s.
 #[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Carrier {
     /// L1 (GPS, SBAS, QZSS)
     #[default]
     L1,
+
     /// L2 (GPS, QZSS)
     L2,
+
     /// L5 (GPS, SBAS, QZSS)
     L5,
+
     /// L6 (LEX) QZSS
     L6,
+
     /// Glonass channel 1 with possible offset
     G1(Option<i8>),
+
     /// Glonass G1a
     G1a,
+
     /// Glonass channel 2 with possible offset
     G2(Option<i8>),
+
     /// Glonass G2a
     G2a,
+
     /// Glonass channel 3
     G3,
+
     /// E1 (Galileo)
     E1,
+
     /// E5a (Galileo)
     E5a,
+
     /// E5b (Galileo)
     E5b,
+
     /// E5a + E5b 1191 MHz
     E5a5b,
+
     /// E6 (Galileo)
     E6,
+
     /// B1 (BDS 2/3)
     B1,
+
     /// B1C (BDS-3)
     B1c,
+
     /// B1A (BDS-3)
     B1a,
+
     /// B2A (BDS-3)
     B2a,
+
     /// B2 (BDS-2)
     B2,
+
     /// B2b (BDS-3)
     B2b,
+
     /// B2a + B2b (BDS-3)
     B2a2b,
+
     /// B3 (BDS-2/3)
     B3,
+
     /// B3A (BDS-3)
     B3a,
+
     /// IRNSS S
     S,
-    /// DORIS S1 Frequency
-    S1,
-    /// DORIS U2 Frequency
-    U2,
 }
 
 impl std::fmt::Display for Carrier {

@@ -66,6 +66,26 @@ impl MeteoObservable {
 }
 
 impl std::fmt::Display for MeteoObservable {
+    /// Formats this [MeteoObservable] in a readable fashion,
+    /// not as found in RINEX records
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Pressure => write!(f, "Pressure (hPa)"),
+            Self::Temperature => write!(f, "Temperature (°C)"),
+            Self::HumidityRate => write!(f, "Moisture rate (%)"),
+            Self::ZenithWetDelay => write!(f, "Zenith wet delay (mm)"),
+            Self::ZenithDryDelay => write!(f, "Zenith dry delay (mm)"),
+            Self::ZenithTotalDelay => write!(f, "Zenith total delay (mm)"),
+            Self::WindDirection => write!(f, "Wind Direction (degrees)"),
+            Self::WindSpeed => write!(f, "Wind speed (m/s)"),
+            Self::RainIncrement => write!(f, "Rain Increment (mm)"),
+            Self::HailIndicator => write!(f, "Hail detection"),
+        }
+    }
+}
+
+impl std::fmt::UpperHex for MeteoObservable {
+    /// Formats this [Observable] as found in RINEX records.
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Pressure => write!(f, "PR"),
@@ -79,21 +99,24 @@ impl std::fmt::Display for MeteoObservable {
             Self::RainIncrement => write!(f, "RI"),
             Self::HailIndicator => write!(f, "HI"),
             Self::FrequencyRatio => write!(f, "F"),
-            Self::PseudoRange(c)
-            | Self::PhaseRange(c)
-            | Self::Doppler(c)
-            | Self::SSI(c)
-            | Self::Power(c)
-            | Self::ChannelNumber(c) => write!(f, "{}", c),
         }
     }
 }
 
 impl std::str::FromStr for MeteoObservable {
-    type Err = ParsingError;
+    type Err = MeteoParsingError;
+
+    /// Parses a [MeteoObservable] from a 1 or 2 character
+    /// description, that must fit the standard specifications,
+    /// including case sensitivity.
+    ///
+    /// For example:
+    /// - "P" is a valid V2 Pressure observable.
+    /// - "PR" is a valid V3 Pressure observable.
+    /// - "HI" is a valid V3 Hail Indicator observable.
+    ///
+    /// This methods identifieds both V2 and V3 observables correctly.
     fn from_str(content: &str) -> Result<Self, Self::Err> {
-        let content = content.to_uppercase();
-        let content = content.trim();
         match content {
             "P" | "PR" => Ok(Self::Pressure),
             "T" | "TD" => Ok(Self::Temperature),
@@ -106,26 +129,7 @@ impl std::str::FromStr for MeteoObservable {
             "WS" => Ok(Self::WindSpeed),
             "RI" => Ok(Self::RainIncrement),
             "HI" => Ok(Self::HailIndicator),
-            _ => {
-                let len = content.len();
-                if len > 1 && len < 4 {
-                    if content.starts_with('L') {
-                        Ok(Self::PhaseRange(content.to_string()))
-                    } else if content.starts_with('C') || content.starts_with('P') {
-                        Ok(Self::PseudoRange(content.to_string()))
-                    } else if content.starts_with('S') {
-                        Ok(Self::SSI(content.to_string()))
-                    } else if content.starts_with('W') {
-                        Ok(Self::Power(content.to_string()))
-                    } else if content.starts_with('D') {
-                        Ok(Self::Doppler(content.to_string()))
-                    } else {
-                        Err(ParsingError::UnknownMeteoObservable)
-                    }
-                } else {
-                    Err(ParsingError::BadMeteoObservable)
-                }
-            },
+            _ => Err(MeteoParsingError::InvalidObservable),
         }
     }
 }
