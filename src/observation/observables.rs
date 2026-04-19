@@ -45,7 +45,6 @@ impl Observable {
         match self {
             Self::SSI(_) => matches!(rhs, Self::SSI(_)),
             Self::PhaseRange(_) => matches!(rhs, Self::PhaseRange(_)),
-            Self::Power(_) => matches!(rhs, Self::Power(_)),
             Self::Doppler(_) => matches!(rhs, Self::Doppler(_)),
             Self::PseudoRange(_) => matches!(rhs, Self::PseudoRange(_)),
         }
@@ -101,9 +100,9 @@ impl Observable {
 
         match constellation {
             Constellation::GPS => match carrier {
-                Carrier::L1 => return Ok(Self::PseudoRange("C1C".to_string())),
-                Carrier::L2 => return Ok(Self::PseudoRange("C2C".to_string())),
-                Carrier::L5 => return Ok(Self::PseudoRange("C5X".to_string())),
+                Carrier::L1 => return Ok(Self::PseudoRange::from_str("C1C").unwrap()),
+                Carrier::L2 => return Ok(Self::PseudoRange::from_str("C2C").unwrap()),
+                Carrier::L5 => return Ok(Self::PseudoRange::from_str("C5X").unwrap()),
                 _ => return Err(Error::UnknownGPSFrequency),
             },
             Constellation::Galileo => match carrier {
@@ -419,7 +418,6 @@ impl std::fmt::UpperHex for Observable {
             Self::PhaseRange(c) => write!(f, "{}", c),
             Self::Doppler(c) => write!(f, "{}", c),
             Self::SSI(c) => write!(f, "{}", c),
-            Self::Power(c) => write!(f, "{}", c),
         }
     }
 }

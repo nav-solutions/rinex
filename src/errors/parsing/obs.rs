@@ -79,5 +79,4 @@ pub enum ObsRINEXParsingError {
     /// This is raised by a corruption in the text file.
     #[error("Invalid Observable")]
     IncorrectObservable,
-    // not tested
 }

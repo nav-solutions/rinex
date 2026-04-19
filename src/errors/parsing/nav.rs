@@ -107,42 +107,42 @@ pub enum NavRINEXParsingError {
     /// this message type and satellite combination.
     /// This is raised when the input text file is corrupt
     /// or this type of message is not supported yet.
-    #[error("missing health flags specs for {:x}({:x})")]
+    #[error("missing health flags specs for {0:x}({1:x})")]
     MissingHealthFlagsDefinition((NavMessageType, Constellation)),
 
     /// No standard definitions in our database for
     /// this message type and satellite combination.
     /// This is raised when the input text file is corrupt
     /// or this type of message is not supported yet.
-    #[error("missing subsidary health flags specs for {:x}({:x})")]
+    #[error("missing subsidary health flags specs for {0:x}({1:x})")]
     MissingSubsidaryHealthFlagsDefinition((NavMessageType, Constellation)),
 
     /// No standard definitions in our database for
     /// this message type and satellite combination.
     /// This is raised when the input text file is corrupt
     /// or this type of message is not supported yet.
-    #[error("missing source flags specs for {:x}({:x})")]
+    #[error("missing source flags specs for {0:x}({1:x})")]
     MissingSourceFlagsDefinition((NavMessageType, Constellation)),
 
     /// No standard definitions in our database for
     /// this message type and satellite combination.
     /// This is raised when the input text file is corrupt
     /// or this type of message is not supported yet.
-    #[error("missing BeiDou satellite type flags specs for {:x}({:x})")]
+    #[error("missing BeiDou satellite type flags specs for {0:x}({1:x})")]
     MissingBeiDouSatTypeDefinition((NavMessageType, Constellation)),
 
     /// No standard definitions in our database for
     /// this message type and satellite combination.
     /// This is raised when the input text file is corrupt
     /// or this type of message is not supported yet.
-    #[error("missing signal integrity specs for {:x}({:x})")]
+    #[error("missing signal integrity specs for {0:x}({1:x})")]
     MissingIntegrityDefinition((NavMessageType, Constellation)),
 
     /// No standard definitions in our database for
     /// this message type and satellite combination.
     /// This is raised when the input text file is corrupt
     /// or this type of message is not supported yet.
-    #[error("missing status flags specs for {:x}({:x})")]
+    #[error("missing status flags specs for {0:x}({1:x})")]
     MissingStatusFlagsDefinition((NavMessageType, Constellation)),
 
     /// Error when trying to identify health flags contained

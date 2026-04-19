@@ -33,6 +33,7 @@ serde = [
     "hifitime/serde",
     "bitflags/serde",
     "ublox/serde",
+    "arrayvec/serde",
 ]
 
 # OBSERVATION RINEX Iterators & methods. Unlocks signal combinations.
