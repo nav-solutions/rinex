@@ -48,7 +48,7 @@ pub fn is_new_epoch(line: &str, v: Version) -> bool {
         match line.chars().next() {
             Some(c) => {
                 c == '>' // epochs always delimited
-                // by this new identifier
+                         // by this new identifier
             },
             _ => false,
         }
