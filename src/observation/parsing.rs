@@ -197,13 +197,12 @@ fn parse_observations(
         }
 
         let systems_str_len = systems_str.len();
-
         parse_signals_v2(
             &systems_str,
             systems_str_len,
             constellation,
             observables,
-            lines,
+            &mut lines,
             signals,
         );
     } else {
@@ -221,13 +220,13 @@ fn parse_observations(
 ///   - system_str: first line description
 ///   - constellation: [Constellation] specs defined in [Header]
 ///   - observables: reference to [Observable]s specs defined in [Header]
-///   - lines: remaing [Lines] Iterator
+///   - lines: remaing [Lines] Iterator via mutable reference
 fn parse_signals_v2(
     systems_str: &str,
     systems_str_len: usize,
     head_constellation: Option<Constellation>,
     head_observables: &HashMap<Constellation, Vec<Observable>>,
-    lines: Lines<'_>,
+    lines: &mut Lines<'_>,
     signals: &mut Vec<SignalObservation>,
 ) {
     const SVNN_SIZE: usize = 3; // SVNN standard
@@ -243,205 +242,117 @@ fn parse_signals_v2(
         return;
     }
 
-    // sv pointer
-    let mut sv = SV::default();
     let mut sv_ptr = 0;
-    let mut sv_identified = false;
-    // let numsat = systems_str_len / SVNN_SIZE;
 
-    // observable pointer
-    let mut obs_ptr = 0;
-    let mut obs_identified = false;
-    let mut observables = &Vec::<Observable>::default();
+    // Process each SV sequentially
+    while sv_ptr < systems_str_len {
+        let sv_end = (sv_ptr + SVNN_SIZE).min(systems_str_len);
+        let system = systems_str[sv_ptr..sv_end].trim();
 
-    // browse all lines
-    for line in lines {
-        // [SV] identification
-        //  1. on first line (not defined yet!)
-        //  2. every time one SV is concluded
-        if !sv_identified {
-            // identify new SV
-            let sv_end = (sv_ptr + SVNN_SIZE).min(systems_str_len);
-            let system = &systems_str[sv_ptr..sv_end].trim();
-
-            // actual parsing
-            if let Ok(found) = SV::from_str(system) {
-                sv = found;
-            } else {
-                // This may fail on very old RINEX mono GNSS
-                // that omit the constellation in the description
-                match head_constellation {
-                    Some(Constellation::Mixed) | None => {
-                        //#[cfg(feature = "log")]
-                        //error!("parse_sig_v2(abort): no constell specs");
+        let mut sv = SV::default();
+        if let Ok(found) = SV::from_str(system) {
+            sv = found;
+        } else {
+            match head_constellation {
+                Some(Constellation::Mixed) | None => break,
+                Some(gnss) => {
+                    if let Ok(prn) = system.trim().parse::<u8>() {
+                        sv = SV {
+                            prn,
+                            constellation: gnss,
+                        };
+                    } else {
                         break;
-                    },
-                    Some(gnss) => {
-                        if let Ok(prn) = system.trim().parse::<u8>() {
-                            sv = SV {
-                                prn,
-                                constellation: gnss,
-                            };
-                        } else {
-                            //#[cfg(feature = "log")]
-                            //error!("parse_sig_v2(abort): invalid sv");
-                            break;
+                    }
+                },
+            }
+        }
+
+        let observables = if sv.constellation.is_sbas() {
+            head_observables.get(&Constellation::SBAS)
+        } else {
+            head_observables.get(&sv.constellation)
+        };
+
+        if let Some(observables) = observables {
+            let num_lines = div_ceil(observables.len(), MAX_OBSERVABLES_LINE);
+            let mut obs_ptr = 0;
+
+            for _ in 0..num_lines {
+                let line = match lines.next() {
+                    Some(l) => l,
+                    None => return, // EOF
+                };
+
+                let line_width = line.len();
+                let trimmed_len = line.trim().len();
+
+                if trimmed_len == 0 {
+                    obs_ptr += MAX_OBSERVABLES_LINE;
+                    continue;
+                }
+
+                let num_obs_this_line = div_ceil(line_width, OBSERVABLE_WIDTH);
+                let mut offset = 0;
+
+                //#[cfg(feature = "log")]
+                //debug!(
+                //   "line: \"{}\" [sv={}/{} obs={}/{}]",
+                //   line,
+                //   sv_ptr,
+                //   systems_str_len,
+                //   obs_ptr,
+                //   observables.len()
+                //);
+
+                for _ in 0..num_obs_this_line {
+                    if obs_ptr >= observables.len() {
+                        break;
+                    }
+
+                    let end = (offset + OBSERVABLE_WIDTH).min(line_width);
+                    let slice = &line[offset..end];
+
+                    let mut lli = Option::<LliFlags>::None;
+                    if slice.len() > OBSERVABLE_F14_WIDTH {
+                        let lli_slice = &slice[OBSERVABLE_F14_WIDTH..OBSERVABLE_F14_WIDTH + 1];
+                        if let Ok(unsigned) = lli_slice.parse::<u8>() {
+                            lli = LliFlags::from_bits(unsigned);
                         }
-                    },
+                    }
+
+                    let mut snr = Option::<SNR>::None;
+                    if slice.len() > OBSERVABLE_F14_WIDTH + 1 {
+                        let snr_slice = &slice[OBSERVABLE_F14_WIDTH + 1..OBSERVABLE_F14_WIDTH + 2];
+                        if let Ok(found) = SNR::from_str(snr_slice) {
+                            snr = Some(found);
+                        }
+                    }
+
+                    let end = slice.len().min(OBSERVABLE_F14_WIDTH);
+                    if let Ok(value) = parse_f64(slice[..end].trim()) {
+                        signals.push(SignalObservation {
+                            sv,
+                            snr,
+                            lli,
+                            value,
+                            observable: observables[obs_ptr].clone(),
+                        });
+                    }
+
+                    obs_ptr += 1;
+                    offset += OBSERVABLE_F14_WIDTH + 2;
+                }
+
+                if num_obs_this_line < MAX_OBSERVABLES_LINE {
+                    obs_ptr += MAX_OBSERVABLES_LINE - num_obs_this_line;
                 }
             }
-
-            // move on to next
-            sv_ptr += SVNN_SIZE;
-            sv_identified = true;
-            obs_identified = false;
+        } else {
+            break;
         }
-
-        // [Observable] identification
-        //  - locate [Observable]s specs for this [SV]
-        if !obs_identified {
-            observables = if sv.constellation.is_sbas() {
-                if let Some(observables) = head_observables.get(&Constellation::SBAS) {
-                    observables
-                } else {
-                    //#[cfg(feature = "log")]
-                    //error!("parse_sig_v2 (sbas): no specs");
-                    break;
-                }
-            } else {
-                if let Some(observables) = head_observables.get(&sv.constellation) {
-                    observables
-                } else {
-                    //#[cfg(feature = "log")]
-                    //error!("parse_sig_v2 ({}): no specs", sv.constellation);
-                    break;
-                }
-            };
-
-            obs_ptr = 0;
-            obs_identified = true;
-
-            //#[cfg(feature = "log")]
-            //debug!("{}: {:?}", sv, observables);
-        }
-
-        let line_width = line.len();
-        let trimmed_len = line.trim().len();
-
-        if trimmed_len == 0 {
-            //#[cfg(feature = "log")]
-            //error!("empty line: \"{}\"", line);
-
-            obs_ptr += MAX_OBSERVABLES_LINE;
-
-            // this concludes this vehicle
-            if obs_ptr >= observables.len() {
-                sv_identified = false;
-                obs_identified = false;
-                if sv_ptr == systems_str_len {
-                    // we're done
-                    return;
-                }
-            }
-
-            continue;
-        }
-
-        // num obs contained this line
-        let num_obs = div_ceil(line_width, OBSERVABLE_WIDTH);
-
-        let mut offset = 0;
-
-        //#[cfg(feature = "log")]
-        //debug!(
-        //    "line: \"{}\" [sv={}/{} obs={}/{}]",
-        //    line,
-        //    sv_ptr,
-        //    systems_str_len,
-        //    obs_ptr,
-        //    observables.len()
-        //);
-
-        // process all of them
-        for _ in 0..num_obs {
-            if obs_ptr >= observables.len() {
-                // line is abnormally long (trailing whitespaces): abort
-                return;
-            }
-
-            let end = (offset + OBSERVABLE_WIDTH).min(line_width);
-            let slice = &line[offset..end];
-
-            //#[cfg(feature = "log")]
-            //println!("observation: [{}] \"{}\" {}", sv, slice, observables[obs_ptr]);
-
-            // parse possible LLI
-            let mut lli = Option::<LliFlags>::None;
-
-            if slice.len() > OBSERVABLE_F14_WIDTH {
-                let lli_slice = &slice[OBSERVABLE_F14_WIDTH..OBSERVABLE_F14_WIDTH + 1];
-                //println!("lli: \"{}\"", lli_slice);
-                match lli_slice.parse::<u8>() {
-                    Ok(unsigned) => {
-                        lli = LliFlags::from_bits(unsigned);
-                    },
-                    Err(_) => {},
-                }
-            }
-
-            // parse possible SNR
-            let mut snr = Option::<SNR>::None;
-
-            if slice.len() > OBSERVABLE_F14_WIDTH + 1 {
-                let snr_slice = &slice[OBSERVABLE_F14_WIDTH + 1..OBSERVABLE_F14_WIDTH + 2];
-                match SNR::from_str(snr_slice) {
-                    Ok(found) => {
-                        //println!("SNR (OK): \"{}\" [{:?}]", snr_slice, observables[obs_ptr]); // DEBUG
-                        snr = Some(found);
-                    },
-                    Err(_) => {
-                        // println!("SNR (ERR): {:?} [{:?}]", e, observables[obs_ptr]); // DEBUG
-                    },
-                }
-            }
-
-            // parse observed value
-            let end = slice.len().min(OBSERVABLE_F14_WIDTH);
-
-            if let Ok(value) = parse_f64(slice[..end].trim()) {
-                signals.push(SignalObservation {
-                    sv,
-                    snr,
-                    lli,
-                    value,
-                    observable: observables[obs_ptr].clone(),
-                });
-            }
-
-            obs_ptr += 1;
-            offset += OBSERVABLE_F14_WIDTH + 2;
-
-            if obs_ptr == observables.len() {
-                //#[cfg(feature = "log")]
-                //debug!("{} completed", sv);
-
-                sv_identified = false;
-                obs_identified = false;
-
-                if sv_ptr == systems_str_len {
-                    // we're done
-                    return;
-                }
-            } else {
-                //#[cfg(feature = "log")]
-                //debug!("{}/{}", obs_ptr, observables.len());
-            }
-        } //num_obs
-
-        if num_obs < MAX_OBSERVABLES_LINE {
-            obs_ptr += MAX_OBSERVABLES_LINE - num_obs;
-        }
-    } // for all lines provided
+        sv_ptr += SVNN_SIZE;
+    }
 }
 
 /// Parses all [SignalObservation]s described by following [Lines].
@@ -714,39 +625,39 @@ G30R01R02R03R08R09R15R16R17R18R19R24
         // extracted from v2/npaz3550_21o
         let content = " 21 12 21 00 00 30.0000000  0 17G08G10G15G16G18G21G23G26G32R04R05R06
                                 R10R12R19R20R21
-  22273618.192   117048642.67706  91206745.37646  22273620.492          45.000  
-        27.000  
-  20679832.284   108673270.42707  84680474.73748  20679834.464          51.000  
-        47.000  
-  24428574.718   128373032.12605 100030940.88146  24428574.158          40.000  
-        26.000  
-  21748622.436   114289784.86106  89056973.16346  21748622.736          46.000  
-        30.000  
-  23159990.646   121706608.75906  94836327.00246  23159990.946          43.000  
-        22.000  
-  24121222.480   126757874.84305  98772376.29745  24121222.660          40.000  
-        17.000  
-  21243754.540   111636702.47207  86989641.56447  21243755.220          48.000  
-        33.000  
-  23730924.382   124706843.12805  97174162.95546  23730927.462          41.000  
-        30.000  
-  25068865.594   131737775.26304 102652811.50846  25068867.574          38.000  
-        24.000  
-  21628749.716   115820985.39407  90082976.65346  21628746.496          48.000  
-        22.000  
-  20263702.068   108321110.70607  84249758.00647  20263698.768          50.000  
-        34.000  
-  23144036.268   123501011.94300                                        32.000  
+  22273618.192   117048642.67706  91206745.37646  22273620.492          45.000
+        27.000
+  20679832.284   108673270.42707  84680474.73748  20679834.464          51.000
+        47.000
+  24428574.718   128373032.12605 100030940.88146  24428574.158          40.000
+        26.000
+  21748622.436   114289784.86106  89056973.16346  21748622.736          46.000
+        30.000
+  23159990.646   121706608.75906  94836327.00246  23159990.946          43.000
+        22.000
+  24121222.480   126757874.84305  98772376.29745  24121222.660          40.000
+        17.000
+  21243754.540   111636702.47207  86989641.56447  21243755.220          48.000
+        33.000
+  23730924.382   124706843.12805  97174162.95546  23730927.462          41.000
+        30.000
+  25068865.594   131737775.26304 102652811.50846  25068867.574          38.000
+        24.000
+  21628749.716   115820985.39407  90082976.65346  21628746.496          48.000
+        22.000
+  20263702.068   108321110.70607  84249758.00647  20263698.768          50.000
+        34.000
+  23144036.268   123501011.94300                                        32.000
 
-  22905715.968   122100341.64505                                        42.000  
-                
-  23665462.924   126416648.11306  98324062.16346  23665459.604          43.000  
-        25.000  
-  23266753.448   124461433.23101                                        33.000  
-                
-  19895900.968   106392328.16604  82749588.85847  19895899.328          39.000  
-        33.000  
-  21758080.616   116431896.04406  90558129.99946  21758077.536          47.000  
+  22905715.968   122100341.64505                                        42.000
+
+  23665462.924   126416648.11306  98324062.16346  23665459.604          43.000
+        25.000
+  23266753.448   124461433.23101                                        33.000
+
+  19895900.968   106392328.16604  82749588.85847  19895899.328          39.000
+        33.000
+  21758080.616   116431896.04406  90558129.99946  21758077.536          47.000
         22.000  ";
         generic_observation_epoch_decoding_test(
             content,
@@ -795,7 +706,7 @@ G30R01R02R03R08R09R15R16R17R18R19R24
                 ("GLO", "L1,    L2,    C1,    P1,    P2,    P1,    P2"),
             ],
             "2019-03-12T16:36:00 GPST",
-            50,
+            58,
             "2019-03-12T16:36:00 GPST",
             EpochFlag::Ok,
             None,
@@ -833,7 +744,7 @@ G30R01R02R03R08R09R15R16R17R18R19R24
                 ("GLO", "L1,    L2,    C1,    P1,    P2,    P1,    P2"),
             ],
             "1995-03-12T16:36:00 GPST",
-            50,
+            58,
             "1995-03-12T16:36:00 GPST",
             EpochFlag::Ok,
             None,
