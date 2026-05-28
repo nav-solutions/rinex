@@ -348,6 +348,8 @@ fn parse_signals_v2(
                     obs_ptr += MAX_OBSERVABLES_LINE - num_obs_this_line;
                 }
             }
+        } else {
+            break;
         }
         sv_ptr += SVNN_SIZE;
     }
