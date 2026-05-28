@@ -220,7 +220,7 @@ fn parse_observations(
 ///   - system_str: first line description
 ///   - constellation: [Constellation] specs defined in [Header]
 ///   - observables: reference to [Observable]s specs defined in [Header]
-///   - lines: remaing [Lines] Iterator
+///   - lines: remaing [Lines] Iterator via mutable reference
 fn parse_signals_v2(
     systems_str: &str,
     systems_str_len: usize,
@@ -247,7 +247,7 @@ fn parse_signals_v2(
     // Process each SV sequentially
     while sv_ptr < systems_str_len {
         let sv_end = (sv_ptr + SVNN_SIZE).min(systems_str_len);
-        let system = &systems_str[sv_ptr..sv_end].trim();
+        let system = systems_str[sv_ptr..sv_end].trim();
 
         let mut sv = SV::default();
         if let Ok(found) = SV::from_str(system) {
