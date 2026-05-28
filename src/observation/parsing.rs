@@ -220,7 +220,7 @@ fn parse_observations(
 ///   - system_str: first line description
 ///   - constellation: [Constellation] specs defined in [Header]
 ///   - observables: reference to [Observable]s specs defined in [Header]
-///   - lines: remaing [Lines] Iterator via mutable reference
+///   - lines: remaining [Lines] Iterator via mutable reference
 fn parse_signals_v2(
     systems_str: &str,
     systems_str_len: usize,
