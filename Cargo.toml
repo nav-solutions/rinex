@@ -43,7 +43,7 @@ obs = []
 nav = [
     "anise",
     "nalgebra",
-    "hyperdual"
+    "hyperdual",
 ]
 
 # Provides the special UT1-TAI methods
