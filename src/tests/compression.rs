@@ -67,6 +67,11 @@ mod test {
             ("VLNS0630.22D", "VLNS0630.22O"),
             ("flrs0010.12d", "flrs0010.12o"),
             ("pdel0010.21d", "pdel0010.21o"),
+            // receiver clock offsets, with resets and gaps
+            (
+                "ACRG00GHA_R_20240010000_01H_30S_MO.crx",
+                "ACRG00GHA_R_20240010000_01H_30S_MO.rnx",
+            ),
         ];
         for duplet in pool {
             let (crnx_name, rnx_name) = duplet;
