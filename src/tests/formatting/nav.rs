@@ -132,3 +132,203 @@ fn nav_v4_brd400dlr_records_write_back() {
 fn nav_v4_02_examples_records_write_back() {
     v4_records_write_back("rinex402_examples_MN.rnx");
 }
+
+use crate::{
+    navigation::{NavFrame, NavKey, NavMessageType},
+    prelude::{Constellation, Version},
+};
+
+/// Writes `rinex` in the revision of its (modified) header to a
+/// temporary file and parses it back.
+fn write_and_reparse(rinex: &Rinex, tag: &str) -> Result<Rinex, crate::error::FormattingError> {
+    let tmp = format!("test-{}-{}.rnx", tag, std::process::id());
+    rinex.to_file(&tmp)?;
+    let parsed = Rinex::from_file(&tmp).unwrap();
+    let _ = remove_file(&tmp);
+    Ok(parsed)
+}
+
+/// The ephemeris written in another revision must carry the values of
+/// the original: same clock fields, every orbit field of the reparsed
+/// record equal to the original's (the RINEX 3 definitions may omit
+/// fields of the RINEX 4 messages, and name the BeiDou group delays
+/// differently).
+fn assert_ephemeris_preserved(original: &NavFrame, reparsed: &NavFrame, k: &NavKey) {
+    let (a, b) = (
+        original.as_ephemeris().unwrap(),
+        reparsed.as_ephemeris().unwrap(),
+    );
+    assert_eq!(a.clock_bias, b.clock_bias, "clock bias {:?}", k);
+    assert_eq!(a.clock_drift, b.clock_drift, "clock drift {:?}", k);
+    assert_eq!(
+        a.clock_drift_rate, b.clock_drift_rate,
+        "clock drift rate {:?}",
+        k
+    );
+
+    fn alias(name: &str) -> &str {
+        match name {
+            "tgdb1b3" => "tgd1b1b3",
+            "tgdb2b3" => "tgd2b2b3",
+            "tgd1b1b3" => "tgdb1b3",
+            "tgd2b2b3" => "tgdb2b3",
+            other => other,
+        }
+    }
+
+    assert!(!b.orbits.is_empty(), "no orbit field at {:?}", k);
+    for (name, value) in b.orbits.iter() {
+        let expected = a
+            .orbits
+            .get(name)
+            .or_else(|| a.orbits.get(alias(name)))
+            .unwrap_or_else(|| {
+                panic!("{} written at {:?} does not exist in the original", name, k)
+            });
+        assert_eq!(
+            value.as_f64(),
+            expected.as_f64(),
+            "{} differs at {:?}",
+            name,
+            k
+        );
+    }
+}
+
+/// A RINEX 4 file mixing modern (CNAV, CNV1 to CNV3) and legacy messages
+/// written as RINEX 3 keeps every legacy ephemeris, and only those: one
+/// unrepresentable frame must not abort the whole file.
+#[test]
+fn nav_v4_written_as_v3_keeps_the_legacy_ephemerides() {
+    for name in [
+        "KMS300DNK_R_20221591000_01H_MN.rnx.gz",
+        "BRD400DLR_S_20230710000_01D_MN.rnx.gz",
+    ] {
+        let mut rinex = Rinex::from_gzip_file(&format!("data/NAV/V4/{}", name)).unwrap();
+        let original = rinex.record.as_nav().unwrap().clone();
+
+        let legacy = original
+            .iter()
+            .filter(|(k, v)| v.as_ephemeris().is_some() && k.msgtype.is_legacy(k.sv.constellation))
+            .collect::<Vec<_>>();
+        let modern = original
+            .iter()
+            .filter(|(k, v)| v.as_ephemeris().is_some() && !k.msgtype.is_legacy(k.sv.constellation))
+            .count();
+        // BRD400DLR mixes LNAV with CNAV and CNV1 to CNV3
+        if name.starts_with("BRD400DLR") {
+            assert!(modern > 0, "{} carries no modern message", name);
+        }
+
+        // records sharing epoch and vehicle collapse to one RINEX 3 key
+        let expected = legacy
+            .iter()
+            .map(|(k, _)| (k.epoch, k.sv))
+            .collect::<std::collections::BTreeSet<_>>()
+            .len();
+
+        rinex.header.version = Version::new(3, 5);
+        let parsed = write_and_reparse(&rinex, "v4-as-v3").unwrap();
+        assert_eq!(parsed.header.version, Version::new(3, 5));
+
+        let record = parsed.record.as_nav().unwrap();
+        assert_eq!(record.len(), expected, "{}", name);
+
+        for (k, frame) in record.iter() {
+            assert_eq!(k.msgtype, NavMessageType::LNAV);
+            // the last legacy message of this epoch and vehicle was written
+            let (_, original) = legacy
+                .iter()
+                .filter(|(o, _)| o.epoch == k.epoch && o.sv == k.sv)
+                .last()
+                .unwrap_or_else(|| panic!("{:?} was not in the original file", k));
+            assert_ephemeris_preserved(original, frame, k);
+        }
+    }
+}
+
+/// A RINEX 3 file written as RINEX 4 gets the message type of each
+/// constellation, and written back as RINEX 3 gives the original record.
+#[test]
+fn nav_v3_written_as_v4_gets_message_types() {
+    let mut rinex = Rinex::from_file("data/NAV/V3/AMEL00NLD_R_20210010000_01D_MN.rnx").unwrap();
+    let original = rinex.record.as_nav().unwrap().clone();
+
+    rinex.header.version = Version::new(4, 0);
+    let parsed = write_and_reparse(&rinex, "v3-as-v4").unwrap();
+
+    let record = parsed.record.as_nav().unwrap();
+    assert_eq!(record.len(), original.len());
+
+    let mut seen = std::collections::BTreeSet::new();
+    for (k, frame) in record.iter() {
+        let expected = match k.sv.constellation {
+            Constellation::GPS => NavMessageType::LNAV,
+            Constellation::Glonass => NavMessageType::FDMA,
+            Constellation::Galileo => {
+                let source = frame
+                    .as_ephemeris()
+                    .unwrap()
+                    .get_orbit_f64("source")
+                    .unwrap_or(0.0) as u32;
+                if source & 0x02 != 0 {
+                    NavMessageType::FNAV
+                } else {
+                    NavMessageType::INAV
+                }
+            },
+            Constellation::BeiDou => {
+                if k.sv.prn <= 5 || k.sv.prn >= 59 {
+                    NavMessageType::D2
+                } else {
+                    NavMessageType::D1
+                }
+            },
+            c if c.is_sbas() => NavMessageType::SBAS,
+            _ => NavMessageType::LNAV,
+        };
+        assert_eq!(k.msgtype, expected, "{:?}", k);
+        seen.insert(k.sv.constellation);
+
+        let key = NavKey {
+            msgtype: NavMessageType::LNAV,
+            ..*k
+        };
+        let original = original
+            .get(&key)
+            .unwrap_or_else(|| panic!("{:?} not found", key));
+        assert_ephemeris_preserved(original, frame, k);
+    }
+    assert!(seen.contains(&Constellation::Glonass) && seen.contains(&Constellation::BeiDou));
+
+    // and back
+    let mut parsed = parsed;
+    parsed.header.version = Version::new(3, 5);
+    let back = write_and_reparse(&parsed, "v4-back-as-v3").unwrap();
+    assert_eq!(back.record.as_nav().unwrap(), &original);
+}
+
+/// A mixed RINEX 3 file written as a RINEX 2 GPS file keeps the GPS
+/// ephemerides only.
+#[test]
+fn nav_v3_mixed_written_as_v2_gps() {
+    let mut rinex = Rinex::from_file("data/NAV/V3/CBW100NLD_R_20210010000_01D_MN.rnx").unwrap();
+    let original = rinex.record.as_nav().unwrap().clone();
+
+    let gps = original
+        .iter()
+        .filter(|(k, _)| k.sv.constellation == Constellation::GPS)
+        .count();
+    assert!(gps > 0 && gps < original.len());
+
+    rinex.header.version = Version::new(2, 11);
+    rinex.header.constellation = Some(Constellation::GPS);
+    let parsed = write_and_reparse(&rinex, "v3-as-v2").unwrap();
+
+    let record = parsed.record.as_nav().unwrap();
+    assert_eq!(record.len(), gps);
+    for (k, frame) in record.iter() {
+        assert_eq!(k.sv.constellation, Constellation::GPS);
+        assert_ephemeris_preserved(&original[k], frame, k);
+    }
+}
