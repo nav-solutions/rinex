@@ -247,6 +247,44 @@ fn nav_v4_written_as_v3_keeps_the_legacy_ephemerides() {
     }
 }
 
+/// The rinexfetch use case: the rapid BRD400DLR product filtered to GPS
+/// (LNAV, CNAV and CNV2 messages) written as RINEX 3 keeps every LNAV
+/// ephemeris, the modern messages have no RINEX 3 representation.
+#[test]
+fn nav_v4_gps_only_written_as_v3() {
+    let mut rinex =
+        Rinex::from_gzip_file("data/NAV/V4/BRD400DLR_S_20230710000_01D_MN.rnx.gz").unwrap();
+    rinex
+        .record
+        .as_mut_nav()
+        .unwrap()
+        .retain(|k, _| k.sv.constellation == Constellation::GPS);
+
+    let original = rinex.record.as_nav().unwrap().clone();
+    let lnav = original
+        .iter()
+        .filter(|(k, v)| v.as_ephemeris().is_some() && k.msgtype == NavMessageType::LNAV)
+        .collect::<Vec<_>>();
+    let modern = original
+        .iter()
+        .filter(|(k, v)| v.as_ephemeris().is_some() && k.msgtype != NavMessageType::LNAV)
+        .count();
+    assert!(!lnav.is_empty() && modern > 0);
+
+    rinex.header.version = Version::new(3, 5);
+    let parsed = write_and_reparse(&rinex, "gps-as-v3").unwrap();
+
+    let record = parsed.record.as_nav().unwrap();
+    assert_eq!(record.len(), lnav.len());
+    for (k, frame) in record.iter() {
+        let (_, original) = lnav
+            .iter()
+            .find(|(o, _)| o.epoch == k.epoch && o.sv == k.sv)
+            .unwrap_or_else(|| panic!("{:?} was not in the original file", k));
+        assert_ephemeris_preserved(original, frame, k);
+    }
+}
+
 /// A RINEX 3 file written as RINEX 4 gets the message type of each
 /// constellation, and written back as RINEX 3 gives the original record.
 #[test]
