@@ -219,7 +219,9 @@ fn v4_message_type(k: &NavKey, eph: &Ephemeris) -> NavMessageType {
 ///   (CNAV, CNV1 to CNV3) and the STO, EOP and ION records have no
 ///   representation there and are skipped. A RINEX 2 file names a single
 ///   constellation: the satellites of the other constellations are
-///   skipped too.
+///   skipped too. When the record is not empty and none of its frames can
+///   be written, [FormattingError::NoRepresentableFrame] is returned
+///   before anything is written.
 pub fn format<W: Write>(
     writer: &mut BufWriter<W>,
     rec: &Record,
@@ -252,6 +254,10 @@ pub fn format<W: Write>(
             None => true,
         }
     };
+
+    if !v4 && !rec.is_empty() && !rec.iter().any(|(k, frame)| representable(k, frame)) {
+        return Err(FormattingError::NoRepresentableFrame);
+    }
 
     // the record is sorted by key: chronological order, then vehicle,
     // then message type. Every entry is written, including messages of

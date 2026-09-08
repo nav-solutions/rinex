@@ -332,3 +332,29 @@ fn nav_v3_mixed_written_as_v2_gps() {
         assert_ephemeris_preserved(&original[k], frame, k);
     }
 }
+
+/// Nothing representable in the target revision is an error, not an
+/// empty file: a RINEX 4 record reduced to its modern messages cannot
+/// be written as RINEX 3.
+#[test]
+fn nav_nothing_representable_is_an_error() {
+    let mut rinex =
+        Rinex::from_gzip_file("data/NAV/V4/BRD400DLR_S_20230710000_01D_MN.rnx.gz").unwrap();
+    rinex
+        .record
+        .as_mut_nav()
+        .unwrap()
+        .retain(|k, _| matches!(k.msgtype, NavMessageType::CNAV | NavMessageType::CNV2));
+    assert!(!rinex.record.as_nav().unwrap().is_empty());
+
+    rinex.header.version = Version::new(3, 5);
+    let result = write_and_reparse(&rinex, "cnav-as-v3");
+    assert!(
+        matches!(
+            result,
+            Err(crate::error::FormattingError::NoRepresentableFrame)
+        ),
+        "{:?}",
+        result.map(|_| ())
+    );
+}
