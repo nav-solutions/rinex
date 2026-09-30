@@ -1,4 +1,5 @@
 //! Navigation module
+mod diagnostics;
 mod earth_orientation;
 mod ephemeris;
 mod frame;
@@ -16,6 +17,7 @@ pub(crate) use formatting::format;
 pub(crate) use parsing::{is_new_epoch, parse_epoch};
 
 pub use crate::navigation::{
+    diagnostics::{NavDiagnosticKind, NavParseDiagnostic, NavParseReport},
     earth_orientation::EarthOrientation,
     ephemeris::{flags::*, orbits::OrbitItem, Ephemeris},
     frame::{NavFrame, NavFrameType},

@@ -26,6 +26,14 @@ use std::{
 impl Header {
     /// Parse [Header] by consuming [BufReader] until end of this section
     pub fn parse<R: Read>(reader: &mut BufReader<R>) -> Result<Self, ParsingError> {
+        Ok(Self::parse_with_line_count(reader)?.0)
+    }
+
+    pub(crate) fn parse_with_line_count<R: Read>(
+        reader: &mut BufReader<R>,
+    ) -> Result<(Self, usize), ParsingError> {
+        let mut line_count = 0;
+        let mut ended = false;
         let mut rinex_type = Type::default();
         let mut version = Version::default();
         let mut constellation: Option<Constellation> = None;
@@ -65,11 +73,8 @@ impl Header {
         let mut antex = AntexHeader::default();
 
         for line in reader.lines() {
-            if line.is_err() {
-                continue;
-            }
-
-            let line = line.unwrap();
+            let line = line?;
+            line_count += 1;
 
             if line.len() < 60 {
                 continue; // --> invalid header content
@@ -81,6 +86,7 @@ impl Header {
             //     --> done parsing
             ///////////////////////////////
             if marker.trim().eq("END OF HEADER") {
+                ended = true;
                 break;
             }
             ///////////////////////////////
@@ -746,7 +752,11 @@ impl Header {
             }
         }
 
-        Ok(Header {
+        if !ended {
+            return Err(ParsingError::MissingEndOfHeader);
+        }
+
+        let header = Header {
             version,
             rinex_type,
             constellation,
@@ -808,7 +818,8 @@ impl Header {
                     None
                 }
             },
-        })
+        };
+        Ok((header, line_count))
     }
 
     fn parse_time_of_obs(content: &str) -> Result<Epoch, ParsingError> {

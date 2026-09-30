@@ -7,6 +7,9 @@ use crate::{
 mod v4;
 use v4::parse as parse_v4_epoch;
 
+#[cfg(test)]
+mod reading_tests;
+
 /// ([NavKey], [NavFrame]) parsing attempt
 pub fn parse_epoch(header: &Header, content: &str) -> Result<(NavKey, NavFrame), ParsingError> {
     if content.starts_with('>') {
@@ -183,7 +186,7 @@ mod test {
         assert_eq!(ephemeris.clock_drift_rate, 7.38E4);
 
         let orbits = &ephemeris.orbits;
-        assert_eq!(orbits.len(), 10);
+        assert_eq!(orbits.len(), 12); // accelY and ageOp are explicit zero fields
 
         for (k, v) in orbits.iter() {
             if k.eq("satPosX") {
@@ -248,7 +251,7 @@ mod test {
         assert_eq!(ephemeris.clock_drift_rate, 0.0);
 
         let orbits = &ephemeris.orbits;
-        assert_eq!(orbits.len(), 23);
+        assert_eq!(orbits.len(), 28); // spare1/2/3/4 and aodc are explicit zero fields
 
         for (k, v) in orbits.iter() {
             if k.eq("aode") {
@@ -285,10 +288,10 @@ mod test {
                 assert_eq!(v.as_f64(), -0.871464871438e-10);
             } else if k.eq("idot") {
                 assert_eq!(v.as_f64(), -0.940753471872e-09);
-            // SPARE
+            } else if matches!(k.as_str(), "spare1" | "spare2" | "spare3" | "spare4") {
+                assert_eq!(v.as_f64(), 0.0);
             } else if k.eq("week") {
                 assert_eq!(v.as_u32(), 782);
-            //SPARE
             } else if k.eq("accuracy") {
                 assert_eq!(v.as_f64(), 0.200000000000e+01);
             } else if k.eq("health") {
@@ -339,7 +342,7 @@ mod test {
         assert_eq!(ephemeris.clock_drift_rate, 0.0);
 
         let orbits = &ephemeris.orbits;
-        assert_eq!(orbits.len(), 23);
+        assert_eq!(orbits.len(), 28); // spare1/2/3/4 and bgdE5bE1 are explicit zero fields
 
         for (k, v) in orbits.iter() {
             if k.eq("iodnav") {
@@ -380,7 +383,8 @@ mod test {
                 assert_eq!(v.as_f64(), 0.258000000000e+03);
             } else if k.eq("week") {
                 assert_eq!(v.as_u32(), 2138);
-            //SPARE
+            } else if matches!(k.as_str(), "spare1" | "spare2" | "spare3" | "spare4") {
+                assert_eq!(v.as_f64(), 0.0);
             } else if k.eq("sisa") {
                 assert_eq!(v.as_f64(), 0.312000000000e+01);
             } else if k.eq("health") {
@@ -426,7 +430,7 @@ mod test {
         assert_eq!(ephemeris.clock_drift_rate, 0.342000000000e+05);
 
         let orbits = &ephemeris.orbits;
-        assert_eq!(orbits.len(), 9);
+        assert_eq!(orbits.len(), 12); // accelX, accelY and ageOp are explicit zero fields
 
         for (k, v) in orbits.iter() {
             if k.eq("satPosX") {
@@ -488,7 +492,7 @@ mod test {
         let content = content.replace("JAPN", "WEST");
         assert!(parse_v4_epoch(&content).is_err());
 
-        // NavIC records are expressed in GPST
+        // IRNSST is represented by the existing GPST epoch proxy.
         let content = "> STO I02 LNAV
     2020 09 15 02 05 36 IRUT
      6.048000000000e+05 0.000000000000e+00 0.000000000000e+00 0.000000000000e+00";

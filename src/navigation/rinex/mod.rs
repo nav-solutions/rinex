@@ -2,6 +2,29 @@
 #[cfg_attr(docsrs, doc(cfg(feature = "nav")))]
 pub mod feature; // feature dependent, high level methods
 
+#[cfg(feature = "nav")]
+#[cfg_attr(docsrs, doc(cfg(feature = "nav")))]
+pub mod selection;
+
+#[cfg(feature = "nav")]
+#[cfg_attr(docsrs, doc(cfg(feature = "nav")))]
+pub mod glonass_fdma;
+
+#[cfg(feature = "nav")]
+#[cfg_attr(docsrs, doc(cfg(feature = "nav")))]
+pub mod sbas;
+
+#[cfg(feature = "nav")]
+#[cfg_attr(docsrs, doc(cfg(feature = "nav")))]
+pub mod legacy_kepler;
+
+#[cfg(feature = "nav")]
+mod broadcast_selection;
+
+#[cfg(feature = "nav")]
+#[cfg_attr(docsrs, doc(cfg(feature = "nav")))]
+pub mod spatial_state;
+
 #[cfg(all(feature = "nav", feature = "processing"))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "nav", feature = "processing"))))]
 pub mod time; // feature dependent high level methods

@@ -35,10 +35,12 @@ impl Ephemeris {
 
         // starts with (clock_bias, drift, rate).
         // SBAS messages carry the transmission time (seconds of week)
-        // in the drift rate slot, stored as the "week" orbit item.
+        // in the drift rate slot, stored as the "t_tm" orbit item.
         // epoch has already been buffered
         let third = if sv_constellation == Constellation::SBAS {
-            self.get_orbit_f64("week").unwrap_or(self.clock_drift_rate)
+            self.get_orbit_f64("t_tm")
+                .or_else(|| self.get_orbit_f64("week"))
+                .ok_or(FormattingError::MissingNavigationField("t_tm"))?
         } else {
             self.clock_drift_rate
         };

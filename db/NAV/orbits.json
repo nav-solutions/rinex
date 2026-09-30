@@ -367,11 +367,11 @@
             "idot": "f64",
             "source": "flag",
             "week": "u32",
+            "spare1": "f64",
             "sisa": "f64",
             "health": "flag",
             "bgdE5aE1": "f64",
             "bgdE5bE1": "f64",
-            "spare3": "f64",
             "t_tm": "f64"
         }
     },
@@ -401,11 +401,11 @@
             "idot": "f64",
             "source": "flag",
             "week": "u32",
+            "spare1": "f64",
             "sisa": "f64",
             "health": "flag",
             "bgdE5aE1": "f64",
             "bgdE5bE1": "f64",
-            "spare3": "f64",
             "t_tm": "f64"
         }
     },

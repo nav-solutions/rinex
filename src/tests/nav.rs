@@ -43,7 +43,7 @@ fn v2_amel0010_21g() {
                 //TODO
                 //assert_eq!(v.sv_position((-1.488799804690E+03, 1.292880712890E+04, 2.193169775390E+04)))
 
-                assert!(eph.get_orbit_f64("ageOp").is_none());
+                assert_eq!(eph.get_orbit_f64("ageOp"), Some(0.0));
                 assert_eq!(eph.glonass_freq_channel(), Some(1));
 
                 num_tests += 1;
@@ -53,7 +53,7 @@ fn v2_amel0010_21g() {
                 assert_eq!(eph.clock_drift, 1.818989403550E-12);
                 assert_eq!(eph.clock_drift_rate, 4.245000000000E+04);
                 // assert_eq!(eph.get_orbit_f64("channel"), Some(-4.0));
-                assert!(eph.get_orbit_f64("ageOp").is_none());
+                assert_eq!(eph.get_orbit_f64("ageOp"), Some(0.0));
 
                 num_tests += 1;
                 //TODO
@@ -102,7 +102,7 @@ fn v2_amel0010_21g() {
                 assert_eq!(eph.clock_bias, -4.201009869580E-05);
                 assert_eq!(eph.clock_drift, 0.0);
                 assert_eq!(eph.clock_drift_rate, 2.88E4);
-                assert!(eph.get_orbit_f64("ageOp").is_none());
+                assert_eq!(eph.get_orbit_f64("ageOp"), Some(0.0));
                 //assert_eq!(eph.get_orbit_f64("channel"), Some(5.0));
                 //assert_eq!(eph.get_orbit_f64("health"), Some(0.0));
                 //                 assert_eq!(posx.as_f64(), Some(1.817068505860E+04));

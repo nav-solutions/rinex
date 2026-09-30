@@ -17,6 +17,10 @@ pub fn parse(content: &str) -> Result<(NavKey, NavFrame), ParsingError> {
         _ => return Err(ParsingError::EmptyEpoch),
     };
 
+    if line.len() < 10 {
+        return Err(ParsingError::NavRecordBoundary);
+    }
+
     let (_, rem) = line.split_at(2);
     let (class, rem) = rem.split_at(4);
     let (svnn, rem) = rem.split_at(4);
@@ -38,7 +42,7 @@ pub fn parse(content: &str) -> Result<(NavKey, NavFrame), ParsingError> {
 
     let msgtype = items
         .next()
-        .ok_or(ParsingError::NavMsgType)?
+        .ok_or(ParsingError::NavRecordBoundary)?
         .parse::<NavMessageType>()?;
 
     let subtype = match items.next() {

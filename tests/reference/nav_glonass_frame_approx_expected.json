@@ -1,0 +1,23 @@
+{
+  "fixture_sha256": "b456dd8d83756a5b6108495c5a7b334d599edcbadd9ef944daa2b9cd6caaec52",
+  "sv": "R01",
+  "record_epoch_utc": "2020-06-24T23:45:00Z",
+  "epoch_utc": "2020-06-24T23:50:00Z",
+  "native_position_km": [
+    14228.774942571004,
+    2534.385126965379,
+    21029.483788965554
+  ],
+  "native_velocity_km_s": [
+    1.7075688680839556,
+    2.315265067913674,
+    -1.433127529023105
+  ],
+  "approx_itrf2014_position_km": [
+    14228.77494658332,
+    2534.3851240503727,
+    21029.483779333983
+  ],
+  "parameter_reference_epoch": "2010.0",
+  "method": "unbounded approximate static use of 2010.0 station-fit parameters"
+}

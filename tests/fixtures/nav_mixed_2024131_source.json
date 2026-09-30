@@ -1,0 +1,105 @@
+{
+  "product": "BRD400DLR_S_20241310000_01D_MN.rnx",
+  "provider": "DLR/GSOC; O. Montenbruck and P. Steigenberger",
+  "doi": "https://doi.org/10.57677/BRD400DLR",
+  "archive": "https://igs.bkg.bund.de/root_ftp/IGS/BRDC/2024/131/",
+  "source_sha256": "9cffb1b1f2978c46e8352d78f603dd089ecd7f32312c1a6c4ae585b5d0e538b6",
+  "source_header_lines": [
+    1,
+    9
+  ],
+  "selection": "Original RINEX bytes for the listed NAV EPH blocks in original order; no OBS input. G04 competing messages, R02/E03 references, C02/I03 unresolved frames, J04 selection rejection.",
+  "fixture": "nav_mixed_2024131_first_epoch.rnx",
+  "fixture_sha256": "dce340cf859c06b7785596f379f1bbf39f8042042629309adc9fbdc2f322c69e",
+  "records": [
+    {
+      "descriptor": "> EPH G04 LNAV",
+      "source_lines": [
+        10,
+        18
+      ],
+      "sha256": "bfdc06ac0a2a23539a03edfe68fafb5cda680e1ce0b84849feac2fa746bc4394"
+    },
+    {
+      "descriptor": "> EPH G04 LNAV",
+      "source_lines": [
+        19,
+        27
+      ],
+      "sha256": "5039fc942739085e3b684d4fea129d765663db2b15f2d27c1e2d3f922a643a29"
+    },
+    {
+      "descriptor": "> EPH G04 CNAV",
+      "source_lines": [
+        28,
+        37
+      ],
+      "sha256": "2e38e1dacc515192f2ed8b065a7024b9f038552a714a27e70f8c15d757a79b8e"
+    },
+    {
+      "descriptor": "> EPH G04 CNAV",
+      "source_lines": [
+        38,
+        47
+      ],
+      "sha256": "ad86ef840d5e9b22bd4ab861b56e2ed58aa85da9df8f8b01686ab4595f98c204"
+    },
+    {
+      "descriptor": "> EPH R02 FDMA",
+      "source_lines": [
+        645,
+        650
+      ],
+      "sha256": "336f409d67676e20f4e944c5960edef23d1d6fe6b5dbe3e5a3b92df1cb0fc03c"
+    },
+    {
+      "descriptor": "> EPH E03 INAV",
+      "source_lines": [
+        870,
+        878
+      ],
+      "sha256": "511bb64b7d3b15e7fa590bbaed1637f563794dcd52051c8098ac89baaa9914d9"
+    },
+    {
+      "descriptor": "> EPH C02 D2",
+      "source_lines": [
+        4407,
+        4415
+      ],
+      "sha256": "b96127afff9d1cbc6d080f507440044968c13a5cef00d4a62e1f4d3237237a67"
+    },
+    {
+      "descriptor": "> EPH J04 LNAV",
+      "source_lines": [
+        7950,
+        7958
+      ],
+      "sha256": "3cc8d596ad5db9e2ad84143c94852e961db73423d6c7f0c8a9355143c0fe644f"
+    },
+    {
+      "descriptor": "> EPH J04 CNAV",
+      "source_lines": [
+        7988,
+        7997
+      ],
+      "sha256": "fa5475ee59b69ef90b0381e143bc6b2d51937eb923a38a1a4ebacb8c419b5200"
+    },
+    {
+      "descriptor": "> EPH I03 LNAV",
+      "source_lines": [
+        8051,
+        8059
+      ],
+      "sha256": "8145ea02bea293c07fc046e6e1cb2eca5c486d393e30893cc10eb6f80293263f"
+    },
+    {
+      "descriptor": "> EPH I03 LNAV",
+      "source_lines": [
+        8060,
+        8068
+      ],
+      "sha256": "dbbba61af533ab58887b157acd8273df3ce6092e3d61e9709ee8deea5b826f20"
+    }
+  ],
+  "source_url": "https://igs.bkg.bund.de/root_ftp/IGS/BRDC/2024/131/BRD400DLR_S_20241310000_01D_MN.rnx.gz"
+}

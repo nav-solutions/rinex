@@ -1,14 +1,11 @@
-use crate::prelude::{nav::Orbit, Constellation, Epoch, SV};
+use crate::prelude::{Constellation, Epoch, SV};
 
 use crate::navigation::Ephemeris;
 
-use anise::{
-    constants::frames::IAU_EARTH_FRAME,
-    math::{Vector3, Vector6},
-};
+use anise::math::Vector3;
 
 mod helper;
-pub use helper::Helper;
+pub use helper::{Helper, KeplerSolveError};
 
 #[cfg(doc)]
 use crate::bibliography::Bibliography;
@@ -141,46 +138,16 @@ impl Ephemeris {
             return None;
         }
 
-        let sv_ts = sv.timescale()?;
+        let sv_ts = crate::navigation::timescale(sv.constellation).ok()?;
         let toe = self.toe(sv)?;
         let dt = t.to_time_scale(sv_ts) - toe;
         Some(dt.to_seconds())
     }
 
-    /// Returns [SV] [Orbit]al state at t [Epoch].
-    /// Self must be correctly selected from navigation record.
-    /// See [Bibliography::AsceAppendix3], [Bibliography::JLe19] and [Bibliography::BeiDouICD]
-    /// ## Input
-    /// - sv: [SV] satellite identity
-    /// - epoch: desired [Epoch]
-    pub fn kepler2position(&self, sv: SV, epoch: Epoch) -> Option<Orbit> {
-        if sv.constellation.is_sbas() || sv.constellation == Constellation::Glonass {
-            let (x_km, y_km, z_km) = (
-                self.get_orbit_f64("satPosX")?,
-                self.get_orbit_f64("satPosY")?,
-                self.get_orbit_f64("satPosZ")?,
-            );
-            // TODO: velocity + integration
-            Some(Orbit::from_position(
-                x_km,
-                y_km,
-                z_km,
-                epoch,
-                IAU_EARTH_FRAME,
-            ))
-        } else {
-            let helper = self.helper(sv, epoch)?;
-            let pos = helper.ecef_position();
-            let vel = helper.ecef_velocity();
-            Some(Orbit::from_cartesian_pos_vel(
-                Vector6::new(pos[0], pos[1], pos[2], vel[0], vel[1], vel[2]),
-                epoch,
-                IAU_EARTH_FRAME,
-            ))
-        }
-    }
-
-    /// Calculates ECEF (position, velocity) [Vector3] duplet
+    /// Calculates raw native-frame (position, velocity) [Vector3] duplet.
+    /// This low-level call does not select a valid message or identify a frame
+    /// realization. GPS applications should use `nav_select_gps_lnav` and
+    /// `NavCandidate::native_state_at` instead.
     /// ## Input
     /// - sv: desired [SV]
     /// - epoch: desired [Epoch]
@@ -188,26 +155,8 @@ impl Ephemeris {
     /// - (position, velocity): [Vector3] duplet, in (km, km/s)
     /// See [Bibliography::AsceAppendix3], [Bibliography::JLe19] and [Bibliography::BeiDouICD]
     pub fn kepler2position_velocity(&self, sv: SV, epoch: Epoch) -> Option<(Vector3, Vector3)> {
-        // In gloass and SBAS scenarios,
-        // we only need to pick up the values from the record.
-        // NB: this is incorrect, it requires an integration process
-        //    that has yet to be understood and implemented.
-        //    SBAS navigation is not supported yet anyway
         if sv.constellation.is_sbas() || sv.constellation == Constellation::Glonass {
-            let (x_km, y_km, z_km) = (
-                self.get_orbit_f64("satPosX")?,
-                self.get_orbit_f64("satPosY")?,
-                self.get_orbit_f64("satPosZ")?,
-            );
-            let (vel_x_km, vel_y_km, vel_z_km) = (
-                self.get_orbit_f64("velX")?,
-                self.get_orbit_f64("velY")?,
-                self.get_orbit_f64("velZ")?,
-            );
-
-            let position = Vector3::new(x_km, y_km, z_km);
-            let velocity = Vector3::new(vel_x_km, vel_y_km, vel_z_km);
-            Some((position, velocity))
+            None
         } else {
             // form keplerian helper
             let helper = self.helper(sv, epoch)?;

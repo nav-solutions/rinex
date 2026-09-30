@@ -42,57 +42,76 @@ fn parse_orbits(
     let word_size: usize = 19;
     let mut map: HashMap<String, OrbitItem> = HashMap::new();
 
-    for line in lines {
-        // trim first few white spaces
-        let mut line: &str = match version.major < 3 {
-            true => &line[3..],
-            false => &line[4..],
+    let mut rows = 0;
+    for (row, line) in lines.enumerate() {
+        rows += 1;
+        let prefix = if version.major < 3 { 3 } else { 4 };
+        let line_number = row + 2; // the epoch/clock line is line 1
+        let line = if line.len() < prefix && line.trim().is_empty() {
+            "" // a truncated blank continuation has four missing slots
+        } else {
+            line.get(prefix..)
+                .ok_or(ParsingError::NavOrbitLineTooShort { line: line_number })?
         };
 
-        // number of fields found on this line, blank or not
-        let mut nb_fields = 0;
+        // Each orbit row has four 19-character slots. Blank middle slots and
+        // omitted trailing slots both advance the descriptor by one position.
+        for slot in 0..4 {
+            let start = slot * word_size;
+            let raw = line
+                .get(start..std::cmp::min(start + word_size, line.len()))
+                .unwrap_or("");
+            let val_str = raw.trim();
 
-        loop {
-            if line.is_empty() {
-                // fields omitted at the end of the line
-                key_index += 4_usize.saturating_sub(nb_fields);
-                break;
-            }
-
-            let (val_str, rem) = line.split_at(std::cmp::min(word_size, line.len()));
-            let val_str = val_str.trim();
-            nb_fields += 1;
-
-            // handle omitted fields
-            if val_str.is_empty() {
-                // omitted field
-                key_index += 1;
-                line = rem;
-                continue;
-            }
-
-            if let Some((name_str, type_str)) = fields.get(key_index) {
-                //println!(
-                //    "Key \"{}\"(index: {}) | Token \"{}\" | Content \"{}\"",
-                //    key,
-                //    key_index,
-                //    token,
-                //    content.trim()
-                //); //DEBUG
-                match OrbitItem::new(name_str, type_str, val_str, &msgtype, constell) {
-                    Ok(item) => {
-                        // println!("found key=\"{}\" (type={}) value=\"{}\"", key, token, content); // DEBUG
-                        map.insert(name_str.to_string(), item);
-                    },
-                    Err(_) => {},
+            if !val_str.is_empty() {
+                if let Some((name_str, type_str)) = fields.get(key_index) {
+                    let item = OrbitItem::new(name_str, type_str, val_str, &msgtype, constell)
+                        .map_err(|source| ParsingError::NavOrbitField {
+                            line: line_number,
+                            slot: slot + 1,
+                            field: name_str.to_string(),
+                            value: raw.to_string(),
+                            source: Box::new(source),
+                        })?;
+                    map.insert(name_str.to_string(), item);
                 }
             }
-
             key_index += 1;
-            line = rem;
         }
     }
+    let expected = fields.len().div_ceil(4);
+    if rows < expected {
+        return Err(ParsingError::NavOrbitMissingLines {
+            expected,
+            found: rows,
+        });
+    }
     Ok(map)
+}
+
+fn parse_clock(
+    raw: &str,
+    line: usize,
+    slot: usize,
+    field: &'static str,
+) -> Result<f64, ParsingError> {
+    let value = parse_f64(raw.trim()).map_err(|_| ParsingError::NavClockField {
+        line,
+        slot,
+        field,
+        value: raw.to_string(),
+        source: Box::new(ParsingError::ClockParsing),
+    })?;
+    if !value.is_finite() {
+        return Err(ParsingError::NavClockField {
+            line,
+            slot,
+            field,
+            value: raw.to_string(),
+            source: Box::new(ParsingError::NavInvalidOrbitValue),
+        });
+    }
+    Ok(value)
 }
 
 impl Ephemeris {
@@ -111,6 +130,10 @@ impl Ephemeris {
             true => 3,
             false => 4,
         };
+
+        if line.len() < svnn_offset + 19 + 3 * 19 {
+            return Err(ParsingError::NavOrbitLineTooShort { line: 1 });
+        }
 
         let (svnn, rem) = line.split_at(svnn_offset);
         let (date, rem) = rem.split_at(19);
@@ -134,26 +157,22 @@ impl Ephemeris {
 
         let epoch = parse_epoch_in_timescale(date.trim(), ts)?;
 
-        let clock_bias = parse_f64(clk_bias.trim()).map_err(|_| ParsingError::ClockParsing)?;
-
-        let clock_drift = parse_f64(clk_dr.trim()).map_err(|_| ParsingError::ClockParsing)?;
-
-        let mut clock_drift_rate =
-            parse_f64(clk_drr.trim()).map_err(|_| ParsingError::ClockParsing)?;
+        let clock_bias = parse_clock(clk_bias, 1, 1, "clockBias")?;
+        let clock_drift = parse_clock(clk_dr, 1, 2, "clockDrift")?;
+        let mut clock_drift_rate = parse_clock(clk_drr, 1, 3, "clockDriftRate")?;
 
         // parse orbits :
         //  only Legacy Frames in V2 and V3 (old) RINEX
         let mut orbits = parse_orbits(version, NavMessageType::LNAV, sv.constellation, lines)?;
 
         if sv.constellation.is_sbas() {
-            // SBAS frames specificity:
-            // clock drift rate does not exist and is actually the week counter
-            orbits.insert(
-                "week".to_string(),
-                OrbitItem::U32(clock_drift_rate.round() as u32),
-            );
-
-            clock_drift_rate = 0.0_f64; // drift rate null: non existing
+            // RINEX SBAS third clock slot is transmission time in GPS week
+            // seconds, not a week number or quadratic clock coefficient.
+            if !clock_drift_rate.is_finite() {
+                return Err(ParsingError::ClockParsing);
+            }
+            orbits.insert("t_tm".to_string(), OrbitItem::F64(clock_drift_rate));
+            clock_drift_rate = 0.0_f64;
         }
 
         Ok((
@@ -179,6 +198,10 @@ impl Ephemeris {
             _ => return Err(ParsingError::EmptyEpoch),
         };
 
+        if line.len() < 4 + 19 + 3 * 19 {
+            return Err(ParsingError::NavOrbitLineTooShort { line: 2 });
+        }
+
         let (svnn, rem) = line.split_at(4);
         let sv = svnn.trim().parse::<SV>()?;
         let (epoch, rem) = rem.split_at(19);
@@ -187,24 +210,21 @@ impl Ephemeris {
         let (clk_bias, rem) = rem.split_at(19);
         let (clk_dr, clk_drr) = rem.split_at(19);
 
-        let clock_bias = parse_f64(clk_bias.trim()).map_err(|_| ParsingError::ClockParsing)?;
-
-        let clock_drift = parse_f64(clk_dr.trim()).map_err(|_| ParsingError::ClockParsing)?;
-
-        let mut clock_drift_rate =
-            parse_f64(clk_drr.trim()).map_err(|_| ParsingError::ClockParsing)?;
+        let clock_bias = parse_clock(clk_bias, 2, 1, "clockBias")?;
+        let clock_drift = parse_clock(clk_dr, 2, 2, "clockDrift")?;
+        let mut clock_drift_rate = parse_clock(clk_drr, 2, 3, "clockDriftRate")?;
 
         let mut orbits =
             parse_orbits(Version { major: 4, minor: 0 }, msg, sv.constellation, lines)?;
 
         if sv.constellation.is_sbas() {
-            // SBAS frames specificity:
-            // clock drift rate does not exist and is actually the week counter
-            orbits.insert(
-                "week".to_string(),
-                OrbitItem::U32(clock_drift_rate.round() as u32),
-            );
-            clock_drift_rate = 0.0_f64; // drift rate null: non existing
+            // RINEX SBAS third clock slot is transmission time in GPS week
+            // seconds, not a week number or quadratic clock coefficient.
+            if !clock_drift_rate.is_finite() {
+                return Err(ParsingError::ClockParsing);
+            }
+            orbits.insert("t_tm".to_string(), OrbitItem::F64(clock_drift_rate));
+            clock_drift_rate = 0.0_f64;
         }
 
         Ok((
@@ -223,13 +243,168 @@ impl Ephemeris {
 #[cfg(test)]
 mod test {
     use crate::{
-        navigation::{Ephemeris, NavMessageType},
+        navigation::{ephemeris::OrbitItem, Ephemeris, NavMessageType},
         prelude::{Constellation, Epoch, TimeScale, Version, SV},
     };
 
-    use std::str::FromStr;
+    use std::{io::BufWriter, str::FromStr};
 
     use super::parse_orbits;
+
+    // First R01 record in data/NAV/V2/amel0010.21g (RINEX 2.11).
+    // Individual field changes below are synthetic and explicitly labeled.
+    const GLO_RECORD: &str =
+        " 1 20 12 31 23 45  0.0 7.282570004460D-05 0.000000000000D+00 7.380000000000D+04
+   -1.488799804690D+03-2.196182250980D+00 3.725290298460D-09 0.000000000000D+00
+    1.292880712890D+04-2.049269676210D+00 0.000000000000D+00 1.000000000000D+00
+    2.193169775390D+04 1.059645652770D+00-9.313225746150D-10 0.000000000000D+00";
+
+    fn glo_orbits(record: &str) -> std::collections::HashMap<String, OrbitItem> {
+        let (_, orbit_lines) = record.split_once('\n').unwrap();
+        parse_orbits(
+            Version::new(2, 11),
+            NavMessageType::LNAV,
+            Constellation::Glonass,
+            orbit_lines.lines(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn explicit_zero_is_present() {
+        let orbits = glo_orbits(GLO_RECORD);
+        assert_eq!(orbits.get("accelY"), Some(&OrbitItem::F64(0.0)));
+        assert_eq!(orbits.get("ageOp"), Some(&OrbitItem::F64(0.0)));
+        assert_eq!(orbits.len(), 12); // all 12 defined GLO orbit fields are present
+
+        // Synthetic edit of the source record: channel 1 -> channel 0.
+        let channel_zero = GLO_RECORD.replace(" 1.000000000000D+00", " 0.000000000000D+00");
+        assert_eq!(
+            glo_orbits(&channel_zero).get("channel"),
+            Some(&OrbitItem::I8(0))
+        );
+        assert_eq!(
+            OrbitItem::new(
+                "week",
+                "u32",
+                "0",
+                &NavMessageType::LNAV,
+                Constellation::GPS
+            )
+            .unwrap(),
+            OrbitItem::U32(0)
+        );
+        assert_eq!(
+            OrbitItem::new(
+                "flags",
+                "u8",
+                "0",
+                &NavMessageType::CNAV,
+                Constellation::GPS
+            )
+            .unwrap(),
+            OrbitItem::U8(0)
+        );
+
+        // Synthetic GPS LNAV orbit lines: zero Kepler correction cuc.
+        let gps = format!(
+            "     9.800000000000e+01-1.718750000000e+00 4.639836124941e-09 2.148941747752e+00
+     0.000000000000e+00 3.355251392350e-04 8.245930075645e-06 5.153800453186e+03{}",
+            "\n    ".repeat(5)
+        );
+        let gps_orbits = parse_orbits(
+            Version::new(3, 0),
+            NavMessageType::LNAV,
+            Constellation::GPS,
+            gps.lines(),
+        )
+        .unwrap();
+        assert_eq!(gps_orbits.get("cuc"), Some(&OrbitItem::F64(0.0)));
+    }
+
+    #[test]
+    fn blank_remains_missing() {
+        // Synthetic edit: blank accelY, channel and ageOp, retaining column widths.
+        let blank = GLO_RECORD
+            .replace(" 0.000000000000D+00 1.000000000000D+00", &" ".repeat(38))
+            .replace(
+                "-9.313225746150D-10 0.000000000000D+00",
+                &format!("-9.313225746150D-10{}", " ".repeat(19)),
+            );
+        let orbits = glo_orbits(&blank);
+        assert_eq!(orbits.get("accelY"), None);
+        assert_eq!(orbits.get("channel"), None);
+        assert_eq!(orbits.get("ageOp"), None);
+        assert_eq!(orbits.len(), 9); // 12 source fields less three blanks
+
+        let gps = format!("     9.800000000000e+01-1.718750000000e+00 4.639836124941e-09 2.148941747752e+00\n    {} 3.355251392350e-04 8.245930075645e-06 5.153800453186e+03{}", " ".repeat(19), "\n    ".repeat(5));
+        let gps_orbits = parse_orbits(
+            Version::new(3, 0),
+            NavMessageType::LNAV,
+            Constellation::GPS,
+            gps.lines(),
+        )
+        .unwrap();
+        assert_eq!(gps_orbits.get("cuc"), None);
+        assert_eq!(
+            gps_orbits.get("e"),
+            Some(&OrbitItem::F64(3.355251392350e-04))
+        );
+    }
+
+    #[test]
+    fn zero_forms_are_preserved() {
+        for (text, negative) in [
+            ("+0.000000000000D+00", false),
+            ("-0.000000000000D+00", true),
+            ("+0.000000000000E+00", false),
+            ("-0.000000000000e+00", true),
+        ] {
+            let item = OrbitItem::new(
+                "accelY",
+                "f64",
+                text,
+                &NavMessageType::LNAV,
+                Constellation::Glonass,
+            )
+            .unwrap();
+            match item {
+                OrbitItem::F64(value) => {
+                    assert_eq!(value, 0.0);
+                    assert_eq!(value.is_sign_negative(), negative, "{text}");
+                },
+                other => panic!("expected f64 zero, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn same_revision_roundtrip_keeps_zero() {
+        let (_, sv, ephemeris) = Ephemeris::parse_v2v3(
+            Version::new(2, 11),
+            Constellation::Glonass,
+            GLO_RECORD.lines(),
+        )
+        .unwrap();
+        assert_eq!(ephemeris.orbits.get("accelY"), Some(&OrbitItem::F64(0.0)));
+        let mut writer = BufWriter::new(Vec::new());
+        ephemeris
+            .format(&mut writer, sv, Version::new(2, 11), NavMessageType::LNAV)
+            .unwrap();
+        let output = String::from_utf8(writer.into_inner().unwrap()).unwrap();
+        // The ephemeris formatter starts at the clock fields; prepend the
+        // unchanged source epoch prefix to exercise the normal V2 reader.
+        let epoch_prefix = &GLO_RECORD.lines().next().unwrap()[..22];
+        let written = format!("{epoch_prefix}{output}");
+        let (_, _, parsed_again) =
+            Ephemeris::parse_v2v3(Version::new(2, 11), Constellation::Glonass, written.lines())
+                .unwrap();
+        let written_orbits = parsed_again.orbits;
+        assert_eq!(written_orbits.get("accelY"), Some(&OrbitItem::F64(0.0)));
+        assert_eq!(written_orbits.get("ageOp"), Some(&OrbitItem::F64(0.0)));
+        assert_eq!(written_orbits.get("channel"), Some(&OrbitItem::I8(1)));
+        assert_eq!(written_orbits.len(), 12);
+    }
 
     // fn build_orbits(
     //     constellation: Constellation,
@@ -309,7 +484,7 @@ mod test {
             ephemeris.get_orbit_f64("bgdE5aE1"),
             Some(-1.303851604462e-08)
         );
-        assert!(ephemeris.get_orbit_f64("bgdE5bE1").is_none());
+        assert_eq!(ephemeris.get_orbit_f64("bgdE5bE1"), Some(0.0));
 
         assert_eq!(ephemeris.get_orbit_f64("t_tm"), Some(3.555400000000e+05));
     }
@@ -383,7 +558,7 @@ mod test {
             Some(-0.900000000000e-08)
         );
 
-        assert!(ephemeris.get_orbit_f64("aodc").is_none());
+        assert_eq!(ephemeris.get_orbit_f64("aodc"), Some(0.0));
         assert_eq!(ephemeris.get_orbit_f64("t_tm"), Some(0.432000000000e+06));
     }
 

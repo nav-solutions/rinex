@@ -52,14 +52,12 @@ fn v3_kepler() {
 
         let (_, _, eph) = dut.nav_ephemeris_selection(g10, t_gpst).unwrap();
 
-        let orbit = eph.kepler2position(g10, t_gpst).unwrap();
-
-        let pos_vel = orbit.to_cartesian_pos_vel();
+        let (position, _) = eph.kepler2position_velocity(g10, t_gpst).unwrap();
 
         let (x_err, y_err, z_err) = (
-            (pos_vel[0] - x_km).abs(),
-            (pos_vel[1] - y_km).abs(),
-            (pos_vel[2] - z_km).abs(),
+            (position[0] - x_km).abs(),
+            (position[1] - y_km).abs(),
+            (position[2] - z_km).abs(),
         );
 
         assert!(
@@ -106,14 +104,12 @@ fn v3_kepler() {
 
         let (_, _, eph) = dut.nav_ephemeris_selection(e30, t_gpst).unwrap();
 
-        let orbit = eph.kepler2position(e30, t_gpst).unwrap();
-
-        let pos_vel = orbit.to_cartesian_pos_vel();
+        let (position, _) = eph.kepler2position_velocity(e30, t_gpst).unwrap();
 
         let (x_err, y_err, z_err) = (
-            (pos_vel[0] - x_km).abs(),
-            (pos_vel[1] - y_km).abs(),
-            (pos_vel[2] - z_km).abs(),
+            (position[0] - x_km).abs(),
+            (position[1] - y_km).abs(),
+            (position[2] - z_km).abs(),
         );
 
         assert!(
@@ -172,14 +168,12 @@ fn v3_kepler() {
 
         let (_, _, eph) = dut.nav_ephemeris_selection(c10, t_gpst).unwrap();
 
-        let orbit = eph.kepler2position(c10, t_gpst).unwrap();
-
-        let pos_vel = orbit.to_cartesian_pos_vel();
+        let (position, _) = eph.kepler2position_velocity(c10, t_gpst).unwrap();
 
         let (x_err, y_err, z_err) = (
-            (pos_vel[0] - x_km).abs(),
-            (pos_vel[1] - y_km).abs(),
-            (pos_vel[2] - z_km).abs(),
+            (position[0] - x_km).abs(),
+            (position[1] - y_km).abs(),
+            (position[2] - z_km).abs(),
         );
 
         assert!(

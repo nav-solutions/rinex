@@ -17,6 +17,11 @@ use crate::prelude::Observable;
 /// Errors that may rise in Parsing process
 #[derive(Debug, Error)]
 pub enum ParsingError {
+    #[error("i/o while reading RINEX: {0}")]
+    InputError(#[from] IoError),
+
+    #[error("missing END OF HEADER")]
+    MissingEndOfHeader,
     #[error("header line too short (invalid)")]
     HeaderLineTooShort,
 
@@ -188,6 +193,9 @@ pub enum ParsingError {
     #[error("nav: invalid message type")]
     NavMsgType,
 
+    #[error("nav: incomplete record descriptor")]
+    NavRecordBoundary,
+
     #[error("nav: invalid message subtype")]
     NavMsgSubtype,
 
@@ -217,6 +225,36 @@ pub enum ParsingError {
 
     #[error("nav: illegal null orbit field")]
     NavNullOrbit,
+
+    #[error("nav: non-finite or out-of-range orbit value")]
+    NavInvalidOrbitValue,
+
+    /// Line and slot are one-based within the NAV record.
+    #[error("nav: orbit line {line}, slot {slot} ({field}) has invalid value {value:?}: {source}")]
+    NavOrbitField {
+        line: usize,
+        slot: usize,
+        field: String,
+        value: String,
+        #[source]
+        source: Box<ParsingError>,
+    },
+
+    #[error("nav: clock line {line}, slot {slot} ({field}) has invalid value {value:?}: {source}")]
+    NavClockField {
+        line: usize,
+        slot: usize,
+        field: &'static str,
+        value: String,
+        #[source]
+        source: Box<ParsingError>,
+    },
+
+    #[error("nav: orbit line {line} is shorter than its continuation prefix")]
+    NavOrbitLineTooShort { line: usize },
+
+    #[error("nav: incomplete orbit record: {found} of {expected} continuation lines")]
+    NavOrbitMissingLines { expected: usize, found: usize },
 
     #[error("nav:ion klobuchar data")]
     KlobucharData,
@@ -281,6 +319,9 @@ pub enum FormattingError {
 
     #[error("missing navigation standard specs")]
     MissingNavigationStandards,
+
+    #[error("nav: missing required field {0}")]
+    MissingNavigationField(&'static str),
 
     #[error("undefined observables")]
     UndefinedObservables,

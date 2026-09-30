@@ -1,5 +1,5 @@
 #[cfg(feature = "log")]
-use log::{error, warn};
+use log::warn;
 
 use crate::{
     constants::{Constants, Omega},
@@ -7,7 +7,7 @@ use crate::{
     prelude::{Constellation, Epoch, SV},
 };
 
-use nalgebra::{Matrix3, Rotation, Rotation3, SMatrix, Vector4};
+use nalgebra::{Rotation, Rotation3, SMatrix, Vector4};
 
 use anise::math::Vector3;
 
@@ -54,6 +54,14 @@ pub struct Helper {
     pub r_sv: (f64, f64, f64),
 }
 
+/// A broadcast Kepler record could not produce a trustworthy state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeplerSolveError {
+    MissingElement,
+    InvalidElement,
+    NonConvergence,
+}
+
 impl Helper {
     /// Returns MEO to ECEF [Rotation3] matrix
     fn meo_orbit_to_ecef_rotation_matrix(&self) -> Rotation<f64, 3> {
@@ -95,28 +103,32 @@ impl Helper {
         if self.sv.is_beidou_geo() {
             self.beidou_geo_ecef_velocity()
         } else {
-            let (x, y, _) = self.r_sv;
-            let (sin_omega_k, cos_omega_k) = self.omega_k.sin_cos();
-            let (sin_i_k, cos_i_k) = self.i_k.sin_cos();
-            // First Derivative of orbit position
-            let (fd_x, fd_y) = self.orbit_velocity();
-            // First Derivative of rotation Matrix
-            let mut fd_r = SMatrix::<f64, 3, 4>::zeros();
-            fd_r[(0, 0)] = cos_omega_k;
-            fd_r[(0, 1)] = -sin_omega_k * cos_i_k;
-            fd_r[(0, 2)] = -(x * sin_omega_k + y * cos_omega_k * cos_i_k);
-            fd_r[(0, 3)] = y * sin_omega_k * sin_i_k;
-            fd_r[(1, 0)] = sin_omega_k;
-            fd_r[(1, 1)] = cos_omega_k * cos_i_k;
-            fd_r[(1, 2)] = x * cos_omega_k - y * sin_omega_k * cos_i_k;
-            fd_r[(1, 3)] = y * cos_omega_k * sin_i_k;
-            fd_r[(2, 1)] = sin_i_k;
-            fd_r[(2, 3)] = y * cos_i_k;
-
-            let rhs = Vector4::new(fd_x, fd_y, self.fd_omega_k, self.fd_i_k);
-            let vel = fd_r * rhs;
-            vel / 1000.0
+            self.base_ecef_velocity()
         }
+    }
+
+    fn base_ecef_velocity(&self) -> Vector3 {
+        let (x, y, _) = self.r_sv;
+        let (sin_omega_k, cos_omega_k) = self.omega_k.sin_cos();
+        let (sin_i_k, cos_i_k) = self.i_k.sin_cos();
+        // First Derivative of orbit position
+        let (fd_x, fd_y) = self.orbit_velocity();
+        // First Derivative of rotation Matrix
+        let mut fd_r = SMatrix::<f64, 3, 4>::zeros();
+        fd_r[(0, 0)] = cos_omega_k;
+        fd_r[(0, 1)] = -sin_omega_k * cos_i_k;
+        fd_r[(0, 2)] = -(x * sin_omega_k + y * cos_omega_k * cos_i_k);
+        fd_r[(0, 3)] = y * sin_omega_k * sin_i_k;
+        fd_r[(1, 0)] = sin_omega_k;
+        fd_r[(1, 1)] = cos_omega_k * cos_i_k;
+        fd_r[(1, 2)] = x * cos_omega_k - y * sin_omega_k * cos_i_k;
+        fd_r[(1, 3)] = -y * cos_omega_k * sin_i_k;
+        fd_r[(2, 1)] = sin_i_k;
+        fd_r[(2, 3)] = y * cos_i_k;
+
+        let rhs = Vector4::new(fd_x, fd_y, self.fd_omega_k, self.fd_i_k);
+        let vel = fd_r * rhs;
+        vel / 1000.0
     }
 
     /// Returns ECEF (position, velocity) [Vector3] in (km, km/s).
@@ -133,72 +145,29 @@ impl Helper {
         ecef_xyz / 1000.0
     }
 
-    /// Returns ECEF velocity [Vector3] in km/s, for BeiDou GEO specifically
+    /// Returns the CGCS2000 GEO position derivative in km/s.
     pub fn beidou_geo_ecef_velocity(&self) -> Vector3 {
-        let (x, y, _) = self.r_sv;
-        let (sin_omega_k, cos_omega_k) = self.omega_k.sin_cos();
-        let (sin_i_k, cos_i_k) = self.i_k.sin_cos();
-        let (fd_x, fd_y) = self.orbit_velocity();
-        let fd_xgk = -y * self.fd_omega_k - fd_y * cos_i_k * sin_omega_k + fd_x * cos_omega_k;
-        let fd_ygk = x * self.fd_omega_k + fd_y * cos_i_k * cos_omega_k + fd_x * sin_omega_k;
-        let fd_zgk = fd_y * sin_i_k + y * self.fd_i_k * cos_i_k;
-
-        let rx = Rotation3::from_axis_angle(&Vector3::x_axis(), 5.0);
-        let rz = Rotation3::from_axis_angle(&Vector3::z_axis(), -Omega::BDS * self.t_k);
-        let (sin_omega_tk, cos_omega_tk) = (Omega::BDS * self.t_k).sin_cos();
-        let fd_rz = self.fd_omega_k
-            * Matrix3::new(
-                -sin_omega_tk,
-                cos_omega_tk,
-                0.0,
-                -cos_omega_tk,
-                -sin_omega_tk,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-            );
-        let pos = self.beidou_geo_ecef_position();
-        let fd_pos = Vector3::new(fd_xgk, fd_ygk, fd_zgk);
-        let vel = fd_rz * rx * pos + rz * rx * fd_pos;
-        vel
+        let rotated = self.geo_orbit_to_ecef_rotation_matrix() * self.base_ecef_velocity();
+        let position = self.beidou_geo_ecef_position();
+        // Derivative of Rz(-earth_rate * t) applied to the final km position.
+        rotated + Vector3::new(Omega::BDS * position.y, -Omega::BDS * position.x, 0.0)
     }
 
-    /// Returns ECEF (position, velocity) [Vector3]s in (km, km/s), for BeiDou GEO specifically.
+    /// Returns CGCS2000 GEO position and velocity in km and km/s.
     pub fn beidou_geo_ecef_pv(&self) -> (Vector3, Vector3) {
-        let (x, y, _) = self.r_sv;
-        let (sin_omega_k, cos_omega_k) = self.omega_k.sin_cos();
-        let (sin_i_k, cos_i_k) = self.i_k.sin_cos();
-        let (fd_x, fd_y) = self.orbit_velocity();
-        let fd_xgk = -y * self.fd_omega_k - fd_y * cos_i_k * sin_omega_k + fd_x * cos_omega_k;
-        let fd_ygk = x * self.fd_omega_k + fd_y * cos_i_k * cos_omega_k + fd_x * sin_omega_k;
-        let fd_zgk = fd_y * sin_i_k + y * self.fd_i_k * cos_i_k;
-
-        let rx = Rotation3::from_axis_angle(&Vector3::x_axis(), 5.0);
-        let rz = Rotation3::from_axis_angle(&Vector3::z_axis(), -Omega::BDS * self.t_k);
-        let (sin_omega_tk, cos_omega_tk) = (Omega::BDS * self.t_k).sin_cos();
-        let fd_rz = self.fd_omega_k
-            * Matrix3::new(
-                -sin_omega_tk,
-                cos_omega_tk,
-                0.0,
-                -cos_omega_tk,
-                -sin_omega_tk,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-            );
-        let pos = self.beidou_geo_ecef_position();
-        let fd_pos = Vector3::new(fd_xgk, fd_ygk, fd_zgk);
-        let vel = fd_rz * rx * pos + rz * rx * fd_pos;
-        (pos, vel)
+        (
+            self.beidou_geo_ecef_position(),
+            self.beidou_geo_ecef_velocity(),
+        )
     }
 
     /// Returns ECEF position [Vector3] in km.
     pub fn position(&self) -> Option<Vector3> {
         match self.sv.constellation {
-            Constellation::GPS | Constellation::Galileo => Some(self.ecef_position()),
+            Constellation::GPS
+            | Constellation::QZSS
+            | Constellation::Galileo
+            | Constellation::IRNSS => Some(self.ecef_position()),
             Constellation::BeiDou => {
                 if self.sv.is_beidou_geo() {
                     Some(self.beidou_geo_ecef_position())
@@ -220,9 +189,11 @@ impl Helper {
             Some(self.beidou_geo_ecef_pv())
         } else {
             match self.sv.constellation {
-                Constellation::GPS | Constellation::Galileo | Constellation::BeiDou => {
-                    Some(self.ecef_pv())
-                },
+                Constellation::GPS
+                | Constellation::QZSS
+                | Constellation::Galileo
+                | Constellation::BeiDou
+                | Constellation::IRNSS => Some(self.ecef_pv()),
                 _ => {
                     #[cfg(feature = "log")]
                     warn!("{} is not supported", self.sv.constellation);
@@ -237,19 +208,72 @@ impl Ephemeris {
     /// Try to form obtain a [Helper] for Keplerian equations solving.
     /// This will fail on Glonass and SBAS constellations.
     pub fn helper(&self, sv: SV, t: Epoch) -> Option<Helper> {
+        self.helper_checked(sv, t).ok()
+    }
+
+    /// Like `helper`, but keeps invalid data separate from iteration failure.
+    pub fn helper_checked(&self, sv: SV, t: Epoch) -> Result<Helper, KeplerSolveError> {
+        self.helper_checked_for_geo(sv, t, sv.is_beidou_geo())
+    }
+
+    pub(crate) fn helper_checked_for_geo(
+        &self,
+        sv: SV,
+        t: Epoch,
+        geo: bool,
+    ) -> Result<Helper, KeplerSolveError> {
+        if !matches!(
+            sv.constellation,
+            Constellation::GPS
+                | Constellation::QZSS
+                | Constellation::Galileo
+                | Constellation::BeiDou
+                | Constellation::IRNSS
+        ) {
+            return Err(KeplerSolveError::InvalidElement);
+        }
         // const
         let gm_m3_s2 = Constants::gm(sv);
         let omega = Constants::omega(sv);
         let dtr_f = Constants::dtr_f(sv);
 
-        let t_k = self.t_k(sv, t)?;
+        let t_k = self.t_k(sv, t).ok_or(KeplerSolveError::MissingElement)?;
 
-        let mut kepler = self.kepler()?;
-        let perturbations = self.perturbations()?;
+        let mut kepler = self.kepler().ok_or(KeplerSolveError::MissingElement)?;
+        let perturbations = self
+            .perturbations()
+            .ok_or(KeplerSolveError::MissingElement)?;
 
         // considering the filed a_dot
         if let Some(a_dot) = self.a_dot() {
             kepler.a += a_dot * t_k;
+        }
+
+        let values = [
+            t_k,
+            kepler.a,
+            kepler.e,
+            kepler.i_0,
+            kepler.omega_0,
+            kepler.m_0,
+            kepler.omega,
+            kepler.toe,
+            perturbations.dn,
+            perturbations.i_dot,
+            perturbations.omega_dot,
+            perturbations.cus,
+            perturbations.cuc,
+            perturbations.cis,
+            perturbations.cic,
+            perturbations.crs,
+            perturbations.crc,
+        ];
+        if !values.iter().all(|v| v.is_finite())
+            || kepler.a <= 0.0
+            || !(0.0..1.0).contains(&kepler.e)
+            || !(0.0..604800.0).contains(&kepler.toe)
+        {
+            return Err(KeplerSolveError::InvalidElement);
         }
 
         let n0 = (gm_m3_s2 / kepler.a.powi(3)).sqrt(); // average angular velocity
@@ -257,22 +281,21 @@ impl Ephemeris {
         let m_k = kepler.m_0 + n * t_k; // average anomaly
 
         // Iterative calculation of e_k
-        let mut e_k_lst: f64 = 0.0;
-        let mut e_k;
-        let mut i = 0;
-
-        loop {
-            e_k = m_k + kepler.e * e_k_lst.sin();
-            if (e_k - e_k_lst).abs() < 1e-10 {
+        let mut e_k = m_k;
+        let mut converged = false;
+        for _ in 0..Constants::MAX_KEPLER_ITER {
+            let delta = (e_k - kepler.e * e_k.sin() - m_k) / (1.0 - kepler.e * e_k.cos());
+            e_k -= delta;
+            if !e_k.is_finite() {
+                return Err(KeplerSolveError::InvalidElement);
+            }
+            if delta.abs() < 1e-14 {
+                converged = true;
                 break;
             }
-            i += 1;
-            e_k_lst = e_k;
         }
-
-        if i >= Constants::MAX_KEPLER_ITER {
-            #[cfg(feature = "log")]
-            error!("{} kepler iteration overflow", sv);
+        if !converged {
+            return Err(KeplerSolveError::NonConvergence);
         }
 
         // true anomaly
@@ -294,12 +317,14 @@ impl Ephemeris {
         let di_k = perturbations.cis * x2_sin_phi_k + perturbations.cic * x2_cos_phi_k;
 
         // first derivatives
-        let fd_omega_k = perturbations.omega_dot - omega;
+        let fd_omega_k = if geo {
+            perturbations.omega_dot
+        } else {
+            perturbations.omega_dot - omega
+        };
 
         let fd_e_k = n / (1.0 - kepler.e * e_k.cos());
-        let fd_phi_k = ((1.0 + kepler.e) / (1.0 - kepler.e)).sqrt()
-            * ((v_k / 2.0).cos() / (e_k / 2.0).cos()).powi(2)
-            * fd_e_k;
+        let fd_phi_k = (1.0 - kepler.e.powi(2)).sqrt() / (1.0 - kepler.e * cos_e_k) * fd_e_k;
 
         let fd_u_k =
             (perturbations.cus * x2_cos_phi_k - perturbations.cuc * x2_sin_phi_k) * fd_phi_k * 2.0
@@ -320,8 +345,8 @@ impl Ephemeris {
         let fd_dtr = dtr_f * kepler.e * kepler.a.sqrt() * e_k.cos() * fd_e_k;
 
         // ascending node longitude correction (RAAN ?)
-        let omega_k = if sv.is_beidou_geo() {
-            // BeiDou [IGSO]
+        let omega_k = if geo {
+            // BeiDou GEO
             kepler.omega_0 + perturbations.omega_dot * t_k - omega * kepler.toe
         } else {
             // GPS, Galileo, BeiDou [MEO]
@@ -336,7 +361,7 @@ impl Ephemeris {
 
         let r_sv = (x, y, 0.0);
 
-        Some(Helper {
+        let helper = Helper {
             sv,
             t_k,
             omega_k,
@@ -350,6 +375,25 @@ impl Ephemeris {
             fd_i_k,
             fd_omega_k,
             r_sv,
-        })
+        };
+        if ![
+            helper.u_k,
+            helper.r_k,
+            helper.i_k,
+            helper.omega_k,
+            helper.fd_u_k,
+            helper.fd_r_k,
+            helper.fd_i_k,
+            helper.fd_omega_k,
+            helper.dtr,
+            helper.r_sv.0,
+            helper.r_sv.1,
+        ]
+        .iter()
+        .all(|v| v.is_finite())
+        {
+            return Err(KeplerSolveError::InvalidElement);
+        }
+        Ok(helper)
     }
 }

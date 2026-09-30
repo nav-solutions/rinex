@@ -155,16 +155,22 @@ fn esbcdnk_ephv3_to_ubx_mga() {
     assert!(gal > 0);
     assert!(qzss > 0);
 
-    assert_eq!(gps, 253);
+    // The source V3 file has 257 GPS epoch lines. Zero-valued NAV fields are
+    // retained by the parser, so all 257 now reach MGA encoding.
+    assert_eq!(gps, 257);
     println!("UBX-MGA-EPH: {:4} GPS frames", gps);
 
     assert_eq!(qzss, 15);
     println!("UBX-MGA-EPH: {:4} QZSS frames", qzss);
 
-    assert_eq!(bds, 353);
+    // The source file has 357 BeiDou epoch lines; retained zero fields allow
+    // each decoded record to reach MGA encoding.
+    assert_eq!(bds, 357);
     println!("UBX-MGA-BDS: {:4} BDS frames", bds);
 
-    assert_eq!(gal, 806);
+    // The source has 1,602 Galileo epoch lines but 823 distinct (SV, ToC)
+    // keys; this RINEX record map keeps one ephemeris per key.
+    assert_eq!(gal, 823);
     println!("UBX-MGA-GAL: {:4} GAL frames", gal);
 }
 
