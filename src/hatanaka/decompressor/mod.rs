@@ -59,6 +59,10 @@ impl State {
     const MIN_COMPRESSED_EPOCH_SIZE_V1: usize = 17;
     const MIN_DECOMPRESSED_EPOCH_SIZE_V1: usize = 32;
 
+    /// Room for the receiver clock offset in a V1 epoch description:
+    /// F12.9 in columns 69-80, after the SV list padded to column 68.
+    const V1_CLOCK_SIZE: usize = 12 + 68 - Self::MIN_DECOMPRESSED_EPOCH_SIZE_V1;
+
     /// Minimal size of a valid [Epoch] description in V3 revision  
     /// - >
     /// - Timestamp: Year uses 4 digits
@@ -81,6 +85,7 @@ impl State {
                     let num_extra = div_ceil(numsat, 12) - 1;
                     size += num_extra * 17; // padding
                     size += numsat * 3; // formatted
+                    size += Self::V1_CLOCK_SIZE; // possible clock offset
                     size
                 }
             },
@@ -191,6 +196,8 @@ impl<const M: usize> DecompressorExpert<M> {
     const V1_TIMESTAMP_SIZE: usize = 24;
     const V1_NUMSAT_OFFSET: usize = Self::V1_TIMESTAMP_SIZE + 4;
     const V1_SAT_OFFSET: usize = Self::V1_NUMSAT_OFFSET + 3;
+    /// Receiver clock offset position (column 69) in a V1 epoch description
+    const V1_CLOCK_OFFSET: usize = 68;
 
     /// Minimal timestamp length in V3 revision
     const V3_TIMESTAMP_SIZE: usize = 26;
@@ -417,10 +424,13 @@ impl<const M: usize> DecompressorExpert<M> {
         buf[produced..produced + 34].copy_from_slice(&bytes[..34]);
         produced += 34;
 
-        // provide clock data, if any
+        // provide clock data, if any.
+        // RINEX V3 formats the receiver clock offset as F15.12 (seconds) in
+        // columns 42-56, CRINEX stores it with the decimal point removed:
+        // 10^-12 s units.
         if let Some(clock_data) = clock_data {
-            let value = clock_data as f64 / 1000.0;
-            let formatted = format!("       {:.12}", value);
+            let value = clock_data as f64 / 1.0E12;
+            let formatted = format!("      {:15.12}", value);
             let fmt_len = formatted.len(); // TODO improve: this is constant
             let bytes = formatted.as_bytes();
             buf[produced..produced + fmt_len].copy_from_slice(&bytes);
@@ -443,9 +453,18 @@ impl<const M: usize> DecompressorExpert<M> {
         buf[produced..produced + first_len].copy_from_slice(&bytes[..first_len]);
         produced += first_len;
 
-        // push clock offset (if any)
+        // push clock offset (if any).
+        // RINEX V2 formats the receiver clock offset as F12.9 (seconds) in
+        // columns 69-80, CRINEX stores it with the decimal point removed:
+        // 10^-9 s units. Pad the SV list up to column 68 first, in case fewer
+        // than 12 SVs were observed.
         if let Some(clock_data) = clock_data {
-            let formatted_ck = format!(" {:15.12}", clock_data);
+            while produced < Self::V1_CLOCK_OFFSET {
+                buf[produced] = b' ';
+                produced += 1;
+            }
+            let value = clock_data as f64 / 1.0E9;
+            let formatted_ck = format!("{:12.9}", value);
             let fmt_len = formatted_ck.len(); // TODO: improve (constant)
             let formatted_ck = formatted_ck.as_bytes();
             buf[produced..produced + fmt_len].copy_from_slice(&formatted_ck);
@@ -486,39 +505,35 @@ impl<const M: usize> DecompressorExpert<M> {
     }
 
     /// Process following line, in [State::Clock]
-    fn run_clock(&mut self, line: &str, len: usize, buf: &mut [u8]) -> Result<usize, Error> {
-        let mut clock_data = Option::<i64>::None;
+    fn run_clock(&mut self, line: &str, _len: usize, buf: &mut [u8]) -> Result<usize, Error> {
+        // The receiver clock line is one of
+        //  - "" : no clock offset for this epoch
+        //  - "m&value" : kernel reset at order m, value is the offset itself
+        //  - "value" : compressed offset, to run through the kernel
+        // Depending on the caller, the line may still carry its line
+        // termination or trailing blanks: strip them before interpreting it,
+        // otherwise a kernel reset silently fails to parse and the following
+        // values are either dropped or decompressed with an uninitialized kernel.
+        let line = line.trim();
+        let bytes = line.as_bytes();
 
-        // attempts to recover clock data (if it exists)
-        if len > 2 {
-            // data may exist
-            if line[1..].starts_with('&') {
-                if let Ok(order) = line[..1].parse::<usize>() {
-                    if let Ok(val) = line[2..].parse::<i64>() {
-                        // valid kernel reset
-                        self.clock_diff.force_init(val, order);
-                        clock_data = Some(val);
-                    }
-                }
-            } else {
-                match line.trim().parse::<i64>() {
-                    Ok(val) => {
-                        let val = self.clock_diff.decompress(val)?;
-                        clock_data = Some(val);
-                    },
-                    Err(_) => {},
-                }
-            }
-        } else if len == 1 {
-            // highly compressed clock data
-            match line.trim().parse::<i64>() {
-                Ok(val) => {
-                    let val = self.clock_diff.decompress(val)?;
-                    clock_data = Some(val);
+        let clock_data = if bytes.len() > 2 && bytes[1] == b'&' {
+            match (line[..1].parse::<usize>(), line[2..].parse::<i64>()) {
+                (Ok(order), Ok(val)) => {
+                    // valid kernel reset
+                    self.clock_diff.force_init(val, order);
+                    Some(val)
                 },
-                Err(_) => {},
+                _ => None,
             }
-        }
+        } else if !line.is_empty() {
+            match line.parse::<i64>() {
+                Ok(val) => Some(self.clock_diff.decompress(val)?),
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
 
         // now that we have potentially recovered clock data
         // we can format the complete epoch description
@@ -860,8 +875,14 @@ mod test {
             let size = State::Epoch.size_to_produce(false, numsat, 0);
             assert_eq!(size, 0); // Should wait for Clock data !
 
+            // room for a possible clock offset (F12.9, after the SVs padded to col 68)
             let size = State::Clock.size_to_produce(false, numsat, 0);
-            assert_eq!(size, expected.len(), "failed for \"{}\"", expected);
+            assert_eq!(
+                size,
+                expected.len() + State::V1_CLOCK_SIZE,
+                "failed for \"{}\"",
+                expected
+            );
         }
     }
 

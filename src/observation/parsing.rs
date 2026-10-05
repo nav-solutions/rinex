@@ -109,18 +109,19 @@ pub fn parse_epoch(
         .map_err(|_| ParsingError::NumSatParsing)?;
 
     // grab possible clock offset
-    let offs: Option<&str> = match header.version.major < 2 {
+    let offs: Option<&str> = match header.version.major < 3 {
         true => {
-            // RINEX 2
-            // clock offsets are last 12 characters
-            if line.len() > 60 - 12 {
-                Some(line.split_at(60 - 12).1.trim())
+            // RINEX 2: F12.9 in columns 69-80, right after the (up to 12) SVs
+            // listed on the first line of the epoch description.
+            const V2_CLOCK_OFFSET: usize = 68;
+            if line.len() > V2_CLOCK_OFFSET {
+                Some(line.split_at(V2_CLOCK_OFFSET).1.trim())
             } else {
                 None
             }
         },
         false => {
-            // RINEX 3
+            // RINEX 3: F15.12 right after the number of SVs
             let min_len: usize = 4+1 // y
                 +2+1 // m
                 +2+1 // d
@@ -140,8 +141,7 @@ pub fn parse_epoch(
 
     if let Some(offset) = offs {
         if let Ok(offset_s) = parse_f64(offset) {
-            observations
-                .with_clock_observation(ClockObservation::default().with_offset_s(epoch, offset_s));
+            observations.clock = Some(ClockObservation::default().with_offset_s(epoch, offset_s));
         }
     }
 
@@ -459,8 +459,8 @@ fn parse_signals_v3(
 mod test {
     use super::is_new_epoch;
     use crate::{
-        observation::{EpochFlag, SignalObservation, SNR},
-        prelude::{Constellation, Observable, Version, SV},
+        observation::{ClockObservation, EpochFlag, SignalObservation, SNR},
+        prelude::{Constellation, Epoch, Observable, Version, SV},
         tests::toolkit::generic_observation_epoch_decoding_test,
     };
     use std::str::FromStr;
@@ -530,7 +530,11 @@ G09  25493930.890   133971510.403 6        41.250                    25493926.95
             30,
             "2022-03-04T00:00:00 GPST",
             EpochFlag::Ok,
-            None,
+            // receiver clock offset is present, zero valued
+            Some(ClockObservation::default().with_offset_s(
+                Epoch::from_str("2022-03-04T00:00:00 GPST").unwrap(),
+                0.0,
+            )),
             vec![
                 SignalObservation {
                     sv: SV::from_str("G01").unwrap(),

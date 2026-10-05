@@ -24,7 +24,7 @@ mod meteo;
 // OBS RINEX dedicated tools
 pub use observation::{
     generic_comparison as generic_observation_comparison, generic_observation_epoch_decoding_test,
-    generic_observation_rinex_test, SignalDataPoint,
+    generic_observation_rinex_test, ClockDataPoint, SignalDataPoint,
 };
 
 #[cfg(feature = "nav")]

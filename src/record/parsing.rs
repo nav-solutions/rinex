@@ -244,7 +244,9 @@ impl Record {
                                 Err(_) => {},
                             }
 
-                            observations.signals.clear(); // reset for next parsing (single alloc)
+                            // reset for next parsing (single alloc)
+                            observations.clock = None;
+                            observations.signals.clear();
                         },
 
                         Type::MeteoData => {
