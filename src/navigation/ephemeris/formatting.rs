@@ -10,6 +10,19 @@ use crate::{
 
 use std::io::{BufWriter, Write};
 
+/// The BeiDou group delays are named differently by the RINEX 3 and
+/// RINEX 4 orbit definitions: a record parsed in one revision is written
+/// in the other under either name.
+fn orbit_alias(key: &str) -> Option<&'static str> {
+    match key {
+        "tgdb1b3" => Some("tgd1b1b3"),
+        "tgd1b1b3" => Some("tgdb1b3"),
+        "tgdb2b3" => Some("tgd2b2b3"),
+        "tgd2b2b3" => Some("tgdb2b3"),
+        _ => None,
+    }
+}
+
 impl Ephemeris {
     /// Formats [Ephemeris] according to RINEX standards
     pub fn format<W: Write>(
@@ -70,7 +83,10 @@ impl Ephemeris {
             if i % 4 == 0 {
                 write!(w, "\n{}", padding)?;
             }
-            match self.get_orbit_f64(field) {
+            match self
+                .get_orbit_f64(field)
+                .or_else(|| orbit_alias(field).and_then(|alias| self.get_orbit_f64(alias)))
+            {
                 Some(value) => write!(w, "{}", formatter(value))?,
                 None => write!(w, "{}", BLANK)?,
             }

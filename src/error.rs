@@ -296,6 +296,9 @@ pub enum FormattingError {
 
     #[error("crinex compression: {0}")]
     Hatanaka(#[from] HatanakaError),
+
+    #[error("nav: no frame can be written in this revision")]
+    NoRepresentableFrame,
 }
 
 /// General error (processing, analysis..)

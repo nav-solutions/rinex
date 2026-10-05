@@ -1,7 +1,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::prelude::ParsingError;
+use crate::prelude::{Constellation, ParsingError};
 
 #[cfg(doc)]
 use crate::bibliography::Bibliography;
@@ -92,6 +92,24 @@ impl std::str::FromStr for NavMessageType {
     }
 }
 
+impl NavMessageType {
+    /// Returns true if this message, broadcast by `constellation`, has a
+    /// representation in RINEX 2 and 3: the legacy message of each
+    /// constellation, which those revisions do not name. The modern
+    /// messages (CNAV, CNV1 to CNV3, L1NV, L1OC, L3OC) only exist in
+    /// RINEX 4, as do the STO, EOP and ION message types.
+    pub fn is_legacy(self, constellation: Constellation) -> bool {
+        match self {
+            Self::LNAV => true,
+            Self::FDMA => constellation == Constellation::Glonass,
+            Self::INAV | Self::FNAV => constellation == Constellation::Galileo,
+            Self::D1 | Self::D2 => constellation == Constellation::BeiDou,
+            Self::SBAS => constellation.is_sbas(),
+            _ => false,
+        }
+    }
+}
+
 impl std::fmt::Display for NavMessageType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -178,6 +196,43 @@ mod test {
             assert_eq!(msgtype.to_string(), code);
         }
         assert!(NavMessageType::from_str("LEG").is_err());
+    }
+
+    #[test]
+    fn legacy_messages() {
+        use crate::prelude::Constellation;
+
+        for (msgtype, constellation, legacy) in [
+            (NavMessageType::LNAV, Constellation::GPS, true),
+            (NavMessageType::LNAV, Constellation::IRNSS, true),
+            (NavMessageType::FDMA, Constellation::Glonass, true),
+            (NavMessageType::FDMA, Constellation::GPS, false),
+            (NavMessageType::INAV, Constellation::Galileo, true),
+            (NavMessageType::FNAV, Constellation::Galileo, true),
+            (NavMessageType::INAV, Constellation::Glonass, false),
+            (NavMessageType::D1, Constellation::BeiDou, true),
+            (NavMessageType::D2, Constellation::BeiDou, true),
+            (NavMessageType::D2, Constellation::GPS, false),
+            (NavMessageType::SBAS, Constellation::EGNOS, true),
+            (NavMessageType::SBAS, Constellation::GPS, false),
+            (NavMessageType::CNAV, Constellation::GPS, false),
+            (NavMessageType::CNV2, Constellation::QZSS, false),
+            (NavMessageType::CNV3, Constellation::BeiDou, false),
+            (NavMessageType::IFNV, Constellation::Galileo, false),
+            (NavMessageType::CNVX, Constellation::GPS, false),
+            (NavMessageType::L1NV, Constellation::IRNSS, false),
+            (NavMessageType::L1OC, Constellation::Glonass, false),
+            (NavMessageType::L3OC, Constellation::Glonass, false),
+            (NavMessageType::LXOC, Constellation::Glonass, false),
+        ] {
+            assert_eq!(
+                msgtype.is_legacy(constellation),
+                legacy,
+                "{} {:?}",
+                msgtype,
+                constellation
+            );
+        }
     }
 
     #[test]
