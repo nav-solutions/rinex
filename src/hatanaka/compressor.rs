@@ -1,11 +1,12 @@
 //! RINEX compression module
 
 use crate::{
-    epoch::epoch_decompose as epoch_decomposition,
+    epoch::format as epoch_format,
     error::FormattingError,
     hatanaka::{NumDiff, TextDiff},
     observation::{HeaderFields, Record},
     prelude::{Constellation, Observable, SV},
+    types::Type as RinexType,
     BufWriter,
 };
 
@@ -77,15 +78,12 @@ impl<const M: usize> CompressorExpert<M> {
                 self.epoch_compression = false;
             }
 
-            let (y, m, d, hh, mm, ss, ns) = epoch_decomposition(k.epoch);
-
-            // form unique SV list
+            // form unique SV list, in the order the signals were recorded
             let svnn = v
                 .signals
                 .iter()
                 .map(|sig| sig.sv)
                 .unique()
-                .sorted()
                 .collect::<Vec<_>>();
 
             // vehicles absent from the previous epoch restart from scratch
@@ -109,33 +107,19 @@ impl<const M: usize> CompressorExpert<M> {
                 }
             }
 
-            if self.v3 {
-                self.epoch_buf.push_str(&format!(
-                    "{:04} {:02} {:02} {:02} {:02} {:02}.{:07}  {}{:3}      ",
-                    y,
-                    m,
-                    d,
-                    hh,
-                    mm,
-                    ss,
-                    ns / 100,
-                    k.flag,
-                    svnn.len(),
-                ));
-            } else {
-                self.epoch_buf.push_str(&format!(
-                    "{:02} {:02} {:02} {:02} {:02} {:02}.{:07}  {}{:3}      ",
-                    y,
-                    m,
-                    d,
-                    hh,
-                    mm,
-                    ss,
-                    ns / 100,
-                    k.flag,
-                    svnn.len(),
-                ));
-            }
+            let revision = if self.v3 { 3 } else { 2 };
+
+            // RINEX 3 reserves 6 columns between the satellite count and
+            // the SV list on the epoch descriptor line, RINEX 2 does not.
+            let sat_list_pad = if self.v3 { "      " } else { "" };
+
+            self.epoch_buf.push_str(&format!(
+                "{}  {}{:3}{}",
+                epoch_format(k.epoch, RinexType::ObservationData, revision),
+                k.flag,
+                svnn.len(),
+                sat_list_pad,
+            ));
 
             // Append each SV to epoch description
             for sv in svnn.iter() {
