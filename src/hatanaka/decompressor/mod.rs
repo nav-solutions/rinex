@@ -82,7 +82,7 @@ impl State {
                     Self::MIN_DECOMPRESSED_EPOCH_SIZE_V3
                 } else {
                     let mut size = Self::MIN_DECOMPRESSED_EPOCH_SIZE_V1;
-                    let num_extra = div_ceil(numsat, 12) - 1;
+                    let num_extra = div_ceil(numsat, 12).saturating_sub(1);
                     size += num_extra * 17; // padding
                     size += numsat * 3; // formatted
                     size += Self::V1_CLOCK_SIZE; // possible clock offset
@@ -94,9 +94,9 @@ impl State {
                     3 + numobs * 16
                 } else {
                     let mut size = 1;
-                    size += numobs - 1; // separator
+                    size += numobs.saturating_sub(1); // separator
                     size += 15 * numobs; // formatted
-                    let num_extra = div_ceil(numobs, 5) - 1;
+                    let num_extra = div_ceil(numobs, 5).saturating_sub(1);
                     size += num_extra * 15; // padding
                     size
                 }
@@ -824,6 +824,16 @@ mod test {
         prelude::SV,
     };
     use std::str::{from_utf8, FromStr};
+
+    /// An epoch without any satellite, or a header without observable,
+    /// must not underflow the size to produce.
+    #[test]
+    fn size_to_produce_without_satellite() {
+        let epoch = State::Clock.size_to_produce(false, 0, 0);
+        assert!(epoch >= State::MIN_DECOMPRESSED_EPOCH_SIZE_V1);
+        assert_eq!(State::Observation.size_to_produce(false, 3, 0), 1);
+        assert_eq!(State::Observation.size_to_produce(true, 3, 0), 3);
+    }
 
     #[test]
     fn epoch_size_to_produce_v1() {
