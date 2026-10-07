@@ -5,7 +5,6 @@ mod test {
     use std::{fs::remove_file as fs_remove_file, path::PathBuf};
 
     #[test]
-    #[ignore]
     fn crinex1() {
         let pool = vec![
             ("AJAC3550.21D", "AJAC3550.21O"),
@@ -53,6 +52,34 @@ mod test {
             // destroy
             let _ = fs_remove_file("v1_compressed.txt");
         }
+    }
+
+    /// The epoch description of a CRINEX 1 file is the RINEX 2 one
+    /// (2 digit year, blank padded fields, satellites in file order),
+    /// with no padding before the satellite list.
+    #[test]
+    fn crinex1_epoch_descriptor() {
+        let data = PathBuf::new().join(env!("CARGO_MANIFEST_DIR")).join("data");
+        let rnx = Rinex::from_file(data.join("OBS").join("V2").join("AJAC3550.21O")).unwrap();
+
+        let tmp = format!("test-crinex1-descriptor-{}.txt", std::process::id());
+        rnx.rnx2crnx().to_file(&tmp).unwrap();
+        let compressed = std::fs::read_to_string(&tmp).unwrap();
+        let _ = fs_remove_file(&tmp);
+
+        let reference =
+            std::fs::read_to_string(data.join("CRNX").join("V1").join("AJAC3550.21D")).unwrap();
+
+        let first_descriptor = |content: &str| {
+            content
+                .lines()
+                .find(|line| line.starts_with('&'))
+                .unwrap()
+                .trim_end()
+                .to_string()
+        };
+
+        assert_eq!(first_descriptor(&compressed), first_descriptor(&reference));
     }
 
     #[test]
