@@ -10,6 +10,8 @@ mod pdel0010_21;
 mod vlns0630;
 // v1
 mod zegv0010;
+// event epochs
+mod event_epoch;
 // receiver clock offsets, V1 and V3
 mod clock_offsets;
 
