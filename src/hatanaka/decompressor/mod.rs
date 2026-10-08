@@ -49,6 +49,9 @@ pub enum State {
 
     /// Observations gathering and recovering.
     Observation,
+
+    /// Forwarding the special records of an event epoch, as published.
+    Event,
 }
 
 impl State {
@@ -148,6 +151,9 @@ pub struct DecompressorExpert<const M: usize> {
     epoch_descriptor: String,
     epoch_desc_len: usize, // for internal logic
 
+    /// Special records of the current event epoch not forwarded yet
+    event_lines: usize,
+
     /// Missing observations of the line being decompressed
     blanks: Vec<bool>,
     /// Vehicles of the epoch being decompressed
@@ -176,6 +182,7 @@ impl<const M: usize> Default for DecompressorExpert<M> {
             obs_ptr: 0,
             first_epoch: true,
             epoch_desc_len: 0,
+            event_lines: 0,
             sv: Default::default(),
             state: Default::default(),
             constellation: Constellation::Mixed,
@@ -284,6 +291,7 @@ impl<const M: usize> DecompressorExpert<M> {
             gnss_observables,
             first_epoch: true,
             epoch_desc_len: 0,
+            event_lines: 0,
             sv: Default::default(),
             state: Default::default(),
             epoch_diff: TextDiff::new(""),
@@ -324,14 +332,15 @@ impl<const M: usize> DecompressorExpert<M> {
         }
 
         match self.state {
-            State::Epoch => self.run_epoch(line, len),
+            State::Epoch => self.run_epoch(line, len, buf),
             State::Clock => self.run_clock(line, len, buf),
             State::Observation => self.run_observation(line, len, buf),
+            State::Event => self.run_event(line, buf),
         }
     }
 
     /// Process the given line, during [State::Epoch] state.
-    fn run_epoch(&mut self, line: &str, len: usize) -> Result<usize, Error> {
+    fn run_epoch(&mut self, line: &str, len: usize, buf: &mut [u8]) -> Result<usize, Error> {
         let min_len = if self.v3 {
             State::MIN_COMPRESSED_EPOCH_SIZE_V3
         } else {
@@ -369,6 +378,13 @@ impl<const M: usize> DecompressorExpert<M> {
             self.epoch_desc_len = self.epoch_descriptor.len();
         }
 
+        // Event epochs: the number of satellites is the number of special
+        // records that follow. They are not compressed and we forward them
+        // as they were published.
+        if self.is_event_epoch() {
+            return self.run_event_epoch(buf);
+        }
+
         // numsat needs to be recovered right away,
         // because it is used to determine the next production size
         if let Some(numsat) = self.epoch_numsat() {
@@ -400,6 +416,81 @@ impl<const M: usize> DecompressorExpert<M> {
             error!("corrupt numsat");
             Err(Error::CorruptNumsat)
         }
+    }
+
+    /// Returns true if the recovered epoch description is an event
+    /// (flag 2 to 5) that is followed by special records.
+    fn is_event_epoch(&self) -> bool {
+        let flag_offset = if self.v3 {
+            Self::V3_NUMSAT_OFFSET
+        } else {
+            Self::V1_NUMSAT_OFFSET
+        } - 1;
+
+        matches!(
+            self.epoch_descriptor.as_bytes().get(flag_offset),
+            Some(b'2'..=b'5')
+        )
+    }
+
+    /// Returns true while the special records of an event epoch are being forwarded.
+    /// The caller must not interpret these lines, they are not compressed.
+    pub(crate) fn in_event(&self) -> bool {
+        self.state == State::Event
+    }
+
+    /// Publishes the description of an event epoch, and prepares for
+    /// its special records.
+    fn run_event_epoch(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
+        let numsat_end = (if self.v3 {
+            Self::V3_NUMSAT_OFFSET
+        } else {
+            Self::V1_NUMSAT_OFFSET
+        }) + 3;
+
+        let numrecords = self.epoch_descriptor[numsat_end - 3..numsat_end]
+            .trim()
+            .parse::<u16>()
+            .map_err(|_| Error::CorruptNumsat)?;
+
+        // The kernel does not shrink: satellites of a former epoch trail the
+        // description, but an event does not have any.
+        self.epoch_descriptor.truncate(numsat_end);
+        self.epoch_desc_len = numsat_end;
+
+        // room for the description (clock offset is not published)
+        if buf.len() < numsat_end + 2 {
+            return Err(Error::BufferOverflow);
+        }
+
+        let produced = self.format_epoch(None, buf);
+
+        self.event_lines = numrecords as usize;
+        self.state = if self.event_lines > 0 {
+            State::Event
+        } else {
+            State::Epoch
+        };
+
+        Ok(produced)
+    }
+
+    /// Forwards one special record of an event epoch.
+    fn run_event(&mut self, line: &str, buf: &mut [u8]) -> Result<usize, Error> {
+        let record = line.trim_end_matches(['\r', '\n']);
+
+        if record.len() > buf.len() {
+            return Err(Error::BufferOverflow);
+        }
+
+        buf[..record.len()].copy_from_slice(record.as_bytes());
+
+        self.event_lines -= 1;
+        if self.event_lines == 0 {
+            self.state = State::Epoch;
+        }
+
+        Ok(record.len())
     }
 
     /// Fills user buffer with recovered epoch, following either V1 or V3 standards

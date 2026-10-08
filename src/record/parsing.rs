@@ -140,8 +140,12 @@ impl Record {
                 eos |= true;
             }
 
+            // The special records of a CRINEX event epoch are published as they
+            // were, they may look like comments but must reach the decompressor.
+            let in_event = is_crinex && decompressor.in_event();
+
             // (special case) COMMENTS: store as is
-            if is_rinex_comment(&line_buf) {
+            if !in_event && is_rinex_comment(&line_buf) {
                 let comment = line_buf.split_at(60).0.trim_end();
                 comment_content.push(comment.to_string());
 
@@ -151,7 +155,7 @@ impl Record {
             }
 
             // (special case) COMMENTS: store as is
-            if line_buf.contains("COMMENT") {
+            if !in_event && line_buf.contains("COMMENT") {
                 let content = line_buf.split_at(60).0.trim();
                 if let Some(comments) = comments.get_mut(&comment_ts) {
                     comments.push(content.to_string());
