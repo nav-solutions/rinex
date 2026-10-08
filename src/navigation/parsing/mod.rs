@@ -183,7 +183,7 @@ mod test {
         assert_eq!(ephemeris.clock_drift_rate, 7.38E4);
 
         let orbits = &ephemeris.orbits;
-        assert_eq!(orbits.len(), 10);
+        assert_eq!(orbits.len(), 12);
 
         for (k, v) in orbits.iter() {
             if k.eq("satPosX") {
@@ -248,7 +248,7 @@ mod test {
         assert_eq!(ephemeris.clock_drift_rate, 0.0);
 
         let orbits = &ephemeris.orbits;
-        assert_eq!(orbits.len(), 23);
+        assert_eq!(orbits.len(), 24);
 
         for (k, v) in orbits.iter() {
             if k.eq("aode") {
@@ -339,7 +339,7 @@ mod test {
         assert_eq!(ephemeris.clock_drift_rate, 0.0);
 
         let orbits = &ephemeris.orbits;
-        assert_eq!(orbits.len(), 23);
+        assert_eq!(orbits.len(), 24);
 
         for (k, v) in orbits.iter() {
             if k.eq("iodnav") {
@@ -426,7 +426,7 @@ mod test {
         assert_eq!(ephemeris.clock_drift_rate, 0.342000000000e+05);
 
         let orbits = &ephemeris.orbits;
-        assert_eq!(orbits.len(), 9);
+        assert_eq!(orbits.len(), 12);
 
         for (k, v) in orbits.iter() {
             if k.eq("satPosX") {

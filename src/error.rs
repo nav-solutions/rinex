@@ -47,6 +47,14 @@ pub enum ParsingError {
     #[error("obs: invalid receiver clock offset")]
     ObsClockParsing,
 
+    /// A nonblank, non-spare orbit field failed to decode. The source distinguishes
+    /// invalid numeric data from flag mapping or unsupported-definition errors.
+    #[error("nav: invalid orbit field {field}: {source}")]
+    NavOrbitParsing {
+        field: String,
+        source: Box<ParsingError>,
+    },
+
     #[error("datime parsing")]
     DatetimeParsing,
 
@@ -221,7 +229,7 @@ pub enum ParsingError {
     #[error("nav: invalid / missing flag definition")]
     NavFlagsDefinition,
 
-    #[error("nav: illegal null orbit field")]
+    #[error("nav: invalid or missing numeric orbit value")]
     NavNullOrbit,
 
     #[error("nav:ion klobuchar data")]

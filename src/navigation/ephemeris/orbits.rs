@@ -142,14 +142,10 @@ impl OrbitItem {
         // make it "rust" compatible
         let float = parse_f64(val_str).map_err(|_| ParsingError::NavNullOrbit)?;
 
-        // do not tolerate zero values for native types
-        match type_str {
-            "u8" | "i8" | "u32" | "f64" => {
-                if float == 0.0 {
-                    return Err(ParsingError::NavNullOrbit);
-                }
-            },
-            _ => {}, // non-native types
+        // Zero is a legitimate numeric value. Empty fields are omitted by
+        // parse_orbits; field-specific sentinels retain their original value.
+        if !float.is_finite() {
+            return Err(ParsingError::NavNullOrbit);
         }
 
         // uninterpreted data remains as native type and we exit.
@@ -628,6 +624,42 @@ pub(crate) fn closest_nav_standards(
 mod test {
     use super::*;
     use crate::navigation::NavMessageType;
+
+    #[test]
+    fn numeric_and_flag_errors_remain_distinct() {
+        for value in ["BAD", "NaN", "inf"] {
+            assert!(matches!(
+                OrbitItem::new(
+                    "health",
+                    "flag",
+                    value,
+                    &NavMessageType::FDMA,
+                    Constellation::Glonass
+                ),
+                Err(ParsingError::NavNullOrbit)
+            ));
+        }
+        assert!(matches!(
+            OrbitItem::new(
+                "health",
+                "flag",
+                "8.0",
+                &NavMessageType::FDMA,
+                Constellation::Glonass
+            ),
+            Err(ParsingError::NavFlagsMapping)
+        ));
+        assert!(matches!(
+            OrbitItem::new(
+                "future",
+                "flag",
+                "0.0",
+                &NavMessageType::LNAV,
+                Constellation::GPS
+            ),
+            Err(ParsingError::NavFlagsDefinition)
+        ));
+    }
 
     #[test]
     fn orbit_database_sanity() {

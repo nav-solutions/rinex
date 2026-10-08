@@ -12,6 +12,8 @@ use std::{collections::HashMap, str::Lines};
 
 /// Parses all orbital elements.
 /// Descriptor is retrieved from database db/NAV/orbits.
+/// Empty and spare fields are omitted. Every other field must decode, including
+/// flags: a mapping or unsupported-definition error rejects the whole block.
 /// ## Inputs
 /// - version: database [Version] filter
 /// - msgtype: database [NavMessageType] filter
@@ -44,10 +46,8 @@ fn parse_orbits(
 
     for line in lines {
         // trim first few white spaces
-        let mut line: &str = match version.major < 3 {
-            true => &line[3..],
-            false => &line[4..],
-        };
+        let padding = if version.major < 3 { 3 } else { 4 };
+        let mut line = line.get(padding..).unwrap_or("");
 
         // number of fields found on this line, blank or not
         let mut nb_fields = 0;
@@ -79,12 +79,14 @@ fn parse_orbits(
                 //    token,
                 //    content.trim()
                 //); //DEBUG
-                match OrbitItem::new(name_str, type_str, val_str, &msgtype, constell) {
-                    Ok(item) => {
-                        // println!("found key=\"{}\" (type={}) value=\"{}\"", key, token, content); // DEBUG
-                        map.insert(name_str.to_string(), item);
-                    },
-                    Err(_) => {},
+                // Spare fields must be skipped (RINEX section 6.4).
+                if !name_str.starts_with("spare") {
+                    let item = OrbitItem::new(name_str, type_str, val_str, &msgtype, constell)
+                        .map_err(|source| ParsingError::NavOrbitParsing {
+                            field: name_str.to_string(),
+                            source: Box::new(source),
+                        })?;
+                    map.insert(name_str.to_string(), item);
                 }
             }
 
@@ -141,6 +143,13 @@ impl Ephemeris {
         let mut clock_drift_rate =
             parse_f64(clk_drr.trim()).map_err(|_| ParsingError::ClockParsing)?;
 
+        if ![clock_bias, clock_drift, clock_drift_rate]
+            .iter()
+            .all(|v| v.is_finite())
+        {
+            return Err(ParsingError::ClockParsing);
+        }
+
         // parse orbits :
         //  only Legacy Frames in V2 and V3 (old) RINEX
         let mut orbits = parse_orbits(version, NavMessageType::LNAV, sv.constellation, lines)?;
@@ -194,6 +203,13 @@ impl Ephemeris {
         let mut clock_drift_rate =
             parse_f64(clk_drr.trim()).map_err(|_| ParsingError::ClockParsing)?;
 
+        if ![clock_bias, clock_drift, clock_drift_rate]
+            .iter()
+            .all(|v| v.is_finite())
+        {
+            return Err(ParsingError::ClockParsing);
+        }
+
         let mut orbits =
             parse_orbits(Version { major: 4, minor: 0 }, msg, sv.constellation, lines)?;
 
@@ -223,11 +239,31 @@ impl Ephemeris {
 #[cfg(test)]
 mod test {
     use crate::{
-        navigation::{Ephemeris, NavMessageType},
+        navigation::{Ephemeris, NavMessageType, OrbitItem},
         prelude::{Constellation, Epoch, TimeScale, Version, SV},
     };
 
     use std::str::FromStr;
+
+    #[test]
+    fn zero_fields_and_non_numeric_spares_remain_distinct() {
+        // Explicitly synthetic BDS legacy row 5: IDOT, spare, week, spare.
+        let mut content = format!("{}\n", " ".repeat(80)).repeat(4);
+        content.push_str(&format!(
+            "    {:>19}{:>19}{:>19}{:>19}\n",
+            "0.0", "FUTURE", "0.0", "FUTURE"
+        ));
+        let orbits = parse_orbits(
+            Version::new(3, 0),
+            NavMessageType::LNAV,
+            Constellation::BeiDou,
+            content.lines(),
+        )
+        .unwrap();
+        assert_eq!(orbits.get("idot"), Some(&OrbitItem::F64(0.0)));
+        assert_eq!(orbits.get("week"), Some(&OrbitItem::U32(0)));
+        assert_eq!(orbits.len(), 2);
+    }
 
     use super::parse_orbits;
 
@@ -309,7 +345,7 @@ mod test {
             ephemeris.get_orbit_f64("bgdE5aE1"),
             Some(-1.303851604462e-08)
         );
-        assert!(ephemeris.get_orbit_f64("bgdE5bE1").is_none());
+        assert_eq!(ephemeris.get_orbit_f64("bgdE5bE1"), Some(0.0));
 
         assert_eq!(ephemeris.get_orbit_f64("t_tm"), Some(3.555400000000e+05));
     }
@@ -383,7 +419,7 @@ mod test {
             Some(-0.900000000000e-08)
         );
 
-        assert!(ephemeris.get_orbit_f64("aodc").is_none());
+        assert_eq!(ephemeris.get_orbit_f64("aodc"), Some(0.0));
         assert_eq!(ephemeris.get_orbit_f64("t_tm"), Some(0.432000000000e+06));
     }
 
