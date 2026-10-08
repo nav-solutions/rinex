@@ -180,10 +180,12 @@ mod test {
 
         assert_eq!(ephemeris.clock_bias, 7.282570004460E-05);
         assert_eq!(ephemeris.clock_drift, 0.0);
-        assert_eq!(ephemeris.clock_drift_rate, 7.38E4);
+        assert_eq!(ephemeris.clock_drift_rate, 0.0);
+        assert_eq!(ephemeris.get_orbit_f64("frameTime"), Some(7.38E4));
 
         let orbits = &ephemeris.orbits;
-        assert_eq!(orbits.len(), 12);
+        // Twelve source orbit fields (including zero accelY/ageOp), plus frame time.
+        assert_eq!(orbits.len(), 13);
 
         for (k, v) in orbits.iter() {
             if k.eq("satPosX") {
@@ -210,6 +212,8 @@ mod test {
                 assert_eq!(v.as_f64(), -9.313225746150E-10);
             } else if k.eq("ageOp") {
                 assert_eq!(v.as_f64(), 0.0);
+            } else if k.eq("frameTime") {
+                assert_eq!(v.as_f64(), 7.38E4);
             } else {
                 panic!("Got unexpected key \"{}\" for GLOV2 record", k);
             }
@@ -248,7 +252,7 @@ mod test {
         assert_eq!(ephemeris.clock_drift_rate, 0.0);
 
         let orbits = &ephemeris.orbits;
-        assert_eq!(orbits.len(), 24);
+        assert_eq!(orbits.len(), 24); // includes the source's zero AODC
 
         for (k, v) in orbits.iter() {
             if k.eq("aode") {
@@ -339,7 +343,7 @@ mod test {
         assert_eq!(ephemeris.clock_drift_rate, 0.0);
 
         let orbits = &ephemeris.orbits;
-        assert_eq!(orbits.len(), 24);
+        assert_eq!(orbits.len(), 24); // includes the source's zero BGD E5b/E1
 
         for (k, v) in orbits.iter() {
             if k.eq("iodnav") {
@@ -423,10 +427,14 @@ mod test {
 
         assert_eq!(ephemeris.clock_bias, -0.420100986958e-04);
         assert_eq!(ephemeris.clock_drift, 0.000000000000e+00);
-        assert_eq!(ephemeris.clock_drift_rate, 0.342000000000e+05);
+        assert_eq!(ephemeris.clock_drift_rate, 0.0);
+        assert_eq!(
+            ephemeris.get_orbit_f64("frameTime"),
+            Some(0.342000000000e+05)
+        );
 
         let orbits = &ephemeris.orbits;
-        assert_eq!(orbits.len(), 12);
+        assert_eq!(orbits.len(), 13); // twelve source orbit fields plus frame time
 
         for (k, v) in orbits.iter() {
             if k.eq("satPosX") {
@@ -453,6 +461,8 @@ mod test {
                 assert_eq!(v.as_f64(), -0.279396772385e-08);
             } else if k.eq("ageOp") {
                 assert_eq!(v.as_f64(), 0.000000000000e+00);
+            } else if k.eq("frameTime") {
+                assert_eq!(v.as_f64(), 0.342000000000e+05);
             } else {
                 panic!("Got unexpected key \"{}\" for GLOV3 record", k);
             }

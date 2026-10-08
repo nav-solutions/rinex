@@ -154,15 +154,19 @@ impl Ephemeris {
         //  only Legacy Frames in V2 and V3 (old) RINEX
         let mut orbits = parse_orbits(version, NavMessageType::LNAV, sv.constellation, lines)?;
 
-        if sv.constellation.is_sbas() {
-            // SBAS frames specificity:
-            // clock drift rate does not exist and is actually the week counter
-            orbits.insert(
-                "week".to_string(),
-                OrbitItem::U32(clock_drift_rate.round() as u32),
-            );
+        if sv.constellation == Constellation::Glonass {
+            // Legacy GLONASS is FDMA: the third scalar is message frame time,
+            // not the quadratic clock coefficient. Its units are UTC-day
+            // seconds in RINEX 2, UTC-week seconds in RINEX 3.
+            orbits.insert("frameTime".to_string(), OrbitItem::F64(clock_drift_rate));
+            clock_drift_rate = 0.0;
+        }
 
-            clock_drift_rate = 0.0_f64; // drift rate null: non existing
+        if sv.constellation.is_sbas() {
+            // RINEX SBAS third scalar: transmission time in GPS week seconds,
+            // including fractional and week-boundary-adjusted values.
+            orbits.insert("t_tm".to_string(), OrbitItem::F64(clock_drift_rate));
+            clock_drift_rate = 0.0;
         }
 
         Ok((
@@ -213,14 +217,16 @@ impl Ephemeris {
         let mut orbits =
             parse_orbits(Version { major: 4, minor: 0 }, msg, sv.constellation, lines)?;
 
+        if sv.constellation == Constellation::Glonass && msg == NavMessageType::FDMA {
+            // RINEX 4 FDMA: seconds of UTC week (table A15).
+            orbits.insert("frameTime".to_string(), OrbitItem::F64(clock_drift_rate));
+            clock_drift_rate = 0.0;
+        }
+
         if sv.constellation.is_sbas() {
-            // SBAS frames specificity:
-            // clock drift rate does not exist and is actually the week counter
-            orbits.insert(
-                "week".to_string(),
-                OrbitItem::U32(clock_drift_rate.round() as u32),
-            );
-            clock_drift_rate = 0.0_f64; // drift rate null: non existing
+            // RINEX 4 table A28: transmission time, never a week number.
+            orbits.insert("t_tm".to_string(), OrbitItem::F64(clock_drift_rate));
+            clock_drift_rate = 0.0;
         }
 
         Ok((

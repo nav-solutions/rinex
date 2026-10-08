@@ -173,6 +173,12 @@ pub struct Ephemeris {
     pub clock_drift: f64,
 
     /// Clock drift rate (s.s⁻²)).   
+    /// Quadratic coefficient for messages that provide it. GLONASS FDMA has
+    /// no such coefficient: this is zero, and the third source scalar is kept
+    /// in `orbits["frameTime"]` (UTC-day seconds in RINEX 2, UTC-week seconds
+    /// in RINEX 3/4). Zero here must not be interpreted as a measured coefficient.
+    /// SBAS likewise stores transmission time in `orbits["t_tm"]` (GPS-week
+    /// seconds) and sets this coefficient to zero.
     pub clock_drift_rate: f64,
 
     /// Orbits are revision and constellation dependent,
