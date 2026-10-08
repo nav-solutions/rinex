@@ -1,3 +1,59 @@
+//! Parser regressions with small inline records and synthetic file envelopes.
+mod observation;
+
+use crate::prelude::*;
+use std::io::BufReader;
+
+// Source G03/G04 rows (lines 51/493) are unchanged; each epoch now declares one SV.
+// SEPT00ATA_R_20241310000_01H_01S_MO.rnx, SHA-256:
+// 79ce9f794590eb38690e61097f8161abee9334f094282444c956b7a5faf15a98.
+const OBS_BODY: &str = r#"> 2024 05 10 00 00  0.0000000  0  1
+G03  20888140.504 8 109767926.63108  20888140.402 8  20888140.763 8  85533467.98008  20888141.418 7  85533463.98007  20888140.080 8  81969573.12908
+> 2024 05 10 00 00  8.0000000  0  1
+G04  22049901.763 7 115873014.86117                                                                                  22049903.466 7  86528556.98917  22049901.762 7 115873015.86117
+"#;
+
+fn parse(text: &str) -> Result<Rinex, ParsingError> {
+    Rinex::parse(&mut BufReader::new(text.as_bytes()))
+}
+
+fn observation_rinex(version: &str, codes: &str, body: &str) -> String {
+    // Synthetic envelope; body values retain their supplied column positions.
+    format!(
+        "{version:>9}           OBSERVATION DATA    M                   RINEX VERSION / TYPE\n\
+         {:<60}SYS / # / OBS TYPES\n\
+         {:<60}TIME OF FIRST OBS\n\
+         {:<60}END OF HEADER\n{body}",
+        codes, "  2024     5    10     0     0    0.0000000     GPS", ""
+    )
+}
+
+fn source_observations() -> String {
+    observation_rinex(
+        "4.02",
+        "G   11 C1C L1C C1W C2W L2W C2L L2L C5Q L5Q C1L L1L",
+        OBS_BODY,
+    )
+}
+
+fn synthetic_obs(version: &str, body: &str) -> String {
+    observation_rinex(version, "G    2 L1C C1C", body)
+}
+
+fn epoch(seconds: &str, clock: Option<&str>, extension: Option<&str>) -> String {
+    let base = format!("> 2024 05 10 00 00 {seconds:>10}  0  1");
+    let first = if clock.is_some() || extension.is_some() {
+        format!(
+            "{base:<41}{:>15} {}",
+            clock.unwrap_or(""),
+            extension.unwrap_or("")
+        )
+    } else {
+        base
+    };
+    format!("{first}\nG03{:>14}17{:>14} 8\n", "-12.500", "0.000")
+}
+
 #[cfg(test)]
 #[cfg(feature = "flate2")]
 mod test {

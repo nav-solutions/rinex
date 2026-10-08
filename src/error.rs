@@ -41,6 +41,12 @@ pub enum ParsingError {
     #[error("epoch parsing")]
     EpochParsing,
 
+    #[error("epoch precision is finer than the native nanosecond resolution")]
+    EpochPrecision,
+
+    #[error("obs: invalid receiver clock offset")]
+    ObsClockParsing,
+
     #[error("datime parsing")]
     DatetimeParsing,
 

@@ -240,6 +240,7 @@ impl Record {
                                     obs_rec.insert(key, observations.clone());
                                     comment_ts = key.epoch; // for comments storage
                                 },
+                                Err(error @ ParsingError::EpochPrecision) => return Err(error),
                                 #[cfg(feature = "log")]
                                 Err(e) => {
                                     error!("parsing: {}", e);

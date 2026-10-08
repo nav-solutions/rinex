@@ -5,7 +5,7 @@ use crate::{
         ClockObservation, EpochFlag, LliFlags, ObsKey, Observations, SignalObservation, SNR,
     },
     parse_f64,
-    prelude::{Constellation, Header, Observable, ParsingError, TimeScale, Version, SV},
+    prelude::{Constellation, Duration, Header, Observable, ParsingError, TimeScale, Version, SV},
 };
 
 use std::{
@@ -94,13 +94,15 @@ pub fn parse_epoch(
         line = line.split_at(1).1;
     }
 
+    if line.len() < offset + 6 {
+        return Err(ParsingError::EpochFormat);
+    }
+
     let (date, rem) = line.split_at(offset);
-    let epoch = parse_epoch_in_timescale(date, ts)?;
+    let mut epoch = parse_epoch_in_timescale(date, ts)?;
 
     let (flag, rem) = rem.split_at(3);
     let flag = EpochFlag::from_str(flag.trim())?;
-
-    let key = ObsKey { epoch, flag };
 
     let (num_sat, rem) = rem.split_at(3);
     let num_sat = num_sat
@@ -121,28 +123,34 @@ pub fn parse_epoch(
             }
         },
         false => {
-            // RINEX 3: F15.12 right after the number of SVs
-            let min_len: usize = 4+1 // y
-                +2+1 // m
-                +2+1 // d
-                +2+1 // h
-                +2+1 // m
-                +11+1// s
-                +3   // flag
-                +3; // n_sat
-            if line.len() > min_len {
-                // RINEX3: clock offset precision was increased
-                Some(line.split_at(min_len).1.trim()) // this handles it naturally
-            } else {
-                None
-            }
+            // Columns 42-56 in the original line. The '>' has been removed.
+            // Do not include the optional RINEX 4.02 time extension.
+            line.get(40..line.len().min(55)).map(str::trim)
         },
     };
 
-    if let Some(offset) = offs {
-        if let Ok(offset_s) = parse_f64(offset) {
-            observations.clock = Some(ClockObservation::default().with_offset_s(epoch, offset_s));
+    if header.version >= (Version { major: 4, minor: 2 }) {
+        if let Some(extension) = line.get(56..).map(str::trim).filter(|s| !s.is_empty()) {
+            // Table A3: append these five digits to F11.7 seconds (picoseconds).
+            if extension.len() != 5 || !extension.bytes().all(|b| b.is_ascii_digit()) {
+                return Err(ParsingError::EpochParsing);
+            }
+            let picoseconds = extension
+                .parse::<u32>()
+                .map_err(|_| ParsingError::EpochParsing)?;
+            if picoseconds % 1000 != 0 {
+                return Err(ParsingError::EpochPrecision);
+            }
+            epoch += Duration::from_nanoseconds((picoseconds / 1000) as f64);
         }
+    }
+
+    if let Some(offset) = offs.filter(|s| !s.is_empty()) {
+        let offset_s = parse_f64(offset).map_err(|_| ParsingError::ObsClockParsing)?;
+        if !offset_s.is_finite() {
+            return Err(ParsingError::ObsClockParsing);
+        }
+        observations.clock = Some(ClockObservation::default().with_offset_s(epoch, offset_s));
     }
 
     match flag {
@@ -155,7 +163,7 @@ pub fn parse_epoch(
         },
     }
 
-    Ok(key)
+    Ok(ObsKey { epoch, flag })
 }
 
 fn parse_observations(
@@ -376,7 +384,10 @@ fn parse_signals_v3(
     // browse all lines
     for line in lines {
         // identify SV
-        let sv_str = &line[0..SVNN_SIZE];
+        let sv_str = match line.get(..SVNN_SIZE) {
+            Some(s) => s,
+            _ => continue,
+        };
         match SV::from_str(sv_str) {
             Ok(found) => {
                 sv = found;
@@ -399,8 +410,8 @@ fn parse_signals_v3(
 
         let observables = observables.unwrap();
 
-        let num_obs = line.len() / OBSERVABLE_WIDTH;
-        let mut offset = SVNN_SIZE + 1;
+        let num_obs = div_ceil(line.len() - SVNN_SIZE, OBSERVABLE_WIDTH);
+        let mut offset = SVNN_SIZE;
 
         for i in 0..num_obs {
             if i == observables.len() {
@@ -414,8 +425,7 @@ fn parse_signals_v3(
             let mut lli = Option::<LliFlags>::None;
 
             if slice.len() > OBSERVABLE_F14_WIDTH {
-                let start = offset + OBSERVABLE_F14_WIDTH - 1;
-                let lli_slice = &line[start..start + 1];
+                let lli_slice = &slice[OBSERVABLE_F14_WIDTH..OBSERVABLE_F14_WIDTH + 1];
                 match lli_slice.parse::<u8>() {
                     Ok(unsigned) => {
                         lli = LliFlags::from_bits(unsigned);
@@ -430,8 +440,7 @@ fn parse_signals_v3(
             let mut snr = Option::<SNR>::None;
 
             if slice.len() > OBSERVABLE_F14_WIDTH + 1 {
-                let start = offset + OBSERVABLE_F14_WIDTH;
-                let snr_slice = &line[start..start + 1];
+                let snr_slice = &slice[OBSERVABLE_F14_WIDTH + 1..OBSERVABLE_F14_WIDTH + 2];
 
                 if let Ok(value) = snr_slice.parse::<u8>() {
                     snr = Some(SNR::from(value));
