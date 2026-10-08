@@ -1,0 +1,35 @@
+{
+  "fixture_sha256": "c36899069ec3488fcf53b3a2bc001bf62ab8b87401fb83864ab999dc123af6dd",
+  "source_file": "data/NAV/V3/NYA100NOR_S_20241280000_01D_GN.rnx.gz",
+  "sv": "G15",
+  "coordinate_epoch": "2024-05-07T02:05:00 GPST",
+  "years_since_2015": 9.347259677542018,
+  "native_position_km": [
+    19224.62119621031,
+    -2435.348503636455,
+    17751.84785453113
+  ],
+  "itrf2014_position_km": [
+    19224.62118673597,
+    -2435.3485044483346,
+    17751.847850344806
+  ],
+  "direct_itrf2020_position_km": [
+    10000.0,
+    20000.0,
+    15000.0
+  ],
+  "direct_itrf2014_position_km": [
+    9999.9999944,
+    19999.99998976527,
+    14999.99999696945
+  ],
+  "translation_mm": [
+    -1.4,
+    -1.8347259677542018,
+    3.2694519355084037
+  ],
+  "scale_ppb": -0.42,
+  "itrf2020_parameter_source": "https://itrf.ign.fr/en/solutions/itrf2020",
+  "g2296_parameter_source": "https://epsg.io/10608"
+}

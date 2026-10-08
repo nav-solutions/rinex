@@ -141,31 +141,33 @@ impl OrbitItem {
     ) -> Result<OrbitItem, ParsingError> {
         // make it "rust" compatible
         let float = parse_f64(val_str).map_err(|_| ParsingError::NavNullOrbit)?;
-
-        // do not tolerate zero values for native types
-        match type_str {
-            "u8" | "i8" | "u32" | "f64" => {
-                if float == 0.0 {
-                    return Err(ParsingError::NavNullOrbit);
-                }
-            },
-            _ => {}, // non-native types
+        if !float.is_finite() {
+            return Err(ParsingError::NavInvalidOrbitValue);
         }
 
         // uninterpreted data remains as native type and we exit.
         match type_str {
             "u8" => {
-                let unsigned = float.round() as u8;
+                if float.fract() != 0.0 || !(0.0..=u8::MAX as f64).contains(&float) {
+                    return Err(ParsingError::NavInvalidOrbitValue);
+                }
+                let unsigned = float as u8;
                 return Ok(OrbitItem::U8(unsigned));
             },
 
             "i8" => {
-                let signed = float.round() as i8;
+                if float.fract() != 0.0 || !(i8::MIN as f64..=i8::MAX as f64).contains(&float) {
+                    return Err(ParsingError::NavInvalidOrbitValue);
+                }
+                let signed = float as i8;
                 return Ok(OrbitItem::I8(signed));
             },
 
             "u32" => {
-                let unsigned = float.round() as u32;
+                if float.fract() != 0.0 || !(0.0..=u32::MAX as f64).contains(&float) {
+                    return Err(ParsingError::NavInvalidOrbitValue);
+                }
+                let unsigned = float as u32;
                 return Ok(OrbitItem::U32(unsigned));
             },
 
@@ -179,7 +181,10 @@ impl OrbitItem {
         match type_str {
             "flag" => {
                 // bit flags interpretation
-                let unsigned = float.round() as u32;
+                if float.fract() != 0.0 || !(0.0..=u32::MAX as f64).contains(&float) {
+                    return Err(ParsingError::NavInvalidOrbitValue);
+                }
+                let unsigned = float as u32;
 
                 match name_str {
                     "health" => {
@@ -636,7 +641,7 @@ mod test {
             let constellation = frame.constellation;
 
             for (name_str, type_str) in frame.items.iter() {
-                let val_str = "1.2345";
+                let val_str = if *type_str == "f64" { "1.2345" } else { "1" };
 
                 let e = OrbitItem::new(name_str, type_str, val_str, &nav_msg, constellation);
                 assert!(

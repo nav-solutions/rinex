@@ -21,6 +21,10 @@ msrv = "1.89"
 all-features = true
 rustdoc-args = ["--cfg", "docrs", "--generate-link-to-definition"]
 
+[[example]]
+name = "nav_frame"
+required-features = ["nav", "flate2"]
+
 [features]
 # serde by default
 # gzip files are supported by default

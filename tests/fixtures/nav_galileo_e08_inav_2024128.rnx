@@ -1,0 +1,18 @@
+     4.00           NAVIGATION DATA     M                   RINEX VERSION / TYPE
+BCEmerge            congo               20240508 004605 GMT PGM / RUN BY / DATE 
+Merged GPS/GLO/GAL/BDS/QZS/SBAS/IRNSS navigation file       COMMENT             
+based on CONGO and IGS tracking data                        COMMENT             
+DLR/GSOC: O. Montenbruck; P. Steigenberger                  COMMENT             
+https://doi.org/10.57677/BRD400DLR                          DOI                 
+       98                                                   MERGED FILE         
+    18    18  1929     7                                    LEAP SECONDS        
+                                                            END OF HEADER       
+> EPH E08 INAV
+E08 2024 05 07 00 30 00-2.666150685400e-04-6.068034963391e-12 0.000000000000e+00
+     3.700000000000e+01 1.812500000000e+00 3.866946788141e-09 1.834836844137e+00
+     2.700835466385e-07 3.573197172955e-04 2.885237336159e-06 5.440600381851e+03
+     1.746000000000e+05 7.450580596924e-08-1.760312638739e+00 1.247972249985e-07
+     9.663823947800e-01 2.819687500000e+02-5.541829149828e-01-6.050252017282e-09
+     3.107272287506e-11 5.160000000000e+02 2.313000000000e+03                   
+     3.120000000000e+00 0.000000000000e+00-7.450580596924e-09-8.381903171539e-09
+     1.756540000000e+05                                                         

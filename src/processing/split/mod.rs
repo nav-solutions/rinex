@@ -55,12 +55,14 @@ impl Split for Rinex {
                 header: h0,
                 production: p0,
                 comments: self.comments.clone(),
+                nav_parse_report: Default::default(),
             },
             Rinex {
                 record: r1,
                 header: h1,
                 production: p1,
                 comments: self.comments.clone(),
+                nav_parse_report: Default::default(),
             },
         )
     }
@@ -132,6 +134,7 @@ impl Split for Rinex {
                 comments: self.comments.clone(),
                 production: self.production.clone(),
                 record: rec.clone(),
+                nav_parse_report: Default::default(),
             })
             .collect()
     }

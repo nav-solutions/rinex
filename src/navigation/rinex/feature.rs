@@ -1,56 +1,20 @@
 use crate::{
     navigation::{BdModel, Ephemeris, IonosphereModel, KbModel, NavKey, NgModel},
-    prelude::{
-        nav::{Almanac, AzElRange, Orbit},
-        Epoch, Rinex, SV,
-    },
+    prelude::{Epoch, Rinex, SV},
 };
 
 impl Rinex {
-    /// [SV] orbital state vector determination attempt, that only applies
-    /// to Navigation [Rinex].
-    /// ## Inputs
-    /// - sv: desired [SV]
-    /// - t: desired [Epoch] to express the [Orbit]al state
-    /// ## Returns
-    /// - orbital state: expressed as ECEF [Orbit]
-    pub fn sv_orbit(&self, sv: SV, t: Epoch) -> Option<Orbit> {
-        let (_, _, eph) = self.nav_ephemeris_selection(sv, t)?;
-        eph.kepler2position(sv, t)
-    }
-
-    /// [SV] (azimuth, elevation, slant range) triplet determination,
-    /// that only applies to Navigation [Rinex].
-    /// ## Inputs
-    /// - sv: target [SV]
-    /// - t: target [Epoch]
-    /// - rx_orbit: RX position expressed as an [Orbit]
-    /// - almanac: [Almanac] context
-    /// ## Returns
-    /// - [AzElRange] on calculations success
-    pub fn nav_azimuth_elevation_range(
-        &self,
-        sv: SV,
-        t: Epoch,
-        rx_orbit: Orbit,
-        almanac: &Almanac,
-    ) -> Option<AzElRange> {
-        let sv_orbit = self.sv_orbit(sv, t)?;
-        let azelrange = almanac
-            .azimuth_elevation_range_sez(sv_orbit, rx_orbit, None, None)
-            .ok()?;
-        Some(azelrange)
-    }
-
     /// Ephemeris selection, that only applies to Navigation [Rinex].
     /// ## Inputs
     /// - sv: desired [SV]
     /// - epoch: desired [Epoch]
     /// ## Returns
     /// - (toc, toe, [Ephemeris]) triplet if an [Ephemeris] message
-    /// was decoded in the correct time frame.
-    /// Note that `ToE` does not exist for GEO/SBAS [SV], so `ToC` is simply
-    /// copied in this case, to maintain the API.
+    /// was decoded in the correct time frame. This is a raw ephemeris lookup;
+    /// it does not establish that the message can be propagated. For GPS LNAV
+    /// native state, use [`Self::nav_select_gps_lnav`].
+    /// SBAS has no `ToE`, so `ToC` is copied. This raw SBAS branch does not
+    /// check health, message support, or a propagation validity window.
     pub fn nav_ephemeris_selection(&self, sv: SV, t: Epoch) -> Option<(Epoch, Epoch, &Ephemeris)> {
         if sv.constellation.is_sbas() {
             self.nav_ephemeris_frames_iter()
@@ -61,7 +25,7 @@ impl Rinex {
                         None
                     }
                 })
-                .min_by_key(|(toc, _, _)| t - *toc)
+                .min_by_key(|(toc, _, _)| (t - *toc).abs())
         } else {
             self.nav_ephemeris_frames_iter()
                 .filter_map(|(k, eph)| {

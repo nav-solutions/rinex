@@ -7,13 +7,16 @@ use crate::{
         record::{is_new_epoch as is_new_clock_epoch, parse_epoch as parse_clock_epoch},
         ClockKey, ClockProfile, Record as ClockRecord,
     },
+    epoch::parse_in_timescale,
     hatanaka::DecompressorExpert,
     is_rinex_comment,
     meteo::{
         is_new_epoch as is_new_meteo_epoch, parse_epoch as parse_meteo_epoch, Record as MeteoRecord,
     },
     navigation::{
-        is_new_epoch as is_new_nav_epoch, parse_epoch as parse_nav_epoch, Record as NavRecord,
+        is_new_epoch as is_new_nav_epoch, parse_epoch as parse_nav_epoch,
+        timescale as nav_timescale, NavDiagnosticKind, NavMessageType, NavParseDiagnostic,
+        NavParseReport, Record as NavRecord,
     },
     observation::Observations,
     observation::{
@@ -37,10 +40,25 @@ use log::error;
 impl Record {
     /// Parses [Record] section by consuming [Read]er entirely.
     /// This requires reference to [Header] that was just parsed by consuming [Read]er until this point.
+    /// Direct record parsing fails on rejected NAV records. Use [crate::Rinex::parse]
+    /// to continue with an attached diagnostic report.
     pub fn parse<R: Read>(
         header: &mut Header,
         reader: &mut BufReader<R>,
     ) -> Result<(Self, Comments), ParsingError> {
+        let (record, comments, _) = Self::parse_with_report(header, reader, 0, true)?;
+        Ok((record, comments))
+    }
+
+    pub(crate) fn parse_with_report<R: Read>(
+        header: &mut Header,
+        reader: &mut BufReader<R>,
+        header_lines: usize,
+        strict_nav_fields: bool,
+    ) -> Result<(Self, Comments, NavParseReport), ParsingError> {
+        let mut report = NavParseReport::default();
+        let mut file_line = header_lines;
+        let mut record_line = header_lines + 1;
         // eos reached: process pending buffer & exit
         let mut eos = false;
         let mut crinex_error = false;
@@ -133,11 +151,21 @@ impl Record {
         }
 
         // Iterate and consume, one line at a time
-        while let Ok(size) = reader.read_line(&mut line_buf) {
+        loop {
+            let size = reader.read_line(&mut line_buf)?;
             if size == 0 {
                 // reached EOS
                 // we might still have something to process prior exiting
                 eos |= true;
+            } else {
+                file_line += 1;
+            }
+
+            if matches!(header.rinex_type, Type::NavigationData)
+                && line_buf.starts_with('>')
+                && !is_new_nav_epoch(&line_buf, header.version)
+            {
+                return Err(ParsingError::NavMsgType);
             }
 
             // The special records of a CRINEX event epoch are published as they
@@ -221,12 +249,45 @@ impl Record {
                     //println!("***MATCH***");
 
                     match &header.rinex_type {
-                        Type::NavigationData => {
-                            if let Ok((k, v)) = parse_nav_epoch(&header, &epoch_buf) {
+                        Type::NavigationData => match parse_nav_epoch(&header, &epoch_buf) {
+                            Ok((k, v)) => {
                                 nav_rec.insert(k, v);
-                                // println!("nav_epoch={:?}", k); // DEBUG
-                                comment_ts = k.epoch; // for comments storage
-                            }
+                                comment_ts = k.epoch;
+                            },
+                            Err(
+                                err @ (ParsingError::NavOrbitField { .. }
+                                | ParsingError::NavClockField { .. }),
+                            ) => {
+                                if strict_nav_fields {
+                                    return Err(err);
+                                }
+                                report.rejected_records += 1;
+                                report.diagnostics.push(nav_diagnostic(
+                                    header,
+                                    &epoch_buf,
+                                    record_line,
+                                    NavDiagnosticKind::InvalidField,
+                                    &err,
+                                ));
+                            },
+                            Err(
+                                err @ (ParsingError::NoNavigationDefinition
+                                | ParsingError::NavMsgType
+                                | ParsingError::NavInvalidTimescale),
+                            ) => {
+                                if strict_nav_fields {
+                                    return Err(err);
+                                }
+                                report.unsupported_records += 1;
+                                report.diagnostics.push(nav_diagnostic(
+                                    header,
+                                    &epoch_buf,
+                                    record_line,
+                                    NavDiagnosticKind::UnsupportedMessage,
+                                    &err,
+                                ));
+                            },
+                            Err(err) => return Err(err),
                         },
                         Type::ObservationData => {
                             match parse_observation_epoch(
@@ -290,6 +351,7 @@ impl Record {
             // clear on new epoch detection
             if new_epoch {
                 epoch_buf.clear();
+                record_line = file_line;
             }
 
             // always stack new content
@@ -310,7 +372,7 @@ impl Record {
             Type::NavigationData => Record::NavRecord(nav_rec),
             Type::ObservationData => Record::ObsRecord(obs_rec),
         };
-        Ok((record, comments))
+        Ok((record, comments, report))
     }
 
     fn is_new_epoch(line: &str, header: &Header) -> bool {
@@ -324,5 +386,98 @@ impl Record {
             Type::ObservationData => is_new_observation_epoch(line, header.version),
             Type::MeteoData => is_new_meteo_epoch(line, header.version),
         }
+    }
+}
+
+fn nav_diagnostic(
+    header: &Header,
+    content: &str,
+    record_line: usize,
+    kind: NavDiagnosticKind,
+    error: &ParsingError,
+) -> NavParseDiagnostic {
+    let mut lines = content.lines();
+    let first = lines.next().unwrap_or("");
+    let v4 = first.starts_with('>');
+    let (sv_text, date_text, message) = if v4 {
+        let sv = first.get(6..10).unwrap_or("").trim();
+        let message = first
+            .get(10..)
+            .and_then(|s| s.split_ascii_whitespace().next())
+            .and_then(|s| s.parse::<NavMessageType>().ok());
+        let date = lines.next().and_then(|s| s.get(4..23)).unwrap_or("");
+        (sv, date, message)
+    } else {
+        let width = if header.version.major < 3 { 3 } else { 4 };
+        (
+            first.get(..width).unwrap_or("").trim(),
+            first.get(width..width + 19).unwrap_or(""),
+            Some(NavMessageType::LNAV),
+        )
+    };
+    let sv = sv_text.parse::<crate::prelude::SV>().ok().or_else(|| {
+        if header.version.major < 3 {
+            let constellation = header.constellation?;
+            format!("{:x}{:02}", constellation, sv_text)
+                .parse::<crate::prelude::SV>()
+                .ok()
+        } else {
+            None
+        }
+    });
+    let epoch = sv
+        .and_then(|sv| nav_timescale(sv.constellation).ok())
+        .and_then(|ts| parse_in_timescale(date_text.trim(), ts).ok());
+    let (field_line, slot, field, raw) = match error {
+        ParsingError::NavOrbitField {
+            line,
+            slot,
+            field,
+            value,
+            ..
+        } => (
+            Some(record_line + usize::from(v4) + line - 1),
+            Some(*slot),
+            Some(field.clone()),
+            Some(value.clone()),
+        ),
+        ParsingError::NavClockField {
+            line,
+            slot,
+            field,
+            value,
+            ..
+        } => (
+            Some(record_line + line - 1),
+            Some(*slot),
+            Some((*field).to_string()),
+            Some(value.clone()),
+        ),
+        ParsingError::NavInvalidTimescale => (
+            Some(record_line + 1),
+            None,
+            Some("timePair".to_string()),
+            content
+                .lines()
+                .nth(1)
+                .and_then(|s| s.get(24..28))
+                .map(str::to_string),
+        ),
+        _ if kind == NavDiagnosticKind::UnsupportedMessage => {
+            (None, None, None, Some(first.to_string()))
+        },
+        _ => (None, None, None, None),
+    };
+    NavParseDiagnostic {
+        kind,
+        record_line,
+        field_line,
+        slot,
+        field,
+        raw,
+        sv,
+        epoch,
+        message,
+        reason: error.to_string(),
     }
 }

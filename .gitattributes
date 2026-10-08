@@ -1,0 +1,2 @@
+# RINEX fixed-width header and data fields may contain significant trailing blanks.
+tests/fixtures/*.rnx whitespace=-blank-at-eol

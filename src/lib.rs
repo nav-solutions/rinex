@@ -219,7 +219,7 @@ use crate::{
 #[cfg(docsrs)]
 pub use bibliography::Bibliography;
 
-#[cfg(doc)]
+#[cfg(all(doc, feature = "qc"))]
 use crate::prelude::qc::Merge;
 
 /// Parse a floating point number from a string, handling Fortran-style 'D'/'d'
@@ -309,6 +309,8 @@ pub struct Rinex {
     pub record: Record,
     /// [ProductionAttributes] filled
     pub production: ProductionAttributes,
+    /// Parse-time NAV record rejections, omitted from RINEX output.
+    pub(crate) nav_parse_report: navigation::NavParseReport,
 }
 
 impl Rinex {
@@ -319,6 +321,7 @@ impl Rinex {
             record,
             comments: Comments::new(),
             production: ProductionAttributes::default(),
+            nav_parse_report: Default::default(),
         }
     }
 
@@ -329,6 +332,7 @@ impl Rinex {
             comments: Default::default(),
             production: ProductionAttributes::default(),
             record: Record::NavRecord(Default::default()),
+            nav_parse_report: Default::default(),
         }
     }
 
@@ -339,6 +343,7 @@ impl Rinex {
             comments: Default::default(),
             production: ProductionAttributes::default(),
             record: Record::ObsRecord(Default::default()),
+            nav_parse_report: Default::default(),
         }
     }
 
@@ -349,6 +354,7 @@ impl Rinex {
             header: Header::basic_crinex(),
             production: ProductionAttributes::default(),
             record: Record::ObsRecord(Default::default()),
+            nav_parse_report: Default::default(),
         }
     }
 
@@ -359,6 +365,7 @@ impl Rinex {
             record: self.record.clone(),
             comments: self.comments.clone(),
             production: self.production.clone(),
+            nav_parse_report: self.nav_parse_report.clone(),
         }
     }
 
@@ -374,12 +381,14 @@ impl Rinex {
             header: self.header.clone(),
             comments: self.comments.clone(),
             production: self.production.clone(),
+            nav_parse_report: Default::default(),
         }
     }
 
     /// Replace [Record] with mutable access.
     pub fn replace_record(&mut self, record: Record) {
         self.record = record.clone();
+        self.nav_parse_report = Default::default();
     }
 
     /// Converts self to CRINEX (compressed RINEX) format.
@@ -790,18 +799,34 @@ impl Rinex {
     /// Attributes potentially described by a file name need to be provided either
     /// manually / externally, or guessed when parsing has been completed.
     pub fn parse<R: Read>(reader: &mut BufReader<R>) -> Result<Self, ParsingError> {
+        Self::parse_inner(reader, false)
+    }
+
+    /// Parse and fail immediately on an invalid NAV field or unsupported NAV record.
+    pub fn parse_strict<R: Read>(reader: &mut BufReader<R>) -> Result<Self, ParsingError> {
+        Self::parse_inner(reader, true)
+    }
+
+    /// Rejected NAV records from the original parse. Empty for non-NAV and constructed values.
+    pub fn nav_parse_report(&self) -> &navigation::NavParseReport {
+        &self.nav_parse_report
+    }
+
+    fn parse_inner<R: Read>(reader: &mut BufReader<R>, strict: bool) -> Result<Self, ParsingError> {
         // Parses Header section (=consumes header until this point)
-        let mut header = Header::parse(reader)?;
+        let (mut header, header_lines) = Header::parse_with_line_count(reader)?;
 
         // Parse record (=consumes rest of this resource)
         // Comments are preserved and store "as is"
-        let (record, comments) = Record::parse(&mut header, reader)?;
+        let (record, comments, nav_parse_report) =
+            Record::parse_with_report(&mut header, reader, header_lines, strict)?;
 
         Ok(Self {
             header,
             comments,
             record,
             production: Default::default(),
+            nav_parse_report,
         })
     }
 
@@ -816,7 +841,7 @@ impl Rinex {
     }
 
     /// Parses [Rinex] from local readable file.
-    /// Will panic if provided file does not exist or is not readable.
+    /// Returns an I/O error if the file does not exist or cannot be read.
     /// See [Self::from_gzip_file] for seamless Gzip support.
     ///
     /// If file name follows standard naming conventions, then internal definitions
@@ -831,6 +856,15 @@ impl Rinex {
     /// all of them, CRINEX (Compat RINEX) is natively supported.
     /// NB: the SINEX format is different and handled in a dedicated library.
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Rinex, ParsingError> {
+        Self::from_file_inner(path, false)
+    }
+
+    /// Read a file and fail immediately on an invalid or unsupported NAV record.
+    pub fn from_file_strict<P: AsRef<Path>>(path: P) -> Result<Rinex, ParsingError> {
+        Self::from_file_inner(path, true)
+    }
+
+    fn from_file_inner<P: AsRef<Path>>(path: P, strict: bool) -> Result<Rinex, ParsingError> {
         let path = path.as_ref();
 
         // deduce all we can from file name
@@ -846,10 +880,10 @@ impl Rinex {
             _ => ProductionAttributes::default(),
         };
 
-        let fd = File::open(path).expect("from_file: open error");
+        let fd = File::open(path)?;
 
         let mut reader = BufReader::new(fd);
-        let mut rinex = Self::parse(&mut reader)?;
+        let mut rinex = Self::parse_inner(&mut reader, strict)?;
         rinex.production = file_attributes;
         Ok(rinex)
     }
@@ -878,7 +912,7 @@ impl Rinex {
     }
 
     /// Parses [Rinex] from local gzip compressed file.
-    /// Will panic if provided file does not exist or is not readable.
+    /// Returns an I/O error if the file does not exist or cannot be read.
     /// Refer to [Self::from_file] for more information.
     ///
     /// ```
@@ -887,6 +921,17 @@ impl Rinex {
     #[cfg(feature = "flate2")]
     #[cfg_attr(docsrs, doc(cfg(feature = "flate2")))]
     pub fn from_gzip_file<P: AsRef<Path>>(path: P) -> Result<Rinex, ParsingError> {
+        Self::from_gzip_file_inner(path, false)
+    }
+
+    /// Read a gzip file and fail immediately on an invalid or unsupported NAV record.
+    #[cfg(feature = "flate2")]
+    pub fn from_gzip_file_strict<P: AsRef<Path>>(path: P) -> Result<Rinex, ParsingError> {
+        Self::from_gzip_file_inner(path, true)
+    }
+
+    #[cfg(feature = "flate2")]
+    fn from_gzip_file_inner<P: AsRef<Path>>(path: P, strict: bool) -> Result<Rinex, ParsingError> {
         let path = path.as_ref();
 
         // deduce all we can from file name
@@ -902,11 +947,11 @@ impl Rinex {
             _ => ProductionAttributes::default(),
         };
 
-        let fd = File::open(path).expect("from_file: open error");
+        let fd = File::open(path)?;
 
         let reader = GzDecoder::new(fd);
         let mut reader = BufReader::new(reader);
-        let mut rinex = Self::parse(&mut reader)?;
+        let mut rinex = Self::parse_inner(&mut reader, strict)?;
         rinex.production = file_attributes;
         Ok(rinex)
     }

@@ -1,0 +1,42 @@
+{
+  "fixture_sha256": "dce340cf859c06b7785596f379f1bbf39f8042042629309adc9fbdc2f322c69e",
+  "sv": "R02",
+  "record_epoch_utc": "2024-05-10T02:45:00Z",
+  "query_epoch_gpst": "2024-05-10T03:00:00 GPST",
+  "query_epoch_utc": "2024-05-10T02:59:42Z",
+  "propagation_seconds": 882.0,
+  "native_position_km": [
+    -13288.263885025124,
+    8043.228789681527,
+    -20203.634130303984
+  ],
+  "native_velocity_km_s": [
+    -2.7720376527271777,
+    -0.202310590458371,
+    1.7327719176077452
+  ],
+  "approx_itrf2014_position_km": [
+    -13288.263897442965,
+    8043.228784572518,
+    -20203.634129263966
+  ],
+  "approx_itrf2020_position_km": [
+    -13288.263901624035,
+    8043.228789786232,
+    -20203.634141020608
+  ],
+  "approx_g2296_position_km": [
+    -13288.263901624035,
+    8043.228789786232,
+    -20203.634141020608
+  ],
+  "itrf_years_since_2015": 9.3555778005932,
+  "itrf_translation_mm": [
+    -1.4,
+    -1.8355577800593201,
+    3.2711155601186404
+  ],
+  "itrf_scale_ppb": -0.42,
+  "pz_parameter_reference_epoch": "2010.0",
+  "status": "MarkedApproximation; no strict satellite-position or epoch error bound"
+}
