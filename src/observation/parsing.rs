@@ -6,6 +6,7 @@ use crate::{
     },
     parse_f64,
     prelude::{Constellation, Duration, Header, Observable, ParsingError, TimeScale, Version, SV},
+    validate_ascii,
 };
 
 use std::{
@@ -26,9 +27,12 @@ pub fn is_new_epoch(line: &str, v: Version) -> bool {
             false
         } else {
             // SPLICE flag handling (still an Observation::flag)
-            let significant = !line[0..26].trim().is_empty();
-            let epoch = parse_utc_epoch(&line[0..26]);
-            let flag = EpochFlag::from_str(line[26..29].trim());
+            let (Some(date), Some(flag)) = (line.get(..26), line.get(26..29)) else {
+                return false;
+            };
+            let significant = !date.trim().is_empty();
+            let epoch = parse_utc_epoch(date);
+            let flag = EpochFlag::from_str(flag.trim());
             if significant {
                 epoch.is_ok() && flag.is_ok()
             } else if flag.is_err() {
@@ -69,6 +73,7 @@ pub fn parse_epoch(
     ts: TimeScale,
     observations: &mut Observations,
 ) -> Result<ObsKey, ParsingError> {
+    validate_ascii(content, 1)?;
     let mut lines = content.lines();
 
     let mut line = match lines.next() {

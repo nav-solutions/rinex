@@ -1,7 +1,7 @@
 use crate::{
-    epoch::parse_utc as parse_utc_epoch,
     navigation::{Ephemeris, NavFrame, NavFrameType, NavKey, NavMessageType},
     prelude::{Header, ParsingError, Version, SV},
+    validate_ascii,
 };
 
 mod v4;
@@ -12,6 +12,7 @@ pub fn parse_epoch(header: &Header, content: &str) -> Result<(NavKey, NavFrame),
     if content.starts_with('>') {
         parse_v4_epoch(content)
     } else {
+        validate_ascii(content, 1)?;
         // <V4: limited to LNAV Ephemeris frames.
         let version = header.version;
 
@@ -38,43 +39,15 @@ pub fn parse_epoch(header: &Header, content: &str) -> Result<(NavKey, NavFrame),
 /// Returns true if given content matches the beginning of a
 /// Navigation record epoch
 pub fn is_new_epoch(line: &str, v: Version) -> bool {
+    // Continuation rows start with padding. Recognize the PRN/SV prefix even
+    // when the date is damaged, so a bad block cannot absorb its neighbours.
     if v.major < 3 {
-        // old RINEX
-        if line.len() < 23 {
-            return false; // not enough bytes
-                          // to describe a PRN and an Epoch
-        }
-
-        let (prn, _) = line.split_at(2);
-        if prn.trim().parse::<u8>().is_err() {
-            return false;
-        }
-
-        let datestr = &line[3..22];
-        parse_utc_epoch(datestr).is_ok()
+        line.get(..2)
+            .is_some_and(|prn| prn.trim().parse::<u8>().is_ok())
     } else if v.major == 3 {
-        // RINEX V3
-        if line.len() < 24 {
-            return false; // not enough bytes
-                          // to describe an SV and an Epoch
-        }
-
-        // 1st entry matches a valid SV description
-        let (sv, _) = line.split_at(4);
-
-        if sv.parse::<SV>().is_err() {
-            return false;
-        }
-
-        let datestr = &line[4..23];
-        parse_utc_epoch(datestr).is_ok()
+        line.get(..3).is_some_and(|sv| sv.parse::<SV>().is_ok())
     } else {
-        // Modern --> easy
-        if let Some(c) = line.chars().next() {
-            c == '>' // new epoch marker
-        } else {
-            false
-        }
+        line.starts_with('>')
     }
 }
 

@@ -14,6 +14,7 @@ use crate::{
     parse_f64,
     prelude::{Constellation, Duration, Epoch, ParsingError, TimeScale, COSPAR, DOMES, SV},
     types::Type,
+    validate_ascii,
     version::Version,
 };
 
@@ -64,12 +65,9 @@ impl Header {
         let mut clock = ClockHeader::default();
         let mut antex = AntexHeader::default();
 
-        for line in reader.lines() {
-            if line.is_err() {
-                continue;
-            }
-
-            let line = line.unwrap();
+        for (index, line) in reader.lines().enumerate() {
+            let line = line?;
+            validate_ascii(&line, index + 1)?;
 
             if line.len() < 60 {
                 continue; // --> invalid header content

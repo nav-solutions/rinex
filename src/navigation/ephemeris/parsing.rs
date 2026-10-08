@@ -46,6 +46,9 @@ fn parse_orbits(
 
     for line in lines {
         // trim first few white spaces
+        if !line.is_ascii() {
+            return Err(ParsingError::EpochFormat);
+        }
         let padding = if version.major < 3 { 3 } else { 4 };
         let mut line = line.get(padding..).unwrap_or("");
 
@@ -113,6 +116,10 @@ impl Ephemeris {
             true => 3,
             false => 4,
         };
+
+        if !line.is_ascii() || line.len() < svnn_offset + 4 * 19 {
+            return Err(ParsingError::EpochFormat);
+        }
 
         let (svnn, rem) = line.split_at(svnn_offset);
         let (date, rem) = rem.split_at(19);
@@ -191,6 +198,10 @@ impl Ephemeris {
             Some(l) => l,
             _ => return Err(ParsingError::EmptyEpoch),
         };
+
+        if !line.is_ascii() || line.len() < 4 + 4 * 19 {
+            return Err(ParsingError::EpochFormat);
+        }
 
         let (svnn, rem) = line.split_at(4);
         let sv = svnn.trim().parse::<SV>()?;

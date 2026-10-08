@@ -1,8 +1,9 @@
 //! Parser regressions with small inline records and synthetic file envelopes.
+mod diagnostics;
 mod navigation;
 mod observation;
 
-use crate::prelude::*;
+use crate::{prelude::*, record::ParsingDiagnostic};
 use std::io::BufReader;
 
 // Source G03/G04 rows (lines 51/493) are unchanged; each epoch now declares one SV.
@@ -50,6 +51,10 @@ fn parse(text: &str) -> Result<Rinex, ParsingError> {
     Rinex::parse(&mut BufReader::new(text.as_bytes()))
 }
 
+fn parse_diagnostics(text: &str) -> (Rinex, Vec<ParsingDiagnostic>) {
+    Rinex::parse_with_diagnostics(&mut BufReader::new(text.as_bytes())).unwrap()
+}
+
 fn observation_rinex(version: &str, codes: &str, body: &str) -> String {
     // Synthetic envelope; body values retain their supplied column positions.
     format!(
@@ -79,6 +84,10 @@ fn navigation_rinex(version: &str, body: &str) -> String {
          {:<60}END OF HEADER\n{body}",
         ""
     )
+}
+
+fn gps_first_block() -> (String, &'static str) {
+    (navigation_rinex("4.02", ""), GPS_BLOCK)
 }
 
 fn epoch(seconds: &str, clock: Option<&str>, extension: Option<&str>) -> String {

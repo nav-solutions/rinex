@@ -17,6 +17,16 @@ use crate::prelude::Observable;
 /// Errors that may rise in Parsing process
 #[derive(Debug, Error)]
 pub enum ParsingError {
+    /// Non-ASCII text cannot be decoded using RINEX byte columns.
+    #[error("non-ASCII input at line {line}, byte column {byte_column}")]
+    NonAscii {
+        /// One-based line within the parsed record block, or within the header
+        /// or input body when returned as a fatal input error.
+        line: usize,
+        /// One-based byte column of the first non-ASCII byte.
+        byte_column: usize,
+    },
+
     #[error("header line too short (invalid)")]
     HeaderLineTooShort,
 
@@ -54,6 +64,9 @@ pub enum ParsingError {
         field: String,
         source: Box<ParsingError>,
     },
+
+    #[error("i/o: input error")]
+    InputIo(#[from] IoError),
 
     #[error("datime parsing")]
     DatetimeParsing,
@@ -204,6 +217,9 @@ pub enum ParsingError {
 
     #[error("nav: invalid message subtype")]
     NavMsgSubtype,
+
+    #[error("nav: ephemeris satellite differs from the record header")]
+    NavSvMismatch,
 
     #[error("nav: (ref) epoch week counter parsing")]
     NavEpochWeekCounter,
