@@ -11,10 +11,7 @@ mod test {
         // For thorough verifications, we have dedicated tests elsewhere.
         let test_resources = PathBuf::new().join(env!("CARGO_MANIFEST_DIR")).join("data");
 
-        for data in vec![
-            "OBS", //"CRNX",
-            "MET", "NAV", "CLK", "ATX",
-        ] {
+        for data in vec!["OBS", "CRNX", "MET", "NAV", "CLK", "ATX"] {
             let data_path = test_resources.clone().join(data);
             for revision in std::fs::read_dir(data_path).unwrap() {
                 let rev = revision.unwrap();
