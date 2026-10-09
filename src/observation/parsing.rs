@@ -6,7 +6,7 @@ use crate::{
     },
     parse_f64,
     prelude::{Constellation, Duration, Header, Observable, ParsingError, TimeScale, Version, SV},
-    validate_ascii,
+    utils::validate_ascii,
 };
 
 use std::{

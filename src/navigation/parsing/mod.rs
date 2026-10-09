@@ -1,7 +1,7 @@
 use crate::{
     navigation::{Ephemeris, NavFrame, NavFrameType, NavKey, NavMessageType},
     prelude::{Header, ParsingError, Version, SV},
-    validate_ascii,
+    utils::validate_ascii,
 };
 
 mod v4;

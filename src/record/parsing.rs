@@ -23,7 +23,7 @@ use crate::{
     prelude::{Epoch, Header, ParsingError, TimeScale},
     record::{Comments, ParsingDiagnostic, ParsingDiagnosticKind, Record},
     types::Type,
-    validate_ascii,
+    utils::validate_ascii,
 };
 
 use std::{

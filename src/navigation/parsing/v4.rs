@@ -5,7 +5,7 @@ use crate::{
         NavicKbModel, NavicNeqnModel, NgModel, TimeOffset,
     },
     prelude::{Constellation, Epoch, ParsingError, SV},
-    validate_ascii,
+    utils::validate_ascii,
 };
 
 /// ([NavKey], [NavFrame]) parsing attempt for a V4 frame.

@@ -14,7 +14,7 @@ use crate::{
     parse_f64,
     prelude::{Constellation, Duration, Epoch, ParsingError, TimeScale, COSPAR, DOMES, SV},
     types::Type,
-    validate_ascii,
+    utils::validate_ascii,
     version::Version,
 };
 

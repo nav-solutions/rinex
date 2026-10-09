@@ -54,6 +54,8 @@ mod linspace;
 mod observable;
 mod sampling;
 
+pub(crate) mod utils;
+
 #[cfg(feature = "qc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "qc")))]
 mod qc;
@@ -231,22 +233,6 @@ pub(crate) fn parse_f64(s: &str) -> Result<f64, std::num::ParseFloatError> {
         return s.parse();
     }
     s.replace('D', "E").replace('d', "e").parse()
-}
-
-/// Validate text before slicing fixed-width RINEX byte columns.
-/// `first_line` is the one-based position of the first line in this context.
-pub(crate) fn validate_ascii(content: &str, first_line: usize) -> Result<(), ParsingError> {
-    if !content.is_ascii() {
-        for (index, line) in content.lines().enumerate() {
-            if let Some(column) = line.bytes().position(|byte| !byte.is_ascii()) {
-                return Err(ParsingError::NonAscii {
-                    line: first_line + index,
-                    byte_column: column + 1,
-                });
-            }
-        }
-    }
-    Ok(())
 }
 
 /*
