@@ -268,7 +268,8 @@ fn parse_signals_v2(
             break;
         }
 
-        let mut sv = SV::default();
+        let sv;
+
         if let Ok(found) = SV::from_str(system) {
             sv = found;
         } else {
