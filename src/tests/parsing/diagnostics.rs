@@ -104,7 +104,14 @@ fn synthetic_nav_duplicates_conflicts_and_failure_are_reported() {
         .unwrap()
         .as_ephemeris()
         .unwrap();
-    assert_eq!(eph.clock_bias, 3.651370464265E-04); // compatibility: last wins
+    assert_eq!(eph.clock_bias, 3.651370464265E-04); // last successful record
+    for (d, previous) in diagnostics[..2].iter().zip([1, 10]) {
+        assert!(matches!(
+            d.kind,
+            DuplicateNavigation { previous_record_line, .. } if previous_record_line == previous
+        ));
+    }
+    assert_eq!(super::parse(&source).unwrap().record, rnx.record);
 }
 
 #[test]
@@ -435,4 +442,39 @@ fn synthetic_non_ascii_crinex_event_record_is_fatal_in_both_parse_modes() {
     let reported = Rinex::parse_with_diagnostics(&mut BufReader::new(text.as_bytes())).unwrap_err();
     assert_non_ascii(&plain, 5, 60);
     assert_non_ascii(&reported, 5, 60);
+}
+
+#[test]
+fn navigation_last_successful_record_and_previous_line_follow_each_replacement() {
+    use crate::record::ParsingDiagnosticKind::DuplicateNavigation;
+    let (header, a) = gps_first_block();
+    let b = a.replacen("3.551370464265E-04", "3.651370464265E-04", 1);
+    for (last, flags, expected) in [
+        (a, [true, true], 3.551370464265E-04),
+        (b.as_str(), [true, false], 3.651370464265E-04),
+    ] {
+        for newline in [true, false] {
+            let text = format!("{header}{a}{b}{last}");
+            let text = if newline {
+                text.as_str()
+            } else {
+                text.trim_end_matches('\n')
+            };
+            let (rinex, diagnostics) = parse_diagnostics(text);
+            assert_eq!(diagnostics.len(), 2);
+            for (d, (previous, current, flag)) in diagnostics
+                .iter()
+                .zip([(1, 10, flags[0]), (10, 19, flags[1])])
+            {
+                assert_eq!(d.record_line, current);
+                assert!(
+                    matches!(d.kind,DuplicateNavigation {previous_record_line,conflicting,..}
+                    if previous_record_line==previous && conflicting==flag)
+                );
+            }
+            let frame = rinex.record.as_nav().unwrap().values().next().unwrap();
+            assert_eq!(frame.as_ephemeris().unwrap().clock_bias, expected);
+            assert_eq!(super::parse(text).unwrap().record, rinex.record);
+        }
+    }
 }

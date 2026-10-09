@@ -792,7 +792,7 @@ impl Rinex {
     /// Attributes potentially described by a file name need to be provided either
     /// manually / externally, or guessed when parsing has been completed.
     /// Uses the same omission and fatal-error rules as [Self::parse_with_diagnostics],
-    /// without collecting diagnostics or comparing duplicate record values.
+    /// without collecting diagnostics. Duplicate NAV keys retain the last decoded record.
     pub fn parse<R: Read>(reader: &mut BufReader<R>) -> Result<Self, ParsingError> {
         let mut header = Header::parse(reader)?;
         let (record, comments) = Record::parse(&mut header, reader)?;
@@ -806,7 +806,8 @@ impl Rinex {
 
     /// Parses a resource and exposes recoverable OBS/NAV failures and duplicate
     /// keys. [Self::parse] follows the same decoding rules without collecting diagnostics.
-    /// Duplicate keys keep the last decoded record. A NAV block is omitted when
+    /// NAV/OBS duplicates keep the last successfully decoded record. NAV diagnostics
+    /// identify the replaced and current body lines. A NAV block is omitted when
     /// any defined, nonblank, non-spare orbit field fails to decode, including an
     /// unsupported flag definition; `NavOrbitParsing` retains the field and cause.
     /// A non-ASCII OBS/NAV block is omitted in full and reported with a position
