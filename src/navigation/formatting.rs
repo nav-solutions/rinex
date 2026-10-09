@@ -4,7 +4,7 @@ use crate::{
     epoch::epoch_decompose as epoch_decomposition,
     error::FormattingError,
     navigation::{Ephemeris, NavFrame, NavFrameType, NavKey, NavMessageType, Record},
-    prelude::{Constellation, Epoch, Header},
+    prelude::{Constellation, Epoch, Header, Version},
 };
 
 pub(crate) struct NavFormatter {
@@ -222,6 +222,10 @@ fn v4_message_type(k: &NavKey, eph: &Ephemeris) -> NavMessageType {
 ///   skipped too. When the record is not empty and none of its frames can
 ///   be written, [FormattingError::NoRepresentableFrame] is returned
 ///   before anything is written.
+/// Each emitted record must have a payload-consistent key; identities that
+/// change after target-format decoding are rejected before writing that record.
+/// Legacy unknown transmission markers are mapped to the target revision's
+/// marker; absent allowed fields remain blank. I/O errors may leave partial output.
 pub fn format<W: Write>(
     writer: &mut BufWriter<W>,
     rec: &Record,
@@ -263,6 +267,32 @@ pub fn format<W: Write>(
     // then message type. Every entry is written, including messages of
     // different types sharing an epoch and vehicle.
     for (k, v) in rec.iter() {
+        if !v4 && !representable(k, v) {
+            continue;
+        }
+        // A key does not retain the source revision. An explicitly unknown
+        // legacy t_tm can originate from either specified marker; preserve its
+        // meaning while mapping it to the target table below.
+        let mut source_version = version;
+        if let Some(eph) = v.as_ephemeris() {
+            let (field, optional, _) =
+                super::parsing::ephemeris_transmission_policy(version, k.sv, k.msgtype);
+            if optional && k.transmission_time.is_none() {
+                source_version = match eph.get_orbit_f64(field) {
+                    Some(999_900_000.0) => Version::new(3, 4),
+                    Some(999_999_999.999) => Version::new(4, 2),
+                    _ => version,
+                };
+            }
+        }
+        let rebuilt = NavKey::from_frame(source_version, k.epoch, k.sv, k.msgtype, k.subtype, v)
+            .map_err(|_| FormattingError::NavIdentityMismatch)?;
+        if &rebuilt != k {
+            return Err(FormattingError::NavIdentityMismatch);
+        }
+        let mut buffer = BufWriter::new(Vec::new());
+        let record_writer = &mut buffer;
+        let mut expected = *k;
         if v4 {
             match v {
                 NavFrame::EPH(eph) => {
@@ -270,30 +300,52 @@ pub fn format<W: Write>(
                         msgtype: v4_message_type(k, eph),
                         ..*k
                     };
-                    format_epoch_v4(writer, &key)?;
-                    eph.format(writer, key.sv, version, key.msgtype)?;
+                    expected = key;
+                    format_epoch_v4(record_writer, &key)?;
+                    eph.format_with_transmission(
+                        record_writer,
+                        key.sv,
+                        version,
+                        key.msgtype,
+                        k.transmission_time.is_none(),
+                    )?;
                 },
                 NavFrame::STO(sto) => {
-                    format_epoch_v4(writer, k)?;
-                    sto.format_v4(writer)?;
+                    format_epoch_v4(record_writer, k)?;
+                    sto.format_v4(record_writer)?;
                 },
                 NavFrame::EOP(eop) => {
-                    format_epoch_v4(writer, k)?;
-                    eop.format_v4(writer, k.epoch)?;
+                    format_epoch_v4(record_writer, k)?;
+                    eop.format_v4(record_writer, k.epoch)?;
                 },
                 NavFrame::ION(model) => {
-                    format_epoch_v4(writer, k)?;
-                    model.format_v4(writer, k.epoch)?;
+                    format_epoch_v4(record_writer, k)?;
+                    model.format_v4(record_writer, k.epoch)?;
                 },
             }
         } else if let Some(eph) = v.as_ephemeris() {
-            if !representable(k, v) {
-                continue;
-            }
-            format_epoch_v2v3(writer, k, v2, &file_constell)?;
+            format_epoch_v2v3(record_writer, k, v2, &file_constell)?;
             // RINEX 2 and 3 definitions are filed as LNAV
-            eph.format(writer, k.sv, version, NavMessageType::LNAV)?;
+            if k.sv.constellation != Constellation::Galileo {
+                expected.msgtype = NavMessageType::LNAV;
+            }
+            eph.format_with_transmission(
+                record_writer,
+                k.sv,
+                version,
+                NavMessageType::LNAV,
+                k.transmission_time.is_none(),
+            )?;
         }
+        let bytes = buffer.into_inner().map_err(|e| e.into_error())?;
+        let content =
+            std::str::from_utf8(&bytes).map_err(|_| FormattingError::NavUnrepresentableIdentity)?;
+        let (decoded, _) = super::parse_epoch(header, content)
+            .map_err(|_| FormattingError::NavUnrepresentableIdentity)?;
+        if decoded != expected {
+            return Err(FormattingError::NavUnrepresentableIdentity);
+        }
+        writer.write_all(&bytes)?;
     }
 
     Ok(())
@@ -374,6 +426,9 @@ mod test {
             frmtype: NavFrameType::from_str("EOP").unwrap(),
             msgtype: NavMessageType::from_str("LNAV").unwrap(),
             subtype: None,
+            galileo_data_sources: None,
+            transmission_time: None,
+            sto_identity: None,
         };
 
         format_epoch_v2v3(&mut writer, &key, true, &gal).unwrap();
@@ -396,6 +451,9 @@ mod test {
             frmtype: NavFrameType::from_str("EPH").unwrap(),
             msgtype: NavMessageType::from_str("LNAV").unwrap(),
             subtype: None,
+            galileo_data_sources: None,
+            transmission_time: None,
+            sto_identity: None,
         };
 
         format_epoch_v4(&mut writer, &key).unwrap();
@@ -422,6 +480,9 @@ G01 2023 03 12 00 00 00"
             frmtype: NavFrameType::from_str("ION").unwrap(),
             msgtype: NavMessageType::from_str("LNAV").unwrap(),
             subtype: None,
+            galileo_data_sources: None,
+            transmission_time: None,
+            sto_identity: None,
         };
 
         format_epoch_v4(&mut writer, &key).unwrap();
@@ -445,6 +506,9 @@ G01 2023 03 12 00 00 00"
             frmtype: NavFrameType::from_str("STO").unwrap(),
             msgtype: NavMessageType::from_str("CNVX").unwrap(),
             subtype: None,
+            galileo_data_sources: None,
+            transmission_time: None,
+            sto_identity: None,
         };
 
         format_epoch_v4(&mut writer, &key).unwrap();
@@ -467,6 +531,9 @@ G01 2023 03 12 00 00 00"
             frmtype: NavFrameType::from_str("EOP").unwrap(),
             msgtype: NavMessageType::from_str("CNVX").unwrap(),
             subtype: None,
+            galileo_data_sources: None,
+            transmission_time: None,
+            sto_identity: None,
         };
 
         format_epoch_v4(&mut writer, &key).unwrap();

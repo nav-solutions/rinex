@@ -34,6 +34,15 @@ pub struct TimeOffset {
     /// (GLONASS and NavIC times) keep their identity here.
     pub time_system: Option<String>,
 
+    /// SBAS indicator, separate from the UTC indicator (RINEX Table A30).
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub sbas: Option<String>,
+
+    /// Original signed seconds of the reference week; not the reference epoch.
+    /// Legacy header corrections do not carry this field.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub transmission_time: Option<f64>,
+
     /// Interpolation polynomial
     pub polynomial: (f64, f64, f64),
 }
@@ -53,6 +62,8 @@ impl TimeOffset {
             t_ref,
             utc: None,
             time_system: None,
+            sbas: None,
+            transmission_time: None,
             polynomial,
         }
     }
@@ -70,6 +81,8 @@ impl TimeOffset {
             rhs,
             utc: None,
             time_system: None,
+            sbas: None,
+            transmission_time: None,
             polynomial,
             t_ref: (t_week, t_nanos),
         }

@@ -1,72 +1,121 @@
 //! Navigation RINEX formatting, compared to the original files.
 use crate::{navigation::NavFrameType, prelude::Rinex};
 
-use std::{collections::HashMap, fs::read_to_string, fs::remove_file};
+use std::collections::HashMap;
 
-/// Splits a RINEX 4 navigation record section into blocks, one per
-/// "> XXX" record, keyed by the record header, the epoch and, for STO
-/// records, the time system pair. Exponent letters are uppercased and
-/// trailing blanks trimmed on every line.
+/// Independent raw-column grouping. A complete block supplies its identity;
+/// same identity replaces the preceding block in source order. No production
+/// key constructor or parser participates in this formatting oracle.
 fn v4_record_blocks(content: &str) -> HashMap<String, Vec<String>> {
-    let mut blocks = HashMap::<String, Vec<String>>::new();
-    let mut header = Option::<String>::None;
-    let mut current = Option::<String>::None;
-
-    for line in content
-        .lines()
-        .skip_while(|line| !line.contains("END OF HEADER"))
-        .skip(1)
-    {
-        let line = line.trim_end().replace('e', "E");
-        if line.starts_with("> ") {
-            header = Some(line.clone());
-            current = None;
-            continue;
+    fn insert(blocks: &mut HashMap<String, Vec<String>>, header: &str, block: Vec<String>) {
+        if block.is_empty() {
+            return;
         }
-        if let Some(header) = header.take() {
-            let key = if header.starts_with("> STO") {
-                format!("{}\n{}", header, &line[..28.min(line.len())])
+        let mut key = format!("{}\n{}", header, &block[0][..23]);
+        let number = |line: &str, start: usize| {
+            let text = line
+                .get(start..(start + 19).min(line.len()))
+                .unwrap_or("")
+                .trim();
+            if text.is_empty() {
+                "absent".to_string()
             } else {
-                format!("{}\n{}", header, &line[..23.min(line.len())])
+                format!(
+                    "{:e}",
+                    text.replace(['D', 'd'], "E").parse::<f64>().unwrap()
+                )
+            }
+        };
+        if header.starts_with("> STO") {
+            key += &format!(
+                "|{}|{}",
+                block[0].get(24..).unwrap_or("").trim_end(),
+                number(&block[1], 4)
+            );
+        } else if header.starts_with("> EOP") {
+            key += &format!("|{}", number(&block[2], 4));
+        } else if header.starts_with("> EPH") {
+            let c = header.as_bytes()[6] as char;
+            let msg = header.split_ascii_whitespace().nth(3).unwrap();
+            // Transmission slot indices come from the published message tables.
+            let row = match (c, msg) {
+                ('R', "FDMA") | ('S', _) => 0,
+                ('G' | 'J', "CNAV") => 8,
+                ('G' | 'J', "CNV2") | ('C', "CNV1" | "CNV2") => 9,
+                ('C', "CNV3") | ('R', "L1OC" | "L3OC") | ('I', "L1NV") => 8,
+                _ => 7,
             };
-            blocks.insert(key.clone(), Vec::new());
-            current = Some(key);
-        }
-        if let Some(key) = &current {
-            if let Some(block) = blocks.get_mut(key) {
-                block.push(line);
+            key += &format!(
+                "|{}",
+                number(
+                    block.get(row).map(String::as_str).unwrap_or(""),
+                    if row == 0 || c == 'R' { 61 } else { 4 }
+                )
+            );
+            if c == 'E' {
+                key += &format!("|{}", number(&block[5], 23));
             }
         }
+        blocks.insert(key, block);
     }
-
+    let mut blocks = HashMap::new();
+    let mut header = None;
+    let mut block = Vec::new();
+    for line in content
+        .lines()
+        .skip_while(|l| !l.contains("END OF HEADER"))
+        .skip(1)
+    {
+        let line = line.trim_end().to_string();
+        if line.starts_with("> ") {
+            if let Some(previous) = header.replace(line) {
+                insert(&mut blocks, &previous, std::mem::take(&mut block));
+            }
+        } else {
+            let sto_header =
+                header.as_ref().is_some_and(|h| h.starts_with("> STO")) && block.is_empty();
+            block.push(if sto_header {
+                line
+            } else {
+                line.replace(['e', 'd', 'D'], "E")
+            });
+        }
+    }
+    if let Some(header) = header {
+        insert(&mut blocks, &header, block);
+    }
     blocks
 }
 
-/// Every STO, EOP and ION record written from `name` must be equal to
-/// the original text, and every such record of the parsed file must be
-/// written. Records sharing epoch, vehicle and message type overwrite
-/// each other in the record, so the original file may hold more.
+fn audited_snapshot(path: &str) -> Rinex {
+    let text = crate::tests::parsing::navigation_text(path);
+    let (rinex, diagnostics) =
+        Rinex::parse_with_diagnostics(&mut std::io::BufReader::new(text.as_bytes())).unwrap();
+    assert!(
+        diagnostics.iter().all(|d| matches!(
+            d.kind,
+            crate::record::ParsingDiagnosticKind::DuplicateNavigation { .. }
+        )),
+        "{path}: {diagnostics:?}"
+    );
+    assert_eq!(
+        Rinex::parse(&mut std::io::BufReader::new(text.as_bytes()))
+            .unwrap()
+            .record,
+        rinex.record
+    );
+    rinex
+}
+
 fn v4_records_write_back(name: &str) {
     let path = format!("data/NAV/V4/{}", name);
-    let original = if name.ends_with(".gz") {
-        Rinex::from_gzip_file(&path).unwrap()
-    } else {
-        Rinex::from_file(&path).unwrap()
-    };
+    let original = audited_snapshot(&path);
 
-    let tmp = format!("test-{}.rnx", name);
-    original.to_file(&tmp).unwrap();
-    let written = read_to_string(&tmp).unwrap();
-    let _ = remove_file(&tmp);
+    let mut buffer = std::io::BufWriter::new(Vec::new());
+    original.format(&mut buffer).unwrap();
+    let written = String::from_utf8(buffer.into_inner().unwrap()).unwrap();
 
-    let original_text = if name.ends_with(".gz") {
-        let mut reader = flate2::read::GzDecoder::new(std::fs::File::open(&path).unwrap());
-        let mut content = String::new();
-        std::io::Read::read_to_string(&mut reader, &mut content).unwrap();
-        content
-    } else {
-        read_to_string(&path).unwrap()
-    };
+    let original_text = crate::tests::parsing::navigation_text(&path);
 
     let model = v4_record_blocks(&original_text);
     let dut = v4_record_blocks(&written);
@@ -80,22 +129,15 @@ fn v4_records_write_back(name: &str) {
             .get(key)
             .unwrap_or_else(|| panic!("written record not in the original file:\n{}", key));
 
-        let (block, written) = if key.starts_with("> STO") {
-            // the message transmission time is not stored: the first
-            // field of the second line is not compared
-            (
-                vec![block[0].clone(), block[1][23..].to_string()],
-                vec![written[0].clone(), written[1][23..].to_string()],
-            )
-        } else if key.starts_with("> ION") && block.len() == 3 && block[2].len() == 23 {
-            // Klobuchar: a blank region code is read as worldwide (0)
-            // and written as such
-            let mut block = block.clone();
-            block[2].push_str(" 0.000000000000E+00");
-            (block, written.clone())
-        } else {
-            (block.clone(), written.clone())
-        };
+        let (block, written) =
+            if key.starts_with("> ION") && block.len() == 3 && block[2].len() == 23 {
+                // Klobuchar blank region retains the established worldwide mapping.
+                let mut block = block.clone();
+                block[2].push_str(" 0.000000000000E+00");
+                (block, written.clone())
+            } else {
+                (block.clone(), written.clone())
+            };
 
         assert_eq!(written, block, "record differs:\n{}", key);
         compared += 1;
@@ -141,11 +183,11 @@ use crate::{
 /// Writes `rinex` in the revision of its (modified) header to a
 /// temporary file and parses it back.
 fn write_and_reparse(rinex: &Rinex, tag: &str) -> Result<Rinex, crate::error::FormattingError> {
-    let tmp = format!("test-{}-{}.rnx", tag, std::process::id());
-    rinex.to_file(&tmp)?;
-    let parsed = Rinex::from_file(&tmp).unwrap();
-    let _ = remove_file(&tmp);
-    Ok(parsed)
+    let _ = tag;
+    let mut buffer = std::io::BufWriter::new(Vec::new());
+    rinex.format(&mut buffer)?;
+    let bytes = buffer.into_inner().unwrap();
+    Ok(Rinex::parse(&mut std::io::BufReader::new(bytes.as_slice())).unwrap())
 }
 
 /// The ephemeris written in another revision must carry the values of
@@ -204,7 +246,7 @@ fn nav_v4_written_as_v3_keeps_the_legacy_ephemerides() {
         "KMS300DNK_R_20221591000_01H_MN.rnx.gz",
         "BRD400DLR_S_20230710000_01D_MN.rnx.gz",
     ] {
-        let mut rinex = Rinex::from_gzip_file(&format!("data/NAV/V4/{}", name)).unwrap();
+        let mut rinex = audited_snapshot(&format!("data/NAV/V4/{}", name));
         let original = rinex.record.as_nav().unwrap().clone();
 
         let legacy = original
@@ -220,10 +262,11 @@ fn nav_v4_written_as_v3_keeps_the_legacy_ephemerides() {
             assert!(modern > 0, "{} carries no modern message", name);
         }
 
-        // records sharing epoch and vehicle collapse to one RINEX 3 key
+        // NAV3 retains Galileo's full source identity. Other legacy message
+        // names are normalized to the pre-existing NAV3 LNAV representation.
         let expected = legacy
             .iter()
-            .map(|(k, _)| (k.epoch, k.sv))
+            .map(|(k, _)| (k.epoch, k.sv, k.galileo_data_sources, k.transmission_time))
             .collect::<std::collections::BTreeSet<_>>()
             .len();
 
@@ -235,12 +278,19 @@ fn nav_v4_written_as_v3_keeps_the_legacy_ephemerides() {
         assert_eq!(record.len(), expected, "{}", name);
 
         for (k, frame) in record.iter() {
-            assert_eq!(k.msgtype, NavMessageType::LNAV);
-            // the last legacy message of this epoch and vehicle was written
+            if k.sv.constellation != Constellation::Galileo {
+                assert_eq!(k.msgtype, NavMessageType::LNAV);
+            }
+            // Match the retained full source identity.
             let (_, original) = legacy
                 .iter()
-                .filter(|(o, _)| o.epoch == k.epoch && o.sv == k.sv)
-                .last()
+                .filter(|(o, _)| {
+                    o.epoch == k.epoch
+                        && o.sv == k.sv
+                        && o.galileo_data_sources == k.galileo_data_sources
+                        && o.transmission_time == k.transmission_time
+                })
+                .next()
                 .unwrap_or_else(|| panic!("{:?} was not in the original file", k));
             assert_ephemeris_preserved(original, frame, k);
         }
@@ -252,8 +302,7 @@ fn nav_v4_written_as_v3_keeps_the_legacy_ephemerides() {
 /// ephemeris, the modern messages have no RINEX 3 representation.
 #[test]
 fn nav_v4_gps_only_written_as_v3() {
-    let mut rinex =
-        Rinex::from_gzip_file("data/NAV/V4/BRD400DLR_S_20230710000_01D_MN.rnx.gz").unwrap();
+    let mut rinex = audited_snapshot("data/NAV/V4/BRD400DLR_S_20230710000_01D_MN.rnx.gz");
     rinex
         .record
         .as_mut_nav()
@@ -279,7 +328,12 @@ fn nav_v4_gps_only_written_as_v3() {
     for (k, frame) in record.iter() {
         let (_, original) = lnav
             .iter()
-            .find(|(o, _)| o.epoch == k.epoch && o.sv == k.sv)
+            .find(|(o, _)| {
+                o.epoch == k.epoch
+                    && o.sv == k.sv
+                    && o.galileo_data_sources == k.galileo_data_sources
+                    && o.transmission_time == k.transmission_time
+            })
             .unwrap_or_else(|| panic!("{:?} was not in the original file", k));
         assert_ephemeris_preserved(original, frame, k);
     }
@@ -329,7 +383,11 @@ fn nav_v3_written_as_v4_gets_message_types() {
         seen.insert(k.sv.constellation);
 
         let key = NavKey {
-            msgtype: NavMessageType::LNAV,
+            msgtype: if k.sv.constellation == Constellation::Galileo {
+                k.msgtype
+            } else {
+                NavMessageType::LNAV
+            },
             ..*k
         };
         let original = original
@@ -376,8 +434,7 @@ fn nav_v3_mixed_written_as_v2_gps() {
 /// be written as RINEX 3.
 #[test]
 fn nav_nothing_representable_is_an_error() {
-    let mut rinex =
-        Rinex::from_gzip_file("data/NAV/V4/BRD400DLR_S_20230710000_01D_MN.rnx.gz").unwrap();
+    let mut rinex = audited_snapshot("data/NAV/V4/BRD400DLR_S_20230710000_01D_MN.rnx.gz");
     rinex
         .record
         .as_mut_nav()
@@ -395,4 +452,190 @@ fn nav_nothing_representable_is_an_error() {
         "{:?}",
         result.map(|_| ())
     );
+}
+
+#[test]
+fn nav_key_rebuild_and_write_validation_use_payload_identity() {
+    use crate::{
+        navigation::{NavKey, OrbitItem, TransmissionTime},
+        FormattingError,
+    };
+    let text = crate::tests::parsing::navigation_rinex("4.02", crate::tests::parsing::GPS_BLOCK);
+    let mut rinex = Rinex::parse(&mut std::io::BufReader::new(text.as_bytes())).unwrap();
+    let record = rinex.record.as_mut_nav().unwrap();
+    let (key, mut frame) = record.pop_first().unwrap();
+    assert_eq!(
+        NavKey::from_frame(
+            Version::new(4, 2),
+            key.epoch,
+            key.sv,
+            key.msgtype,
+            key.subtype,
+            &frame
+        )
+        .unwrap(),
+        key
+    );
+    frame
+        .as_mut_ephemeris()
+        .unwrap()
+        .orbits
+        .insert("t_tm".to_string(), OrbitItem::F64(-0.5));
+    record.insert(key, frame.clone());
+    let mut buffer = std::io::BufWriter::new(Vec::new());
+    assert!(matches!(
+        crate::navigation::format(&mut buffer, record, &rinex.header),
+        Err(FormattingError::NavIdentityMismatch)
+    ));
+    assert!(buffer.into_inner().unwrap().is_empty());
+    record.remove(&key);
+    let rebuilt = NavKey::from_frame(
+        Version::new(4, 2),
+        key.epoch,
+        key.sv,
+        key.msgtype,
+        key.subtype,
+        &frame,
+    )
+    .unwrap();
+    assert_eq!(
+        rebuilt.transmission_time,
+        Some(TransmissionTime::new(-0.5).unwrap())
+    );
+    record.insert(rebuilt, frame.clone());
+    let back = write_and_reparse(&rinex, "rebuilt").unwrap();
+    assert_eq!(back.record, rinex.record);
+    // Frame type, complete identity and finite values are checked before this record.
+    for wrong in [
+        NavKey {
+            frmtype: NavFrameType::EarthOrientation,
+            ..rebuilt
+        },
+        NavKey {
+            galileo_data_sources: Some(258),
+            ..rebuilt
+        },
+        NavKey {
+            sto_identity: Some(crate::navigation::StoIdentity {
+                time_system: *b"GPUT",
+                sbas_id: [b' '; 18],
+                utc_id: [b' '; 18],
+            }),
+            ..rebuilt
+        },
+    ] {
+        let record = [(wrong, frame.clone())].into_iter().collect();
+        let mut buffer = std::io::BufWriter::new(Vec::new());
+        assert!(matches!(
+            crate::navigation::format(&mut buffer, &record, &rinex.header),
+            Err(FormattingError::NavIdentityMismatch)
+        ));
+        assert!(buffer.into_inner().unwrap().is_empty());
+    }
+    for value in [1.23456789012345, 1e100, 1e-100] {
+        frame
+            .as_mut_ephemeris()
+            .unwrap()
+            .orbits
+            .insert("t_tm".to_string(), OrbitItem::F64(value));
+        let k = NavKey::from_frame(
+            Version::new(4, 2),
+            key.epoch,
+            key.sv,
+            key.msgtype,
+            key.subtype,
+            &frame,
+        )
+        .unwrap();
+        let record = [(k, frame.clone())].into_iter().collect();
+        let mut buffer = std::io::BufWriter::new(Vec::new());
+        assert!(
+            matches!(
+                crate::navigation::format(&mut buffer, &record, &rinex.header),
+                Err(FormattingError::NavUnrepresentableIdentity)
+            ),
+            "{value}"
+        );
+        assert!(buffer.into_inner().unwrap().is_empty());
+    }
+}
+
+#[test]
+fn nav_unknown_transmission_maps_to_target_marker_without_becoming_a_time() {
+    let text = crate::tests::parsing::navigation_rinex(
+        "4.00",
+        &crate::tests::parsing::GPS_BLOCK.replace("4.248180000000E+05", "9.999000000000E+08"),
+    );
+    let rinex = Rinex::parse(&mut std::io::BufReader::new(text.as_bytes())).unwrap();
+    assert_eq!(
+        rinex
+            .record
+            .as_nav()
+            .unwrap()
+            .keys()
+            .next()
+            .unwrap()
+            .transmission_time,
+        None
+    );
+    for version in [Version::new(3, 4), Version::new(4, 0), Version::new(4, 2)] {
+        let mut source = rinex.clone();
+        source.header.version = version;
+        let back = write_and_reparse(&source, "unknown").unwrap();
+        let (k, f) = back.record.as_nav().unwrap().first_key_value().unwrap();
+        assert_eq!(k.transmission_time, None);
+        assert_eq!(
+            f.as_ephemeris().unwrap().get_orbit_f64("t_tm"),
+            Some(if version >= Version::new(4, 2) {
+                999999999.999
+            } else {
+                999900000.0
+            })
+        );
+        source = back;
+        source.header.version = Version::new(3, 4);
+        assert_eq!(
+            write_and_reparse(&source, "back").unwrap().record,
+            rinex.record
+        );
+    }
+}
+
+#[test]
+fn independent_raw_grouping_preserves_same_epoch_ephemeris_sto_eop_transmissions() {
+    // BRD400DLR 2024-131 source lines: one STO, EOP and FDMA EPH.
+    let text = crate::tests::parsing::navigation_excerpt(
+        "BRD400DLR_S_20241310000_01D_MN.rnx",
+        &[(1, 9), (22, 24), (415, 418), (62862, 62867)],
+    );
+    let lines: Vec<_> = text.split_inclusive('\n').collect();
+    let header = lines[..9].concat();
+    let body = lines[9..].concat();
+    // Synthetic retransmissions with the same reference epochs.
+    let later = body
+        .replace("4.322400000000e+05", "4.323000000000e+05")
+        .replace("4.410000000000e+05", "4.410600000000e+05");
+    // Change STO's first scalar independently of the epoch/pair columns.
+    let mut rows: Vec<_> = later.lines().map(str::to_string).collect();
+    rows[2].replace_range(4..23, " 1.234560000000E+05");
+    let source = format!("{header}{body}{}\n", rows.join("\n"));
+    let model = v4_record_blocks(&source);
+    assert_eq!(model.len(), 6);
+    let r = Rinex::parse(&mut std::io::BufReader::new(source.as_bytes())).unwrap();
+    assert_eq!(r.record.as_nav().unwrap().len(), 6);
+    let mut buffer = std::io::BufWriter::new(Vec::new());
+    r.format(&mut buffer).unwrap();
+    let text = String::from_utf8(buffer.into_inner().unwrap()).unwrap();
+    let output = v4_record_blocks(&text);
+    assert_eq!(output.len(), 6);
+    for (key, block) in output {
+        let expected = model.get(&key).unwrap();
+        // FDMA may format trailing blank fields to full width; retained raw
+        // identity and three clock scalars still agree independently.
+        if key.starts_with("> EPH") {
+            assert_eq!(block[0], expected[0]);
+        } else {
+            assert_eq!(&block, expected);
+        }
+    }
 }

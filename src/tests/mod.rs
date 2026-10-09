@@ -61,3 +61,6 @@ pub fn init_logger() {
             .init();
     });
 }
+
+#[cfg(all(feature = "nav", not(feature = "log")))]
+pub fn init_logger() {}

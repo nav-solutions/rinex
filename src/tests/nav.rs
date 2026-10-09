@@ -255,7 +255,15 @@ fn v3_amel00nld_r_2021() {
     let mut num_tests = 0;
 
     for (k, eph) in rinex.nav_ephemeris_frames_iter() {
-        assert_eq!(k.msgtype, NavMessageType::LNAV);
+        // AMEL source E01/E03 Data sources is 258 (F/NAV).
+        assert_eq!(
+            k.msgtype,
+            if k.sv.constellation == Constellation::Galileo {
+                NavMessageType::FNAV
+            } else {
+                NavMessageType::LNAV
+            }
+        );
 
         if k.sv == c05 {
             assert_eq!(eph.clock_bias, -0.426337239332e-03);
@@ -468,7 +476,9 @@ fn v3_esbc00dnk_r2020() {
         R01, R02, R03, R04, R05, R06, R07, R08, R09, R10,
         R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R23, R24,
         S23, S25, S26, S36, S44",
-        4092,
+        // Raw EPH boundaries and complete identity columns: 4,871 unique
+        // broadcasts; the old epoch/SV count discarded 779 alternatives.
+        4871,
     );
 
     let mut tests_passed = 0;
@@ -673,7 +683,7 @@ fn nav_v4_kms300dnk_r2022() {
                 tests_passed += 1;
             }
         } else if k.epoch == t1 {
-            if k.sv == e01 {
+            if k.sv == e01 && v.time_system.as_deref() == Some("GAGP") {
                 assert_eq!(k.msgtype, NavMessageType::IFNV);
                 assert_eq!(k.frmtype, NavFrameType::SystemTimeOffset);
 
@@ -688,12 +698,20 @@ fn nav_v4_kms300dnk_r2022() {
                 assert!((drift - -4.440892098501E-15).abs() < 1E-12);
 
                 assert_eq!(v.polynomial.2, 0.0);
+                assert_eq!(v.transmission_time, Some(295240.0));
+                tests_passed += 1;
+            } else if k.sv == e01 {
+                // KMS source lines 735-737 are GAUT; GAGP is at 738-740.
+                assert_eq!(v.time_system.as_deref(), Some("GAUT"));
+                assert_eq!(v.rhs, TimeScale::UTC);
+                assert_eq!(v.transmission_time, Some(295207.0));
+                assert_eq!(v.polynomial, (-1.862645149231e-09, 8.881784197001e-16, 0.0));
                 tests_passed += 1;
             }
         }
     }
 
-    assert_eq!(tests_passed, 2);
+    assert_eq!(tests_passed, 3);
 
     // NO EOP frames
     let mut tests = 0;
@@ -1401,11 +1419,11 @@ fn nav_v4_02_spec_examples() {
 
     let record = dut.record.as_nav().unwrap();
 
-    // records sharing epoch, satellite, message type and subtype
-    // share a key: the file has 34 records for 30 keys.
+    // Raw source boundaries: 34 distinct broadcasts. Four STO records that
+    // share coarse epoch/SV fields differ in their time pairs/transmissions.
     let count = |frmtype: NavFrameType| record.keys().filter(|k| k.frmtype == frmtype).count();
     assert_eq!(count(NavFrameType::Ephemeris), 9);
-    assert_eq!(count(NavFrameType::SystemTimeOffset), 9);
+    assert_eq!(count(NavFrameType::SystemTimeOffset), 13);
     assert_eq!(count(NavFrameType::EarthOrientation), 5);
     assert_eq!(count(NavFrameType::IonosphereModel), 7);
 
@@ -1463,16 +1481,48 @@ fn nav_v4_02_spec_examples() {
     let sto = sto.as_system_time().unwrap();
     assert_eq!(sto.time_system.as_deref(), Some("GAUT"));
     assert_eq!(sto.utc.as_deref(), Some("UTCGAL"));
-    let (_, sto) = find(NavFrameType::SystemTimeOffset, "I10", NavMessageType::L1NV);
-    assert_eq!(
-        sto.as_system_time().unwrap().time_system.as_deref(),
-        Some("IRUT")
-    );
-    let (_, sto) = find(NavFrameType::SystemTimeOffset, "R26", NavMessageType::LXOC);
-    assert_eq!(
-        sto.as_system_time().unwrap().time_system.as_deref(),
-        Some("GLUT")
-    );
+    // Select every retained STO by its complete pair/UTC identity, rather
+    // than relying on coarse-key iteration order. Raw source lines 115-129.
+    for (sv, expected) in [
+        (
+            "I10",
+            vec![
+                ("IRGP", None, -1.717125996947e-09),
+                ("IRUT", Some("UTC(NPLI)"), -4.074536263943e-09),
+                ("IRUT", Some("UTCIRN"), 6.984919309616e-10),
+            ],
+        ),
+        (
+            "R26",
+            vec![
+                ("GLGP", None, 5.504261935130e-08),
+                ("GLUT", Some("UTC(SU)"), -8.335337042809e-08),
+            ],
+        ),
+    ] {
+        let sv = SV::from_str(sv).unwrap();
+        let actual = record
+            .iter()
+            .filter_map(|(k, f)| {
+                if k.sv != sv {
+                    return None;
+                }
+                f.as_system_time().map(|s| {
+                    (
+                        (s.time_system.as_deref().unwrap(), s.utc.as_deref()),
+                        s.polynomial.0,
+                    )
+                })
+            })
+            .collect::<std::collections::BTreeMap<_, _>>();
+        assert_eq!(
+            actual,
+            expected
+                .into_iter()
+                .map(|(pair, utc, a0)| ((pair, utc), a0))
+                .collect()
+        );
+    }
 
     // EOP (Table A41)
     let (k, eop) = find(NavFrameType::EarthOrientation, "I10", NavMessageType::L1NV);
@@ -1482,9 +1532,9 @@ fn nav_v4_02_spec_examples() {
     );
     let eop = eop.as_earth_orientation().unwrap();
     assert_eq!(eop.x.0, 1.616811752319e-01);
-    assert_eq!(eop.t_tm, 519426);
+    assert_eq!(eop.t_tm, 519426.0);
     let (_, eop) = find(NavFrameType::EarthOrientation, "R04", NavMessageType::LXOC);
-    assert_eq!(eop.as_earth_orientation().unwrap().t_tm, 518394);
+    assert_eq!(eop.as_earth_orientation().unwrap().t_tm, 518394.0);
 
     // ION (Table A41)
     let (_, ion) = find(NavFrameType::IonosphereModel, "G14", NavMessageType::CNVX);
