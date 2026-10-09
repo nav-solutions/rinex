@@ -61,7 +61,7 @@ use crate::prelude::{Constellation, Duration, Epoch, TimeScale, SV};
 /// RINEX V3 example:
 /// ```
 /// use rinex::{
-///     prelude::Rinex,
+///     prelude::{Constellation, Rinex},
 ///     navigation::{NavFrameType, NavMessageType},
 /// };
 ///
@@ -87,8 +87,14 @@ use crate::prelude::{Constellation, Duration, Epoch, TimeScale, SV};
 ///     // until RINEXv3 (included) you can only find this type of frame
 ///     assert_eq!(key.frmtype, NavFrameType::Ephemeris);
 ///
-///     // until RINEXv3 (included) you can only find this kind of message
-///     assert_eq!(key.msgtype, NavMessageType::LNAV);
+///     // RINEX v3 does not explicitly label the message type. Galileo's
+///     // F/NAV and I/NAV are identified from the Data sources field;
+///     // this parser represents other constellations as LNAV in v2/v3.
+///     if sv_broadcaster.constellation == Constellation::Galileo {
+///         assert!(matches!(key.msgtype, NavMessageType::FNAV | NavMessageType::INAV));
+///     } else {
+///         assert_eq!(key.msgtype, NavMessageType::LNAV);
+///     }
 ///
 ///     assert_eq!(toc.time_scale, sv_timescale); // always true in NAV RINEX
 ///
@@ -129,6 +135,7 @@ use crate::prelude::{Constellation, Duration, Epoch, TimeScale, SV};
 ///     // that can resolve the coordinates of the SV using this very frame.
 ///     // You still have to manage your ephemeris frames correctly.
 ///     // This is just an example.
+///     #[cfg(feature = "nav")]
 ///     if let Some(orbital_state) = ephemeris.kepler2position(sv_broadcaster, toc) {
 ///         // continue with [Orbit] processing
 ///     }

@@ -221,9 +221,6 @@ use crate::{
 #[cfg(docsrs)]
 pub use bibliography::Bibliography;
 
-#[cfg(doc)]
-use crate::prelude::qc::Merge;
-
 /// Parse a floating point number from a string, handling Fortran-style 'D'/'d'
 /// exponent notation (e.g. `1.3775D+02`) that Rust's standard `FromStr` does not
 /// recognize. Both uppercase 'D' and lowercase 'd' are replaced before parsing.
@@ -1004,8 +1001,14 @@ impl Rinex {
             .count()
             > 0
     }
-
-    /// Determines whether [Rinex] is the result of a previous [Merge] operation.
+    #[cfg_attr(
+        feature = "qc",
+        doc = "Determines whether [Rinex] is the result of a previous [Merge](crate::prelude::qc::Merge) operation."
+    )]
+    #[cfg_attr(
+        not(feature = "qc"),
+        doc = "Determines whether [Rinex] is the result of a previous merge operation."
+    )]
     /// That is, the combination of two files merged together.  
     /// This is determined by the presence of custom yet somewhat standardized [Comments].
     pub fn is_merged(&self) -> bool {
