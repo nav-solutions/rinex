@@ -48,10 +48,15 @@ impl Ephemeris {
 
         // starts with (clock_bias, drift, rate).
         // SBAS messages carry the transmission time (seconds of week)
-        // in the drift rate slot, stored as the "week" orbit item.
+        // in the drift rate slot, stored as the "t_tm" orbit item.
         // epoch has already been buffered
         let third = if sv_constellation == Constellation::SBAS {
-            self.get_orbit_f64("week").unwrap_or(self.clock_drift_rate)
+            self.get_orbit_f64("t_tm").unwrap_or(self.clock_drift_rate)
+        } else if sv_constellation == Constellation::Glonass
+            && matches!(msgtype, NavMessageType::LNAV | NavMessageType::FDMA)
+        {
+            self.get_orbit_f64("frameTime")
+                .unwrap_or(self.clock_drift_rate)
         } else {
             self.clock_drift_rate
         };
@@ -187,7 +192,7 @@ mod test {
             clock_drift: 0.0,
             clock_drift_rate: 0.0,
             orbits: [
-                ("week".to_string(), OrbitItem::U32(437280)),
+                ("t_tm".to_string(), OrbitItem::F64(437280.0)),
                 ("satPosX".to_string(), OrbitItem::F64(42003.688)),
             ]
             .into_iter()

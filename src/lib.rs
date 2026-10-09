@@ -54,6 +54,8 @@ mod linspace;
 mod observable;
 mod sampling;
 
+pub(crate) mod utils;
+
 #[cfg(feature = "qc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "qc")))]
 mod qc;
@@ -789,20 +791,48 @@ impl Rinex {
     /// Parse [Rinex] content by consuming [BufReader] (efficient buffered reader).
     /// Attributes potentially described by a file name need to be provided either
     /// manually / externally, or guessed when parsing has been completed.
+    /// Uses the same omission and fatal-error rules as [Self::parse_with_diagnostics],
+    /// without collecting diagnostics or comparing duplicate record values.
     pub fn parse<R: Read>(reader: &mut BufReader<R>) -> Result<Self, ParsingError> {
-        // Parses Header section (=consumes header until this point)
         let mut header = Header::parse(reader)?;
-
-        // Parse record (=consumes rest of this resource)
-        // Comments are preserved and store "as is"
         let (record, comments) = Record::parse(&mut header, reader)?;
-
         Ok(Self {
             header,
             comments,
             record,
             production: Default::default(),
         })
+    }
+
+    /// Parses a resource and exposes recoverable OBS/NAV failures and duplicate
+    /// keys. [Self::parse] follows the same decoding rules without collecting diagnostics.
+    /// Duplicate keys keep the last decoded record. A NAV block is omitted when
+    /// any defined, nonblank, non-spare orbit field fails to decode, including an
+    /// unsupported flag definition; `NavOrbitParsing` retains the field and cause.
+    /// A non-ASCII OBS/NAV block is omitted in full and reported with a position
+    /// relative to that block. Header, comment and compressed-input encoding
+    /// errors are fatal, as are I/O errors (including invalid UTF-8).
+    /// An epoch finer than native nanosecond resolution returns `EpochPrecision`;
+    /// it is never rounded or silently merged with another epoch.
+    pub fn parse_with_diagnostics<R: Read>(
+        reader: &mut BufReader<R>,
+    ) -> Result<(Self, Vec<record::ParsingDiagnostic>), ParsingError> {
+        // Parses Header section (=consumes header until this point)
+        let mut header = Header::parse(reader)?;
+
+        // Parse record (=consumes rest of this resource)
+        // Comments are preserved and store "as is"
+        let (record, comments, diagnostics) = Record::parse_with_diagnostics(&mut header, reader)?;
+
+        Ok((
+            Self {
+                header,
+                comments,
+                record,
+                production: Default::default(),
+            },
+            diagnostics,
+        ))
     }
 
     /// Format [Rinex] into writable I/O using efficient buffered writer

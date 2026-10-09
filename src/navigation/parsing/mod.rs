@@ -1,7 +1,7 @@
 use crate::{
-    epoch::parse_utc as parse_utc_epoch,
     navigation::{Ephemeris, NavFrame, NavFrameType, NavKey, NavMessageType},
     prelude::{Header, ParsingError, Version, SV},
+    utils::validate_ascii,
 };
 
 mod v4;
@@ -12,6 +12,7 @@ pub fn parse_epoch(header: &Header, content: &str) -> Result<(NavKey, NavFrame),
     if content.starts_with('>') {
         parse_v4_epoch(content)
     } else {
+        validate_ascii(content, 1)?;
         // <V4: limited to LNAV Ephemeris frames.
         let version = header.version;
 
@@ -38,43 +39,15 @@ pub fn parse_epoch(header: &Header, content: &str) -> Result<(NavKey, NavFrame),
 /// Returns true if given content matches the beginning of a
 /// Navigation record epoch
 pub fn is_new_epoch(line: &str, v: Version) -> bool {
+    // Continuation rows start with padding. Recognize the PRN/SV prefix even
+    // when the date is damaged, so a bad block cannot absorb its neighbours.
     if v.major < 3 {
-        // old RINEX
-        if line.len() < 23 {
-            return false; // not enough bytes
-                          // to describe a PRN and an Epoch
-        }
-
-        let (prn, _) = line.split_at(2);
-        if prn.trim().parse::<u8>().is_err() {
-            return false;
-        }
-
-        let datestr = &line[3..22];
-        parse_utc_epoch(datestr).is_ok()
+        line.get(..2)
+            .is_some_and(|prn| prn.trim().parse::<u8>().is_ok())
     } else if v.major == 3 {
-        // RINEX V3
-        if line.len() < 24 {
-            return false; // not enough bytes
-                          // to describe an SV and an Epoch
-        }
-
-        // 1st entry matches a valid SV description
-        let (sv, _) = line.split_at(4);
-
-        if sv.parse::<SV>().is_err() {
-            return false;
-        }
-
-        let datestr = &line[4..23];
-        parse_utc_epoch(datestr).is_ok()
+        line.get(..3).is_some_and(|sv| sv.parse::<SV>().is_ok())
     } else {
-        // Modern --> easy
-        if let Some(c) = line.chars().next() {
-            c == '>' // new epoch marker
-        } else {
-            false
-        }
+        line.starts_with('>')
     }
 }
 
@@ -180,10 +153,12 @@ mod test {
 
         assert_eq!(ephemeris.clock_bias, 7.282570004460E-05);
         assert_eq!(ephemeris.clock_drift, 0.0);
-        assert_eq!(ephemeris.clock_drift_rate, 7.38E4);
+        assert_eq!(ephemeris.clock_drift_rate, 0.0);
+        assert_eq!(ephemeris.get_orbit_f64("frameTime"), Some(7.38E4));
 
         let orbits = &ephemeris.orbits;
-        assert_eq!(orbits.len(), 10);
+        // Twelve source orbit fields (including zero accelY/ageOp), plus frame time.
+        assert_eq!(orbits.len(), 13);
 
         for (k, v) in orbits.iter() {
             if k.eq("satPosX") {
@@ -210,6 +185,8 @@ mod test {
                 assert_eq!(v.as_f64(), -9.313225746150E-10);
             } else if k.eq("ageOp") {
                 assert_eq!(v.as_f64(), 0.0);
+            } else if k.eq("frameTime") {
+                assert_eq!(v.as_f64(), 7.38E4);
             } else {
                 panic!("Got unexpected key \"{}\" for GLOV2 record", k);
             }
@@ -248,7 +225,7 @@ mod test {
         assert_eq!(ephemeris.clock_drift_rate, 0.0);
 
         let orbits = &ephemeris.orbits;
-        assert_eq!(orbits.len(), 23);
+        assert_eq!(orbits.len(), 24); // includes the source's zero AODC
 
         for (k, v) in orbits.iter() {
             if k.eq("aode") {
@@ -339,7 +316,7 @@ mod test {
         assert_eq!(ephemeris.clock_drift_rate, 0.0);
 
         let orbits = &ephemeris.orbits;
-        assert_eq!(orbits.len(), 23);
+        assert_eq!(orbits.len(), 24); // includes the source's zero BGD E5b/E1
 
         for (k, v) in orbits.iter() {
             if k.eq("iodnav") {
@@ -423,10 +400,14 @@ mod test {
 
         assert_eq!(ephemeris.clock_bias, -0.420100986958e-04);
         assert_eq!(ephemeris.clock_drift, 0.000000000000e+00);
-        assert_eq!(ephemeris.clock_drift_rate, 0.342000000000e+05);
+        assert_eq!(ephemeris.clock_drift_rate, 0.0);
+        assert_eq!(
+            ephemeris.get_orbit_f64("frameTime"),
+            Some(0.342000000000e+05)
+        );
 
         let orbits = &ephemeris.orbits;
-        assert_eq!(orbits.len(), 9);
+        assert_eq!(orbits.len(), 13); // twelve source orbit fields plus frame time
 
         for (k, v) in orbits.iter() {
             if k.eq("satPosX") {
@@ -453,6 +434,8 @@ mod test {
                 assert_eq!(v.as_f64(), -0.279396772385e-08);
             } else if k.eq("ageOp") {
                 assert_eq!(v.as_f64(), 0.000000000000e+00);
+            } else if k.eq("frameTime") {
+                assert_eq!(v.as_f64(), 0.342000000000e+05);
             } else {
                 panic!("Got unexpected key \"{}\" for GLOV3 record", k);
             }

@@ -5,17 +5,23 @@ use crate::{
         NavicKbModel, NavicNeqnModel, NgModel, TimeOffset,
     },
     prelude::{Constellation, Epoch, ParsingError, SV},
+    utils::validate_ascii,
 };
 
 /// ([NavKey], [NavFrame]) parsing attempt for a V4 frame.
 /// In modern Navigation, all forms may exist.
 pub fn parse(content: &str) -> Result<(NavKey, NavFrame), ParsingError> {
+    validate_ascii(content, 1)?;
     let mut lines = content.lines();
 
     let line = match lines.next() {
         Some(l) => l,
         _ => return Err(ParsingError::EmptyEpoch),
     };
+
+    if line.len() < 10 {
+        return Err(ParsingError::EpochFormat);
+    }
 
     let (_, rem) = line.split_at(2);
     let (class, rem) = rem.split_at(4);
@@ -51,7 +57,10 @@ pub fn parse(content: &str) -> Result<(NavKey, NavFrame), ParsingError> {
     // Parses navframe type dependent and epoch of publication
     let (epoch, fr) = match frmtype {
         NavFrameType::Ephemeris => {
-            let (epoch, _, ephemeris) = Ephemeris::parse_v4(msgtype, lines, ts)?;
+            let (epoch, payload_sv, ephemeris) = Ephemeris::parse_v4(msgtype, lines, ts)?;
+            if payload_sv != sv {
+                return Err(ParsingError::NavSvMismatch);
+            }
             (epoch, NavFrame::EPH(ephemeris))
         },
         NavFrameType::IonosphereModel => {

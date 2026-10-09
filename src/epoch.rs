@@ -201,7 +201,7 @@ pub(crate) fn parse_in_timescale(content: &str, ts: TimeScale) -> Result<Epoch, 
                 return Err(ParsingError::EpochFormat);
             }
             let epoch = Epoch::from_gregorian_str(&format!(
-                "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:06} {}",
+                "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:09} {}",
                 y, m, d, hh, mm, ss, ns, ts
             ))?;
             Ok(epoch)

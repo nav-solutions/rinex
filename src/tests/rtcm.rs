@@ -52,10 +52,10 @@ fn esbcdnk_ephv3_to_rtcm() {
     assert!(qzss1044 > 0);
     assert!(gal1045 > 0);
 
-    assert_eq!(gps1019, 253);
+    assert_eq!(gps1019, 257);
     assert_eq!(glo1020, 510);
-    assert_eq!(gal1045, 806);
-    assert_eq!(bds1042, 353);
+    assert_eq!(gal1045, 823);
+    assert_eq!(bds1042, 357);
     assert_eq!(qzss1044, 15);
 }
 

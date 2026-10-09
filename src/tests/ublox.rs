@@ -155,16 +155,16 @@ fn esbcdnk_ephv3_to_ubx_mga() {
     assert!(gal > 0);
     assert!(qzss > 0);
 
-    assert_eq!(gps, 253);
+    assert_eq!(gps, 257);
     println!("UBX-MGA-EPH: {:4} GPS frames", gps);
 
     assert_eq!(qzss, 15);
     println!("UBX-MGA-EPH: {:4} QZSS frames", qzss);
 
-    assert_eq!(bds, 353);
+    assert_eq!(bds, 357);
     println!("UBX-MGA-BDS: {:4} BDS frames", bds);
 
-    assert_eq!(gal, 806);
+    assert_eq!(gal, 823);
     println!("UBX-MGA-GAL: {:4} GAL frames", gal);
 }
 

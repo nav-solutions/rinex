@@ -21,8 +21,9 @@ use crate::{
         Record as ObservationRecord,
     },
     prelude::{Epoch, Header, ParsingError, TimeScale},
-    record::{Comments, Record},
+    record::{Comments, ParsingDiagnostic, ParsingDiagnosticKind, Record},
     types::Type,
+    utils::validate_ascii,
 };
 
 use std::{
@@ -41,6 +42,29 @@ impl Record {
         header: &mut Header,
         reader: &mut BufReader<R>,
     ) -> Result<(Self, Comments), ParsingError> {
+        Self::parse_record(header, reader, None)
+    }
+
+    /// Parses the body and reports recoverable OBS/NAV failures and duplicate
+    /// keys. Duplicate keys retain the legacy last-record-wins behavior.
+    /// Non-ASCII OBS/NAV blocks are omitted in full. Non-ASCII comments or
+    /// compressed input, I/O failures and unrepresentable precision are fatal.
+    pub fn parse_with_diagnostics<R: Read>(
+        header: &mut Header,
+        reader: &mut BufReader<R>,
+    ) -> Result<(Self, Comments, Vec<ParsingDiagnostic>), ParsingError> {
+        let mut diagnostics = Vec::new();
+        let (record, comments) = Self::parse_record(header, reader, Some(&mut diagnostics))?;
+        Ok((record, comments, diagnostics))
+    }
+
+    fn parse_record<R: Read>(
+        header: &mut Header,
+        reader: &mut BufReader<R>,
+        mut diagnostics: Option<&mut Vec<ParsingDiagnostic>>,
+    ) -> Result<(Self, Comments), ParsingError> {
+        let mut input_line = 0;
+        let mut record_line = 1;
         // eos reached: process pending buffer & exit
         let mut eos = false;
         let mut crinex_error = false;
@@ -133,7 +157,11 @@ impl Record {
         }
 
         // Iterate and consume, one line at a time
-        while let Ok(size) = reader.read_line(&mut line_buf) {
+        loop {
+            let size = reader.read_line(&mut line_buf)?;
+            if size > 0 {
+                input_line += 1;
+            }
             if size == 0 {
                 // reached EOS
                 // we might still have something to process prior exiting
@@ -144,8 +172,20 @@ impl Record {
             // were, they may look like comments but must reach the decompressor.
             let in_event = is_crinex && decompressor.in_event();
 
+            // Validate compressed text before the stateful decompressor sees it.
+            // Other record types have no recoverable encoding diagnostics.
+            if is_crinex
+                || !matches!(
+                    header.rinex_type,
+                    Type::ObservationData | Type::NavigationData
+                )
+            {
+                validate_ascii(&line_buf, input_line)?;
+            }
+
             // (special case) COMMENTS: store as is
             if !in_event && is_rinex_comment(&line_buf) {
+                validate_ascii(&line_buf, input_line)?;
                 let comment = line_buf.split_at(60).0.trim_end();
                 comment_content.push(comment.to_string());
 
@@ -155,8 +195,11 @@ impl Record {
             }
 
             // (special case) COMMENTS: store as is
-            if !in_event && line_buf.contains("COMMENT") {
-                let content = line_buf.split_at(60).0.trim();
+            if let Some(content) = line_buf
+                .get(..60)
+                .filter(|_| !in_event && line_buf.contains("COMMENT"))
+            {
+                let content = content.trim();
                 if let Some(comments) = comments.get_mut(&comment_ts) {
                     comments.push(content.to_string());
                 } else {
@@ -221,12 +264,33 @@ impl Record {
                     //println!("***MATCH***");
 
                     match &header.rinex_type {
-                        Type::NavigationData => {
-                            if let Ok((k, v)) = parse_nav_epoch(&header, &epoch_buf) {
-                                nav_rec.insert(k, v);
-                                // println!("nav_epoch={:?}", k); // DEBUG
-                                comment_ts = k.epoch; // for comments storage
-                            }
+                        Type::NavigationData => match parse_nav_epoch(&header, &epoch_buf) {
+                            Ok((key, frame)) => {
+                                let conflicting = diagnostics.as_ref().and_then(|_| {
+                                    nav_rec.get(&key).map(|previous| previous != &frame)
+                                });
+                                nav_rec.insert(key, frame);
+                                if let (Some(diagnostics), Some(conflicting)) =
+                                    (diagnostics.as_deref_mut(), conflicting)
+                                {
+                                    diagnostics.push(ParsingDiagnostic {
+                                        record_line,
+                                        kind: ParsingDiagnosticKind::DuplicateNavigation {
+                                            key,
+                                            conflicting,
+                                        },
+                                    });
+                                }
+                                comment_ts = key.epoch;
+                            },
+                            Err(error) => {
+                                if let Some(diagnostics) = diagnostics.as_deref_mut() {
+                                    diagnostics.push(ParsingDiagnostic {
+                                        record_line,
+                                        kind: ParsingDiagnosticKind::NavigationFailure(error),
+                                    });
+                                }
+                            },
                         },
                         Type::ObservationData => {
                             match parse_observation_epoch(
@@ -237,15 +301,31 @@ impl Record {
                             ) {
                                 Ok(key) => {
                                     //println!("key={:?}", key);
-                                    obs_rec.insert(key, observations.clone());
+                                    let previous = obs_rec.insert(key, observations.clone());
+                                    if let (Some(diagnostics), Some(previous)) =
+                                        (diagnostics.as_deref_mut(), previous)
+                                    {
+                                        diagnostics.push(ParsingDiagnostic {
+                                            record_line,
+                                            kind: ParsingDiagnosticKind::DuplicateObservation {
+                                                key,
+                                                conflicting: previous != observations,
+                                            },
+                                        });
+                                    }
                                     comment_ts = key.epoch; // for comments storage
                                 },
-                                #[cfg(feature = "log")]
-                                Err(e) => {
-                                    error!("parsing: {}", e);
+                                Err(error @ ParsingError::EpochPrecision) => return Err(error),
+                                Err(error) => {
+                                    #[cfg(feature = "log")]
+                                    error!("parsing: {}", error);
+                                    if let Some(diagnostics) = diagnostics.as_deref_mut() {
+                                        diagnostics.push(ParsingDiagnostic {
+                                            record_line,
+                                            kind: ParsingDiagnosticKind::ObservationFailure(error),
+                                        });
+                                    }
                                 },
-                                #[cfg(not(feature = "log"))]
-                                Err(_) => {},
                             }
 
                             // reset for next parsing (single alloc)
@@ -293,6 +373,9 @@ impl Record {
             }
 
             // always stack new content
+            if epoch_buf.is_empty() {
+                record_line = input_line;
+            }
             epoch_buf.push_str(&line_buf);
 
             if eos || crinex_error {
