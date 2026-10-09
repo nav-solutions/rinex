@@ -89,9 +89,9 @@ fn esbcdnk_ephv3_binex() {
     // TODO assert!(bds_passed > 0);
     // TODO assert!(qzss_passed > 0);
 
-    assert_eq!(gps_passed, 253);
-    assert_eq!(gal_passed, 806);
-    assert_eq!(sbas_passed, 320);
+    assert_eq!(gps_passed, 257);
+    assert_eq!(gal_passed, 823);
+    assert_eq!(sbas_passed, 2130);
 }
 
 #[test]
