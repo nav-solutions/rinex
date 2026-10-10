@@ -45,6 +45,18 @@ pub enum ParsingError {
     #[error("nav: clock parsing")]
     ClockParsing,
 
+    #[error("nav: missing, invalid or inconsistent Galileo Data sources")]
+    NavGalileoDataSources,
+
+    #[error("nav: invalid transmission time")]
+    NavTransmissionTime,
+
+    #[error("nav: invalid Earth orientation field")]
+    NavEarthOrientationParsing,
+
+    #[error("nav: inconsistent frame identity")]
+    NavFrameIdentity,
+
     #[error("invalid epoch format")]
     EpochFormat,
 
@@ -303,6 +315,12 @@ pub enum ParsingError {
 /// Errors that may rise in Formatting process
 #[derive(Error, Debug)]
 pub enum FormattingError {
+    #[error("nav: key and payload identity disagree")]
+    NavIdentityMismatch,
+    #[error("nav: broadcast identity cannot be represented in the target revision")]
+    NavUnrepresentableIdentity,
+    #[error("NAV4 STO requires a source transmission time")]
+    NavMissingTransmissionTime,
     #[error("i/o: output error")]
     OutputError(#[from] IoError),
 

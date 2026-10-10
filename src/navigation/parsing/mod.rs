@@ -1,43 +1,176 @@
 use crate::{
-    navigation::{Ephemeris, NavFrame, NavFrameType, NavKey, NavMessageType},
-    prelude::{Header, ParsingError, Version, SV},
+    navigation::{
+        Ephemeris, NavFrame, NavFrameType, NavKey, NavMessageSubtype, NavMessageType, StoIdentity,
+        TransmissionTime,
+    },
+    prelude::{Constellation, Epoch, Header, ParsingError, Version, SV},
     utils::validate_ascii,
 };
 
 mod v4;
 use v4::parse as parse_v4_epoch;
 
+fn galileo_identity(
+    sv: SV,
+    eph: &Ephemeris,
+) -> Result<Option<(NavMessageType, u32)>, ParsingError> {
+    if sv.constellation != Constellation::Galileo {
+        return Ok(None);
+    }
+    let value = eph
+        .get_orbit_f64("source")
+        .ok_or(ParsingError::NavGalileoDataSources)?;
+    if !value.is_finite() || value < 0.0 || value > u32::MAX as f64 || value.fract() != 0.0 {
+        return Err(ParsingError::NavGalileoDataSources);
+    }
+    let source = value as u32;
+    // Bits 3/4 are defined reserved bits and must be preserved.
+    if source & !0x31f != 0 || source & 0x300 == 0x300 {
+        return Err(ParsingError::NavGalileoDataSources);
+    }
+    let message = match source & 7 {
+        2 => NavMessageType::FNAV,
+        1 | 4 | 5 => NavMessageType::INAV,
+        _ => return Err(ParsingError::NavGalileoDataSources),
+    };
+    Ok(Some((message, source)))
+}
+
+/// Field, missing-value permission and unknown marker, by message table.
+/// The marker applies only to legacy orbital t_tm, never STO/EOP or GLONASS.
+pub(crate) fn ephemeris_transmission_policy(
+    version: Version,
+    sv: SV,
+    msgtype: NavMessageType,
+) -> (&'static str, bool, Option<f64>) {
+    if sv.constellation == Constellation::Glonass
+        && matches!(msgtype, NavMessageType::LNAV | NavMessageType::FDMA)
+    {
+        return ("frameTime", false, None);
+    }
+    if sv.constellation.is_sbas() {
+        return ("t_tm", false, None);
+    }
+    let legacy = msgtype.is_legacy(sv.constellation);
+    // RINEX 3.04 Tables A6/A8/A12/A14/A18 and corresponding NAV4 tables.
+    let marker = if legacy {
+        Some(if version >= Version::new(4, 2) {
+            999_999_999.999
+        } else {
+            999_900_000.0
+        })
+    } else {
+        None
+    };
+    ("t_tm", legacy, marker)
+}
+
+pub(super) fn key_from_frame(
+    version: Version,
+    epoch: Epoch,
+    sv: SV,
+    mut msgtype: NavMessageType,
+    subtype: Option<NavMessageSubtype>,
+    frame: &NavFrame,
+) -> Result<NavKey, ParsingError> {
+    let mut galileo_data_sources = None;
+    let mut sto_identity = None;
+    let (frmtype, seconds) = match frame {
+        NavFrame::EPH(eph) => {
+            if let Some((message, source)) = galileo_identity(sv, eph)? {
+                if version.major < 4 {
+                    msgtype = message;
+                } else if message != msgtype {
+                    return Err(ParsingError::NavGalileoDataSources);
+                }
+                galileo_data_sources = Some(source);
+            }
+            let (field, optional, unknown) = ephemeris_transmission_policy(version, sv, msgtype);
+            let seconds = eph.get_orbit_f64(field);
+            if seconds.is_none() && !optional {
+                return Err(ParsingError::NavTransmissionTime);
+            }
+            (
+                NavFrameType::Ephemeris,
+                seconds.filter(|v| Some(*v) != unknown),
+            )
+        },
+        NavFrame::STO(sto) => {
+            if epoch != Epoch::from_time_of_week(sto.t_ref.0, sto.t_ref.1, sto.lhs) {
+                return Err(ParsingError::NavFrameIdentity);
+            }
+            sto_identity = Some(sto_identity_fields(sto)?);
+            (
+                NavFrameType::SystemTimeOffset,
+                Some(
+                    sto.transmission_time
+                        .ok_or(ParsingError::NavTransmissionTime)?,
+                ),
+            )
+        },
+        NavFrame::EOP(eop) => (NavFrameType::EarthOrientation, Some(eop.t_tm)),
+        NavFrame::ION(_) => (NavFrameType::IonosphereModel, None),
+    };
+    Ok(NavKey {
+        epoch,
+        sv,
+        msgtype,
+        frmtype,
+        subtype,
+        galileo_data_sources,
+        transmission_time: seconds.map(TransmissionTime::new).transpose()?,
+        sto_identity,
+    })
+}
+
+fn sto_identity_fields(sto: &crate::navigation::TimeOffset) -> Result<StoIdentity, ParsingError> {
+    fn field<const N: usize>(text: &str) -> Result<[u8; N], ParsingError> {
+        if !text.is_ascii() || text.len() > N || text.trim() != text {
+            return Err(ParsingError::NavInvalidTimescale);
+        }
+        let mut out = [b' '; N];
+        out[..text.len()].copy_from_slice(text.as_bytes());
+        Ok(out)
+    }
+    let code = sto
+        .time_system
+        .as_deref()
+        .ok_or(ParsingError::NavInvalidTimescale)?;
+    if code.len() != 4 {
+        return Err(ParsingError::NavInvalidTimescale);
+    }
+    Ok(StoIdentity {
+        time_system: field(code)?,
+        sbas_id: field(sto.sbas.as_deref().unwrap_or(""))?,
+        utc_id: field(sto.utc.as_deref().unwrap_or(""))?,
+    })
+}
+
 /// ([NavKey], [NavFrame]) parsing attempt
 pub fn parse_epoch(header: &Header, content: &str) -> Result<(NavKey, NavFrame), ParsingError> {
     if content.starts_with('>') {
-        parse_v4_epoch(content)
+        parse_v4_epoch(header.version, content)
     } else {
         validate_ascii(content, 1)?;
-        // <V4: limited to LNAV Ephemeris frames.
-        let version = header.version;
-
         let constellation = header
             .constellation
             .ok_or(ParsingError::UndefinedConstellation)?;
-
-        let (epoch, sv, eph) = Ephemeris::parse_v2v3(version, constellation, content.lines())?;
-
-        let key = NavKey {
+        let (epoch, sv, eph) =
+            Ephemeris::parse_v2v3(header.version, constellation, content.lines())?;
+        let frame = NavFrame::EPH(eph);
+        let key = NavKey::from_frame(
+            header.version,
             epoch,
             sv,
-            msgtype: NavMessageType::LNAV,
-            frmtype: NavFrameType::Ephemeris,
-            subtype: None,
-        };
-
-        let frame = NavFrame::EPH(eph);
-
+            NavMessageType::LNAV,
+            None,
+            &frame,
+        )?;
         Ok((key, frame))
     }
 }
 
-/// Returns true if given content matches the beginning of a
-/// Navigation record epoch
+/// Returns true at the beginning of a navigation record epoch.
 pub fn is_new_epoch(line: &str, v: Version) -> bool {
     // Continuation rows start with padding. Recognize the PRN/SV prefix even
     // when the date is damaged, so a bad block cannot absorb its neighbours.
@@ -286,7 +419,8 @@ mod test {
 
     #[test]
     fn parse_galileo_v3() {
-        let header = Header::basic_nav().with_constellation(Constellation::Galileo);
+        let mut header = Header::basic_nav().with_constellation(Constellation::Galileo);
+        header.version = Version::new(3, 4);
 
         let content =
             "E01 2021 01 01 10 10 00 -.101553811692e-02 -.804334376880e-11  .000000000000e+00
@@ -307,7 +441,8 @@ mod test {
             Epoch::from_str("2021-01-01T10:10:00 GST").unwrap(),
         );
         assert_eq!(key.frmtype, NavFrameType::Ephemeris);
-        assert_eq!(key.msgtype, NavMessageType::LNAV);
+        assert_eq!(key.msgtype, NavMessageType::FNAV);
+        assert_eq!(key.galileo_data_sources, Some(258));
 
         let ephemeris = frame.as_ephemeris().unwrap();
 
@@ -451,7 +586,7 @@ mod test {
         let content = "> STO E   IFNV
     2020 09 15 00 00 00 GAUT                                  UTCGAL
      6.048000000000e+05-1.862645149231e-09 8.881784197001e-16 0.000000000000e+00";
-        let (k, _) = parse_v4_epoch(content).unwrap();
+        let (k, _) = parse_v4_epoch(Version::new(4, 0), content).unwrap();
         assert_eq!(k.sv, SV::new(Constellation::Galileo, 0));
         assert_eq!(k.msgtype, NavMessageType::IFNV);
         assert_eq!(k.subtype, None);
@@ -462,20 +597,20 @@ mod test {
     2022 06 08 09 59 48 1.024454832077E-08 2.235174179077E-08-5.960464477539E-08
     -1.192092895508E-07 9.625600000000E+04 1.310720000000E+05-6.553600000000E+04
     -5.898240000000E+05 0.000000000000E+00";
-        let (k, frame) = parse_v4_epoch(content).unwrap();
+        let (k, frame) = parse_v4_epoch(Version::new(4, 0), content).unwrap();
         assert_eq!(k.subtype, Some(NavMessageSubtype::JAPN));
         let model = frame.as_ionosphere_model().unwrap().as_klobuchar().unwrap();
         assert_eq!(model.region, KbRegionCode::Japan);
 
         // unknown subtype
         let content = content.replace("JAPN", "WEST");
-        assert!(parse_v4_epoch(&content).is_err());
+        assert!(parse_v4_epoch(Version::new(4, 0), &content).is_err());
 
         // NavIC records are expressed in GPST
         let content = "> STO I02 LNAV
     2020 09 15 02 05 36 IRUT
      6.048000000000e+05 0.000000000000e+00 0.000000000000e+00 0.000000000000e+00";
-        let (k, _) = parse_v4_epoch(content).unwrap();
+        let (k, _) = parse_v4_epoch(Version::new(4, 0), content).unwrap();
         assert_eq!(k.msgtype, NavMessageType::LNAV);
         assert_eq!(
             k.epoch,

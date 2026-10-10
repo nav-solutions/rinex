@@ -54,7 +54,9 @@ fn esbcdnk_ephv3_to_rtcm() {
 
     assert_eq!(gps1019, 257);
     assert_eq!(glo1020, 510);
-    assert_eq!(gal1045, 823);
+    // Raw ESBC source: 781 F/NAV + 821 I/NAV broadcasts; the old
+    // epoch/SV-only key collapsed distinct Data sources to 823 entries.
+    assert_eq!(gal1045, 1602);
     assert_eq!(bds1042, 357);
     assert_eq!(qzss1044, 15);
 }

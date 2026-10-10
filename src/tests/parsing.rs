@@ -1,5 +1,8 @@
 //! Parser regressions with small inline records and synthetic file envelopes.
+mod broadcast;
 mod diagnostics;
+mod dlr_identity;
+mod galileo_identity;
 mod navigation;
 mod observation;
 
@@ -17,7 +20,7 @@ G04  22049901.763 7 115873014.86117                                             
 
 // First G03 EPH, source lines 14-22 in SEPT00ATA_R_20241310000_01H_MN.rnx.
 // SHA-256: 34db1cd071f106bbf64af594025478a7ffd156669f3a6f9ed0b37f9f00cc152d.
-const GPS_BLOCK: &str = r#"> EPH G03 LNAV
+pub(super) const GPS_BLOCK: &str = r#"> EPH G03 LNAV
 G03 2024 05 10 00 00 00 3.551370464265E-04 1.989519660128E-11 0.000000000000E+00
      1.100000000000E+02-1.118750000000E+02 3.804801342391E-09-2.502756304520E+00
     -5.733221769333E-06 5.448369774967E-03 1.007691025734E-05 5.153735258102E+03
@@ -46,6 +49,29 @@ S27 2024 05 10 02 56 00 5.569308996201e-07 8.367351256311e-11 4.425350000000e+05
      3.457259992000e+04 1.931250000000e-03 1.250000000000e-08 4.096000000000e+03
     -7.398280000000e+01-3.300000000000e-03 3.750000000000e-07 1.480000000000e+02
 "#;
+
+pub(super) fn navigation_text(path: &str) -> String {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(path);
+    let file = std::fs::File::open(&path)
+        .unwrap_or_else(|error| panic!("NAV input {}: {error}", path.display()));
+    let mut text = String::new();
+    if path.extension().is_some_and(|ext| ext == "gz") {
+        std::io::Read::read_to_string(&mut flate2::read::GzDecoder::new(file), &mut text).unwrap();
+    } else {
+        std::io::Read::read_to_string(&mut BufReader::new(file), &mut text).unwrap();
+    }
+    text
+}
+
+pub(super) fn navigation_excerpt(name: &str, spans: &[(usize, usize)]) -> String {
+    let version = if name.starts_with("BRD4") { "V4" } else { "V3" };
+    let text = navigation_text(&format!("data/NAV/{version}/{name}.gz"));
+    let lines: Vec<_> = text.split_inclusive('\n').collect();
+    spans
+        .iter()
+        .map(|&(first, last)| lines[first - 1..last].concat())
+        .collect()
+}
 
 fn parse(text: &str) -> Result<Rinex, ParsingError> {
     Rinex::parse(&mut BufReader::new(text.as_bytes()))
@@ -78,7 +104,7 @@ fn synthetic_obs(version: &str, body: &str) -> String {
     observation_rinex(version, "G    2 L1C C1C", body)
 }
 
-fn navigation_rinex(version: &str, body: &str) -> String {
+pub(super) fn navigation_rinex(version: &str, body: &str) -> String {
     format!(
         "{version:>9}           NAVIGATION DATA     M                   RINEX VERSION / TYPE\n\
          {:<60}END OF HEADER\n{body}",
@@ -161,7 +187,6 @@ mod test {
                         full_path,
                         rinex.err().unwrap()
                     );
-
                     let rinex = rinex.unwrap();
 
                     match data {

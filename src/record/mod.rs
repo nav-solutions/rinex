@@ -34,10 +34,12 @@ pub enum ParsingDiagnosticKind {
     NavigationFailure(crate::ParsingError),
     /// The OBS block could not be decoded and was omitted from the record.
     ObservationFailure(crate::ParsingError),
-    /// The existing last-record-wins behavior is retained and made visible.
+    /// The last successfully decoded NAV record replaces its predecessor.
     DuplicateNavigation {
         key: crate::navigation::NavKey,
         conflicting: bool,
+        /// One-based body line of the replaced record.
+        previous_record_line: usize,
     },
     /// Same behavior as NAV duplicates; the key includes the epoch flag.
     DuplicateObservation {

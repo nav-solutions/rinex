@@ -164,7 +164,8 @@ fn esbcdnk_ephv3_to_ubx_mga() {
     assert_eq!(bds, 357);
     println!("UBX-MGA-BDS: {:4} BDS frames", bds);
 
-    assert_eq!(gal, 823);
+    // Raw ESBC source: 1,602 Galileo broadcasts with distinct full identities.
+    assert_eq!(gal, 1602);
     println!("UBX-MGA-GAL: {:4} GAL frames", gal);
 }
 

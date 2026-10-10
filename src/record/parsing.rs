@@ -46,7 +46,7 @@ impl Record {
     }
 
     /// Parses the body and reports recoverable OBS/NAV failures and duplicate
-    /// keys. Duplicate keys retain the legacy last-record-wins behavior.
+    /// keys. NAV and OBS duplicates retain the last successfully decoded record.
     /// Non-ASCII OBS/NAV blocks are omitted in full. Non-ASCII comments or
     /// compressed input, I/O failures and unrepresentable precision are fatal.
     pub fn parse_with_diagnostics<R: Read>(
@@ -85,6 +85,7 @@ impl Record {
 
         // NAV
         let mut nav_rec = NavRecord::new();
+        let mut nav_previous_lines = diagnostics.as_ref().map(|_| BTreeMap::new());
 
         // OBS
         let mut obs_rec = ObservationRecord::new();
@@ -270,16 +271,26 @@ impl Record {
                                     nav_rec.get(&key).map(|previous| previous != &frame)
                                 });
                                 nav_rec.insert(key, frame);
-                                if let (Some(diagnostics), Some(conflicting)) =
-                                    (diagnostics.as_deref_mut(), conflicting)
-                                {
-                                    diagnostics.push(ParsingDiagnostic {
-                                        record_line,
-                                        kind: ParsingDiagnosticKind::DuplicateNavigation {
-                                            key,
-                                            conflicting,
-                                        },
-                                    });
+                                if let Some(lines) = nav_previous_lines.as_mut() {
+                                    let previous_record_line = lines.insert(key, record_line);
+                                    if let (
+                                        Some(diagnostics),
+                                        Some(conflicting),
+                                        Some(previous_record_line),
+                                    ) = (
+                                        diagnostics.as_deref_mut(),
+                                        conflicting,
+                                        previous_record_line,
+                                    ) {
+                                        diagnostics.push(ParsingDiagnostic {
+                                            record_line,
+                                            kind: ParsingDiagnosticKind::DuplicateNavigation {
+                                                key,
+                                                conflicting,
+                                                previous_record_line,
+                                            },
+                                        });
+                                    }
                                 }
                                 comment_ts = key.epoch;
                             },

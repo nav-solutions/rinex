@@ -32,12 +32,24 @@ impl Ephemeris {
         version: Version,
         msgtype: NavMessageType,
     ) -> Result<(), FormattingError> {
+        self.format_with_transmission(w, sv, version, msgtype, false)
+    }
+
+    pub(crate) fn format_with_transmission<W: Write>(
+        &self,
+        w: &mut BufWriter<W>,
+        sv: SV,
+        version: Version,
+        msgtype: NavMessageType,
+        unknown_transmission: bool,
+    ) -> Result<(), FormattingError> {
         let sv_constellation = if sv.constellation.is_sbas() {
             Constellation::SBAS
         } else {
             sv.constellation
         };
-
+        let (transmission_field, _, marker) =
+            crate::navigation::parsing::ephemeris_transmission_policy(version, sv, msgtype);
         // retrieve standard specs
         let standard_specs = match closest_nav_standards(sv_constellation, version, msgtype) {
             Some(specs) => specs,
@@ -92,7 +104,14 @@ impl Ephemeris {
                 .get_orbit_f64(field)
                 .or_else(|| orbit_alias(field).and_then(|alias| self.get_orbit_f64(alias)))
             {
-                Some(value) => write!(w, "{}", formatter(value))?,
+                Some(value) => {
+                    let value = if unknown_transmission && *field == transmission_field {
+                        marker.ok_or(FormattingError::NavUnrepresentableIdentity)?
+                    } else {
+                        value
+                    };
+                    write!(w, "{}", formatter(value))?;
+                },
                 None => write!(w, "{}", BLANK)?,
             }
         }

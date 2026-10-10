@@ -29,6 +29,10 @@ impl TimeOffset {
             "GLUT" => Ok((TimeScale::UTC, TimeScale::UTC)),
             "GLGP" => Ok((TimeScale::UTC, TimeScale::GPST)),
             // NavIC: GPST aligned
+            "IRGA" => Ok((TimeScale::GPST, TimeScale::GST)),
+            // IRGL retains its literal identity. UTC is only a GLONASS label
+            // proxy here; this does not apply a NavIC/GLONASS time conversion.
+            "IRGL" => Ok((TimeScale::GPST, TimeScale::UTC)),
             "IRUT" => Ok((TimeScale::GPST, TimeScale::UTC)),
             "IRGP" => Ok((TimeScale::GPST, TimeScale::GPST)),
             // beidou / glonass
@@ -133,39 +137,43 @@ impl TimeOffset {
 
     /// Parse [TimeOffset] from RINEXv4 standard
     pub fn parse_v4(line_1: &str, line_2: &str) -> Result<Self, ParsingError> {
-        let (epoch, rem) = line_1.split_at(24);
-        let (timescales, rem) = rem.split_at(4);
-
+        let bad = || ParsingError::NavTimeOffsetParinsg;
+        if !line_1.is_ascii()
+            || !line_2.is_ascii()
+            || line_1.len() > 80
+            || line_2.len() < 80
+            || !line_2[80..].trim().is_empty()
+        {
+            return Err(bad());
+        }
+        let epoch = line_1.get(..23).ok_or_else(bad)?;
+        let timescales = line_1.get(24..line_1.len().min(42)).ok_or_else(bad)?.trim();
         let (lhs, rhs) = Self::parse_lhs_rhs_timescales(timescales)?;
-
-        // UTC identifier (column 63), when the message defines one
-        let utc = match rem.trim() {
-            "" => None,
-            utc => Some(utc.to_string()),
+        // Table A30: separate 18-character correction, SBAS and UTC columns.
+        let indicator = |start: usize| {
+            line_1
+                .get(start..line_1.len().min(start + 18))
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
         };
-
+        let sbas = indicator(43);
+        let utc = indicator(62);
         let t_ref = parse_epoch_in_timescale(epoch.trim(), lhs)?;
         let (t_week, t_nanos) = t_ref.to_time_of_week();
-
-        let (_, rem) = line_2.split_at(23);
-        let (a0, rem) = rem.split_at(19);
-        let (a1, rem) = rem.split_at(19);
-        let (a2, _) = rem.split_at(19);
-
-        // let t_tm = t_tm
-        //     .trim()
-        //     .replace('D', "e")
-        //     .parse::<f64>()
-        //     .map_err(|_| ParsingError::NavTimeOffsetParinsg)?;
-
-        let (a0, a1, a2) = (
-            parse_f64(a0.trim()).map_err(|_| ParsingError::NavTimeOffsetParinsg)?,
-            parse_f64(a1.trim()).map_err(|_| ParsingError::NavTimeOffsetParinsg)?,
-            parse_f64(a2.trim()).map_err(|_| ParsingError::NavTimeOffsetParinsg)?,
-        );
-
+        let t_tm = parse_f64(line_2.get(4..23).ok_or_else(bad)?.trim())
+            .map_err(|_| ParsingError::NavTransmissionTime)?;
+        crate::navigation::TransmissionTime::new(t_tm)?;
+        let a0 = parse_f64(line_2.get(23..42).ok_or_else(bad)?.trim()).map_err(|_| bad())?;
+        let a1 = parse_f64(line_2.get(42..61).ok_or_else(bad)?.trim()).map_err(|_| bad())?;
+        let a2 = parse_f64(line_2.get(61..80).ok_or_else(bad)?.trim()).map_err(|_| bad())?;
+        if ![a0, a1, a2].iter().all(|v| v.is_finite()) {
+            return Err(bad());
+        }
         let mut time_offset = Self::from_time_of_week(t_week, t_nanos, lhs, rhs, (a0, a1, a2));
         time_offset.utc = utc;
+        time_offset.sbas = sbas;
+        time_offset.transmission_time = Some(t_tm);
         time_offset.time_system = Some(timescales.to_string());
 
         Ok(time_offset)
@@ -361,7 +369,7 @@ mod test {
             assert_eq!(time_offset.lhs, lhs);
             assert_eq!(time_offset.rhs, rhs);
             assert_eq!(time_offset.t_ref.0, t_ref_week);
-            //assert_eq!(time_offset.t_ref.1, t_sec * 1_000_000_000);
+            assert_eq!(time_offset.transmission_time, Some(t_sec as f64));
 
             assert_eq!(time_offset.polynomial, (a0, a1, a2),);
 
@@ -371,15 +379,11 @@ mod test {
 
             let formatted = buf.into_inner().unwrap().to_ascii_utf8();
 
-            for (index, line) in formatted.split('\n').enumerate() {
-                if index == 0 {
-                    // assert_eq!(line, line_1);
-                } else if index == 1 {
-                    // assert_eq!(line, line_2);
-                } else if index == 3 {
-                    panic!("two lines expected (only)!");
-                }
-            }
+            let mut lines = formatted.lines();
+            let reparsed =
+                TimeOffset::parse_v4(lines.next().unwrap(), lines.next().unwrap()).unwrap();
+            assert_eq!(reparsed, time_offset);
+            assert_eq!(lines.next(), None);
         }
     }
 

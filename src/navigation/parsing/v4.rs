@@ -4,13 +4,13 @@ use crate::{
         KbRegionCode, NavFrame, NavFrameType, NavKey, NavMessageSubtype, NavMessageType,
         NavicKbModel, NavicNeqnModel, NgModel, TimeOffset,
     },
-    prelude::{Constellation, Epoch, ParsingError, SV},
+    prelude::{Constellation, Epoch, ParsingError, Version, SV},
     utils::validate_ascii,
 };
 
 /// ([NavKey], [NavFrame]) parsing attempt for a V4 frame.
 /// In modern Navigation, all forms may exist.
-pub fn parse(content: &str) -> Result<(NavKey, NavFrame), ParsingError> {
+pub fn parse(version: Version, content: &str) -> Result<(NavKey, NavFrame), ParsingError> {
     validate_ascii(content, 1)?;
     let mut lines = content.lines();
 
@@ -57,7 +57,7 @@ pub fn parse(content: &str) -> Result<(NavKey, NavFrame), ParsingError> {
     // Parses navframe type dependent and epoch of publication
     let (epoch, fr) = match frmtype {
         NavFrameType::Ephemeris => {
-            let (epoch, payload_sv, ephemeris) = Ephemeris::parse_v4(msgtype, lines, ts)?;
+            let (epoch, payload_sv, ephemeris) = Ephemeris::parse_v4(version, msgtype, lines, ts)?;
             if payload_sv != sv {
                 return Err(ParsingError::NavSvMismatch);
             }
@@ -130,13 +130,6 @@ pub fn parse(content: &str) -> Result<(NavKey, NavFrame), ParsingError> {
         },
     };
 
-    let key = NavKey {
-        epoch,
-        sv,
-        msgtype,
-        frmtype,
-        subtype,
-    };
-
+    let key = NavKey::from_frame(version, epoch, sv, msgtype, subtype, &fr)?;
     Ok((key, fr))
 }

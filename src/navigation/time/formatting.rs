@@ -105,37 +105,31 @@ impl TimeOffset {
         Ok(())
     }
 
-    /// Formats the RINEX 4 STO record (Table A33), following the
-    /// "> STO" record header. The message transmission time is not
-    /// stored: the reference time (seconds of week) is written in its slot.
+    /// Format STO preserving the distinct reference epoch, transmission time,
+    /// time-system pair and SBAS/UTC identifiers (RINEX Table A30).
     pub(crate) fn format_v4<W: Write>(&self, w: &mut BufWriter<W>) -> Result<(), FormattingError> {
+        let transmit = self
+            .transmission_time
+            .ok_or(FormattingError::NavMissingTransmissionTime)?;
         let t = Epoch::from_time_of_week(self.t_ref.0, self.t_ref.1, self.lhs);
-
-        write!(
+        writeln!(
             w,
-            "    {} {}",
+            "    {} {:<18} {:<18} {:<18}",
             format_epoch_v4_fields(t),
             self.time_system
                 .as_deref()
                 .unwrap_or_else(|| self.to_lhs_rhs_timescales()),
+            self.sbas.as_deref().unwrap_or(""),
+            self.utc.as_deref().unwrap_or("")
         )?;
-
-        // UTC identifier, column 63
-        if let Some(utc) = &self.utc {
-            write!(w, "{:34}{}", "", utc)?;
-        }
-
-        writeln!(w)?;
-
         writeln!(
             w,
             "    {}{}{}{}",
-            NavFormatter::new((self.t_ref.1 / 1_000_000_000) as f64),
+            NavFormatter::new(transmit),
             NavFormatter::new(self.polynomial.0),
             NavFormatter::new(self.polynomial.1),
-            NavFormatter::new(self.polynomial.2),
+            NavFormatter::new(self.polynomial.2)
         )?;
-
         Ok(())
     }
 }

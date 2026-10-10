@@ -148,6 +148,14 @@ impl OrbitItem {
             return Err(ParsingError::NavNullOrbit);
         }
 
+        // Identity fields cannot be rounded or saturated into a valid bitfield.
+        if name_str == "source"
+            && constellation == Constellation::Galileo
+            && (float < 0.0 || float > u32::MAX as f64 || float.fract() != 0.0)
+        {
+            return Err(ParsingError::NavGalileoDataSources);
+        }
+
         // uninterpreted data remains as native type and we exit.
         match type_str {
             "u8" => {
@@ -668,7 +676,11 @@ mod test {
             let constellation = frame.constellation;
 
             for (name_str, type_str) in frame.items.iter() {
-                let val_str = "1.2345";
+                let val_str = if *name_str == "source" {
+                    "258.0"
+                } else {
+                    "1.2345"
+                };
 
                 let e = OrbitItem::new(name_str, type_str, val_str, &nav_msg, constellation);
                 assert!(

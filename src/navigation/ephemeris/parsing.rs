@@ -190,6 +190,7 @@ impl Ephemeris {
 
     /// Parse Ephemeris (V4) from line iterator
     pub(crate) fn parse_v4(
+        version: Version,
         msg: NavMessageType,
         mut lines: Lines<'_>,
         ts: TimeScale,
@@ -225,8 +226,7 @@ impl Ephemeris {
             return Err(ParsingError::ClockParsing);
         }
 
-        let mut orbits =
-            parse_orbits(Version { major: 4, minor: 0 }, msg, sv.constellation, lines)?;
+        let mut orbits = parse_orbits(version, msg, sv.constellation, lines)?;
 
         if sv.constellation == Constellation::Glonass && msg == NavMessageType::FDMA {
             // RINEX 4 FDMA: seconds of UTC week (table A15).
@@ -616,8 +616,13 @@ mod test {
     -9.578970431139e-10                    2.123000000000e+03
      2.000000000000e+00 0.000000000000e+00-1.862645149231e-09
      1.804920000000e+05";
-        let (epoch, sv, eph) =
-            Ephemeris::parse_v4(NavMessageType::LNAV, content.lines(), TimeScale::GPST).unwrap();
+        let (epoch, sv, eph) = Ephemeris::parse_v4(
+            Version::new(4, 0),
+            NavMessageType::LNAV,
+            content.lines(),
+            TimeScale::GPST,
+        )
+        .unwrap();
         assert_eq!(sv, SV::from_str("I02").unwrap());
         assert_eq!(epoch, Epoch::from_str("2020-09-15T02:05:36 GPST").unwrap());
         assert_eq!(eph.clock_bias, 6.225099787116e-04);
@@ -643,8 +648,13 @@ mod test {
      1.500000000000e+01 0.000000000000e+00                   -3.608874976635e-09
                                            6.984919309616e-09 5.995389074087e-09
      5.191380000000e+05";
-        let (epoch, sv, eph) =
-            Ephemeris::parse_v4(NavMessageType::L1NV, content.lines(), TimeScale::GPST).unwrap();
+        let (epoch, sv, eph) = Ephemeris::parse_v4(
+            Version::new(4, 0),
+            NavMessageType::L1NV,
+            content.lines(),
+            TimeScale::GPST,
+        )
+        .unwrap();
         assert_eq!(sv, SV::from_str("I10").unwrap());
         assert_eq!(epoch, Epoch::from_str("2023-06-24T00:05:00 GPST").unwrap());
         assert_eq!(eph.get_orbit_f64("crs"), Some(-2.593125000000e+02));
@@ -674,7 +684,8 @@ mod test {
      1.500000000000e+01 5.000000000000e+00                    5.184000000000e+05";
         for msgtype in [NavMessageType::L1OC, NavMessageType::L3OC] {
             let (epoch, sv, eph) =
-                Ephemeris::parse_v4(msgtype, content.lines(), TimeScale::UTC).unwrap();
+                Ephemeris::parse_v4(Version::new(4, 0), msgtype, content.lines(), TimeScale::UTC)
+                    .unwrap();
             assert_eq!(sv, SV::from_str("R26").unwrap());
             assert_eq!(epoch, Epoch::from_str("2024-02-03T00:15:00 UTC").unwrap());
             assert_eq!(eph.get_orbit_f64("satPosX"), Some(1.812154053020e+04));
@@ -701,14 +712,24 @@ mod test {
      0.000000000000e+00 7.000000000000e+00-8.789356797934e-09 5.000000000000e+00
     -5.820766091347e-10-6.606569513679e-09-1.178705133498e-08-1.178705133498e-08
      3.558540000000e+05 2.044000000000e+03";
-        let (_, _, eph) =
-            Ephemeris::parse_v4(NavMessageType::CNAV, content.lines(), TimeScale::GPST).unwrap();
+        let (_, _, eph) = Ephemeris::parse_v4(
+            Version::new(4, 0),
+            NavMessageType::CNAV,
+            content.lines(),
+            TimeScale::GPST,
+        )
+        .unwrap();
         assert_eq!(eph.get_orbit_f64("wn_op"), Some(2044.0));
         assert_eq!(eph.get_orbit_f64("flags"), None);
 
         let content = format!("{} 3.000000000000e+00", content);
-        let (_, _, eph) =
-            Ephemeris::parse_v4(NavMessageType::CNAV, content.lines(), TimeScale::GPST).unwrap();
+        let (_, _, eph) = Ephemeris::parse_v4(
+            Version::new(4, 0),
+            NavMessageType::CNAV,
+            content.lines(),
+            TimeScale::GPST,
+        )
+        .unwrap();
         assert_eq!(eph.get_orbit_f64("flags"), Some(3.0));
     }
 }
