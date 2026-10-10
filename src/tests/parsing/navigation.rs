@@ -7,6 +7,74 @@ use crate::{
 use std::{io::BufWriter, str::FromStr};
 
 #[test]
+fn navic_sto_irga_and_irgl_preserve_system_pairs() {
+    // Original IRGL record, source lines 370-372; SHA-256 of the plain file:
+    // 28aa24352328f7537bf78ebb7a27bfab0e4a397d47ae5d0215fd242fe37c6770.
+    let source =
+        super::navigation_excerpt("BRD400DLR_S_20230710000_01D_MN.rnx", &[(1, 9), (370, 372)]);
+    for (pair, rhs) in [("IRGL", TimeScale::UTC), ("IRGA", TimeScale::GST)] {
+        // IRGA is a synthetic derivative: only the original pair is changed.
+        let text = source.replace("IRGL", pair);
+        let (rinex, diagnostics) = super::parse_diagnostics(&text);
+        assert!(diagnostics.is_empty(), "{pair}: {diagnostics:?}");
+        let records = rinex.record.as_nav().unwrap();
+        assert_eq!(records.len(), 1, "{pair}");
+        let (key, frame) = records.first_key_value().unwrap();
+        let sto = frame.as_system_time().unwrap();
+        assert_eq!(key.sv, SV::from_str("I03").unwrap());
+        assert_eq!(
+            key.epoch,
+            Epoch::from_str("2023-03-12T00:04:48 GPST").unwrap()
+        );
+        assert_eq!(
+            key.sto_identity.unwrap().time_system.as_slice(),
+            pair.as_bytes()
+        );
+        assert_eq!(sto.time_system.as_deref(), Some(pair));
+        assert_eq!((sto.lhs, sto.rhs), (TimeScale::GPST, rhs));
+        assert_eq!(sto.transmission_time, Some(372.0));
+        assert_eq!(
+            sto.polynomial,
+            (5.410402081907e-08, 1.509903313490e-14, 1.321371397717e-19)
+        );
+        let mut writer = BufWriter::new(Vec::new());
+        rinex.format(&mut writer).unwrap();
+        let output = writer.into_inner().unwrap();
+        let (back, diagnostics) = super::parse_diagnostics(std::str::from_utf8(&output).unwrap());
+        assert!(diagnostics.is_empty(), "{pair}: {diagnostics:?}");
+        assert_eq!(back.record, rinex.record, "{pair}");
+    }
+}
+
+#[test]
+fn navic_time_system_corr_irga_and_irgl_preserve_system_pairs() {
+    // Original NAV3 header: its IRGL correction is at source line 21.
+    let source = super::navigation_excerpt("BRDM00DLR_S_20241310000_01D_MN.rnx", &[(1, 26)]);
+    for (pair, rhs) in [("IRGL", TimeScale::UTC), ("IRGA", TimeScale::GST)] {
+        // IRGA is a synthetic derivative of the unchanged IRGL coefficients.
+        let text = source.replace("IRGL", pair);
+        let rinex = parse(&text).unwrap();
+        let nav = rinex.header.nav.as_ref().unwrap();
+        let correction = nav
+            .time_offsets
+            .iter()
+            .find(|offset| offset.time_system.as_deref() == Some(pair))
+            .unwrap_or_else(|| panic!("missing {pair} TIME SYSTEM CORR"));
+        assert_eq!((correction.lhs, correction.rhs), (TimeScale::GPST, rhs));
+        assert_eq!(correction.t_ref, (2313, 517200 * 1_000_000_000));
+        assert_eq!(
+            correction.polynomial,
+            (1.3242242858e-08, -6.172840017e-14, 0.0)
+        );
+        let mut writer = BufWriter::new(Vec::new());
+        rinex.format(&mut writer).unwrap();
+        let output = writer.into_inner().unwrap();
+        let back = parse(std::str::from_utf8(&output).unwrap()).unwrap();
+        assert_eq!(back.header.nav, rinex.header.nav, "{pair}");
+    }
+}
+
+#[test]
 fn real_nav_keeps_zero_and_blank_distinct() {
     let rnx = parse(&navigation_rinex("4.00", GLO_BLOCK)).unwrap();
     let nav = rnx.record.as_nav().unwrap();

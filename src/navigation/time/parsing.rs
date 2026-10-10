@@ -29,6 +29,7 @@ impl TimeOffset {
             "GLUT" => Ok((TimeScale::UTC, TimeScale::UTC)),
             "GLGP" => Ok((TimeScale::UTC, TimeScale::GPST)),
             // NavIC: GPST aligned
+            "IRGA" => Ok((TimeScale::GPST, TimeScale::GST)),
             // IRGL retains its literal identity. UTC is only a GLONASS label
             // proxy here; this does not apply a NavIC/GLONASS time conversion.
             "IRGL" => Ok((TimeScale::GPST, TimeScale::UTC)),
