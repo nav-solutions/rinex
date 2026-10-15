@@ -201,10 +201,21 @@ fn event_epoch_in_file() {
         content.push('\n');
     }
 
-    let rinex = Rinex::parse(&mut BufReader::new(content.as_bytes())).unwrap();
-
-    let epochs = rinex.epoch_iter().collect::<Vec<_>>();
-    assert_eq!(epochs.len(), 2, "both epochs around the event are expected");
+    use crate::observation::{ObsDuplicatePolicy, ObsOutcome, ObservationReader};
+    let all = ObservationReader::new(BufReader::new(content.as_bytes()))
+        .unwrap()
+        .collect_records(ObsDuplicatePolicy::Preserve)
+        .unwrap();
+    assert_eq!(all.items.len(), 3);
+    assert!(matches!(all.items[1].outcome, ObsOutcome::Event(_)));
+    assert_eq!(
+        all.items
+            .iter()
+            .filter(|i| matches!(i.outcome, ObsOutcome::Observation { .. }))
+            .count(),
+        2
+    );
+    assert!(Rinex::parse(&mut BufReader::new(content.as_bytes())).is_err());
 }
 
 // Issue 356: HKWS00HKG_R_20250300000_01D_30S_MO, an epoch of 46 satellites is
@@ -302,14 +313,29 @@ fn reported_event_epoch_in_file() {
         content.push('\n');
     }
 
-    let rinex = Rinex::parse(&mut BufReader::new(content.as_bytes())).unwrap();
-
-    // both epochs around the event are complete: the special records
-    // that look like comments did not disturb the decompressor
-    let signals = rinex
-        .observations_iter()
-        .map(|(_, v)| v.signals.len())
-        .collect::<Vec<_>>();
-
+    use crate::observation::{ObsDuplicatePolicy, ObsEvent, ObsOutcome, ObservationReader};
+    let all = ObservationReader::new(BufReader::new(content.as_bytes()))
+        .unwrap()
+        .collect_records(ObsDuplicatePolicy::Preserve)
+        .unwrap();
+    let signals: Vec<_> = all
+        .items
+        .iter()
+        .filter_map(|i| match &i.outcome {
+            ObsOutcome::Observation { data, .. } => Some(data.signals.len()),
+            _ => None,
+        })
+        .collect();
     assert_eq!(signals, [46, 46]);
+    assert!(
+        matches!(&all.items[1].outcome, ObsOutcome::Event(ObsEvent::Special { records, epoch: None, .. }) if records.len() == 213)
+    );
+    let rinex = Rinex::parse(&mut BufReader::new(content.as_bytes())).unwrap();
+    assert_eq!(
+        rinex
+            .observations_iter()
+            .map(|(_, v)| v.signals.len())
+            .collect::<Vec<_>>(),
+        signals
+    );
 }

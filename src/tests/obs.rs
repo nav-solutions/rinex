@@ -125,14 +125,32 @@ fn v2_rovn0010_21o() {
                 2021-01-01T00:00:30 GPST,
                 2021-01-01T01:10:00 GPST,
                 2021-01-01T02:25:00 GPST,
-                2021-01-01T02:25:30 GPST,
-                2021-01-01T02:26:00 GPST
+                2021-01-01T02:25:30 GPST
             ",
             ),
             vec![],
             vec![],
         );
 
+    // The source ends at line 572: the third (all-blank) observation
+    // record of the final R20 is missing. Preserve this as a rejected block,
+    // rather than treating a potentially truncated epoch as complete.
+    use crate::observation::{ObsDuplicatePolicy, ObsOutcome, ObservationReader};
+    let source =
+        ObservationReader::new(std::io::BufReader::new(std::fs::File::open(&path).unwrap()))
+            .unwrap()
+            .collect_records(ObsDuplicatePolicy::Preserve)
+            .unwrap();
+    assert!(matches!(
+        &source.items.last().unwrap().outcome,
+        ObsOutcome::Rejected {
+            error: crate::ParsingError::ObsSatelliteCount {
+                expected: 20,
+                found: 19
+            },
+            ..
+        }
+    ));
     let agency = dut.header.agency.as_ref().unwrap();
     assert_eq!(agency, "TU Delft for Deltares");
 

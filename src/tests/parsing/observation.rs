@@ -104,14 +104,31 @@ fn synthetic_clock_absent_zero_nonzero_and_no_epoch_leak() {
 
 #[test]
 fn synthetic_short_obs_lines_and_numeric_boundaries() {
-    let mut body = epoch("0.0000000", None, None);
-    body.push_str("\nG\nG03\n");
-    let rnx = parse(&synthetic_obs("4.02", &body)).unwrap();
+    let good = epoch("0.0000000", None, None);
+    let rnx = parse(&synthetic_obs("4.02", &good)).unwrap();
     let (_, observations) = rnx.observations_iter().next().unwrap();
     assert_eq!(observations.signals.len(), 2);
     assert_eq!(observations.signals[0].value, -12.5);
     assert_eq!(observations.signals[0].lli.unwrap().bits(), 1);
     assert_eq!(observations.signals[1].value, 0.0);
+    // Nonblank malformed satellite rows reject the complete block; the next
+    // correctly framed epoch survives, with no leaked partial samples.
+    let body = good + "\nG\nG03\n" + &epoch("1.0000000", None, None);
+    let (rnx, diagnostics) = super::parse_diagnostics(&synthetic_obs("4.02", &body));
+    assert_eq!(diagnostics.len(), 1);
+    assert!(matches!(
+        diagnostics[0].kind,
+        crate::record::ParsingDiagnosticKind::ObservationFailure(
+            ParsingError::ObsSignalParsing { .. }
+        )
+    ));
+    let observations: Vec<_> = rnx.observations_iter().collect();
+    assert_eq!(observations.len(), 1);
+    assert_eq!(
+        observations[0].0.epoch.to_string(),
+        "2024-05-10T00:00:01 GPST"
+    );
+    assert_eq!(observations[0].1.signals.len(), 2);
 }
 
 #[test]

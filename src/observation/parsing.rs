@@ -1,21 +1,18 @@
 //! Observation RINEX parsing
 use crate::{
     epoch::{parse_in_timescale as parse_epoch_in_timescale, parse_utc as parse_utc_epoch},
-    observation::{
-        ClockObservation, EpochFlag, LliFlags, ObsKey, Observations, SignalObservation, SNR,
-    },
+    observation::{ClockObservation, EpochFlag, LliFlags, Observations, SignalObservation, SNR},
     parse_f64,
     prelude::{Constellation, Duration, Header, Observable, ParsingError, TimeScale, Version, SV},
     utils::validate_ascii,
 };
 
-use std::{
-    collections::HashMap,
-    str::{FromStr, Lines},
-};
+#[cfg(test)]
+use crate::observation::ObsKey;
+
+use std::str::FromStr;
 
 // TODO: see if we can get rid of num_integer
-use num_integer::div_ceil;
 
 // #[cfg(feature = "log")]
 // use log::{debug, error};
@@ -59,84 +56,83 @@ pub fn is_new_epoch(line: &str, v: Version) -> bool {
     }
 }
 
-/// Parses record entries from readable content
-/// ## Input
-///   - header: reference to previously parsed [Header]
-///   - content: readable content
-///   - ts: [TimeScale] defined by [Header]
-///   - observations: preallocated [Observations] for performance issue.
-/// ## Output
-///   - [ObsKey] record indexer
-pub fn parse_epoch(
+/// Fields confirmed by the native decoder. An absent epoch or flag must not be
+/// guessed. In particular, special events may legitimately have no timestamp.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ObsContext {
+    pub flag: Option<EpochFlag>,
+    pub epoch: Option<crate::prelude::Epoch>,
+}
+
+pub(super) struct EpochDescriptor {
+    pub epoch: Option<crate::prelude::Epoch>,
+    pub flag: EpochFlag,
+    pub count: usize,
+    pub clock: Option<f64>,
+}
+
+pub(super) fn descriptor_fields(
+    line: &str,
+    version: Version,
+) -> Result<(EpochFlag, usize), ParsingError> {
+    let offset = if version.major < 3 { 26 } else { 29 };
+    let flag = line
+        .get(offset..offset + 3)
+        .ok_or(ParsingError::EpochFormat)?;
+    let count = line
+        .get(offset + 3..offset + 6)
+        .ok_or(ParsingError::EpochFormat)?;
+    Ok((
+        EpochFlag::from_str(flag.trim())?,
+        count
+            .trim()
+            .parse::<u16>()
+            .map_err(|_| ParsingError::NumSatParsing)? as usize,
+    ))
+}
+
+pub(super) fn parse_descriptor(
     header: &Header,
-    content: &str,
+    line: &str,
     ts: TimeScale,
-    observations: &mut Observations,
-) -> Result<ObsKey, ParsingError> {
-    validate_ascii(content, 1)?;
-    let mut lines = content.lines();
-
-    let mut line = match lines.next() {
-        Some(l) => l,
-        _ => return Err(ParsingError::EmptyEpoch),
-    };
-
-    // epoch::
-    let mut offset: usize = 2+1 // Y
-        +2+1 // d
-        +2+1 // m
-        +2+1 // h
-        +2+1 // m
-        +11; // secs
-
-    // V > 2 epoch::year is a 4 digit number
-    if header.version.major > 2 {
-        offset += 2
-    }
-
-    // V > 2 might start with a ">" marker
-    if line.starts_with('>') {
-        line = line.split_at(1).1;
-    }
-
-    if line.len() < offset + 6 {
+    context: &mut ObsContext,
+) -> Result<EpochDescriptor, ParsingError> {
+    validate_ascii(line, 1)?;
+    if header.version.major >= 3 && !line.starts_with('>') {
         return Err(ParsingError::EpochFormat);
     }
-
-    let (date, rem) = line.split_at(offset);
-    let mut epoch = parse_epoch_in_timescale(date, ts)?;
-
-    let (flag, rem) = rem.split_at(3);
-    let flag = EpochFlag::from_str(flag.trim())?;
-
-    let (num_sat, rem) = rem.split_at(3);
-    let num_sat = num_sat
-        .trim()
-        .parse::<u16>()
-        .map_err(|_| ParsingError::NumSatParsing)?;
-
-    // grab possible clock offset
-    let offs: Option<&str> = match header.version.major < 3 {
-        true => {
-            // RINEX 2: F12.9 in columns 69-80, right after the (up to 12) SVs
-            // listed on the first line of the epoch description.
-            const V2_CLOCK_OFFSET: usize = 68;
-            if line.len() > V2_CLOCK_OFFSET {
-                Some(line.split_at(V2_CLOCK_OFFSET).1.trim())
-            } else {
-                None
-            }
-        },
-        false => {
-            // Columns 42-56 in the original line. The '>' has been removed.
-            // Do not include the optional RINEX 4.02 time extension.
-            line.get(40..line.len().min(55)).map(str::trim)
-        },
+    let offset = if header.version.major < 3 { 26 } else { 29 };
+    let date = line
+        .get(..offset)
+        .ok_or(ParsingError::EpochFormat)?
+        .trim_start_matches('>');
+    let flag = line
+        .get(offset..offset + 3)
+        .ok_or(ParsingError::EpochFormat)?;
+    let parsed_flag = EpochFlag::from_str(flag.trim());
+    context.flag = parsed_flag.as_ref().ok().copied();
+    let special = matches!(
+        context.flag,
+        Some(
+            EpochFlag::AntennaBeingMoved
+                | EpochFlag::NewSiteOccupation
+                | EpochFlag::HeaderInformationFollows
+                | EpochFlag::ExternalEvent
+        )
+    );
+    let mut epoch = if special && date.trim().is_empty() {
+        // Flag 5 has a significant epoch: RINEX 2.11 Table A2 / 4.02 Table A3.
+        if context.flag == Some(EpochFlag::ExternalEvent) {
+            return Err(ParsingError::EpochFormat);
+        }
+        None
+    } else {
+        Some(parse_epoch_in_timescale(date, ts)?)
     };
-
-    if header.version >= (Version { major: 4, minor: 2 }) {
-        if let Some(extension) = line.get(56..).map(str::trim).filter(|s| !s.is_empty()) {
-            // Table A3: append these five digits to F11.7 seconds (picoseconds).
+    let flag = parsed_flag?;
+    let (_, count) = descriptor_fields(line, header.version)?;
+    if header.version >= Version::new(4, 2) {
+        if let Some(extension) = line.get(57..).map(str::trim).filter(|s| !s.is_empty()) {
             if extension.len() != 5 || !extension.bytes().all(|b| b.is_ascii_digit()) {
                 return Err(ParsingError::EpochParsing);
             }
@@ -146,335 +142,279 @@ pub fn parse_epoch(
             if picoseconds % 1000 != 0 {
                 return Err(ParsingError::EpochPrecision);
             }
-            epoch += Duration::from_nanoseconds((picoseconds / 1000) as f64);
+            if let Some(epoch) = &mut epoch {
+                *epoch += Duration::from_nanoseconds((picoseconds / 1000) as f64);
+            } else {
+                return Err(ParsingError::EpochParsing);
+            }
         }
     }
-
-    if let Some(offset) = offs.filter(|s| !s.is_empty()) {
-        let offset_s = parse_f64(offset).map_err(|_| ParsingError::ObsClockParsing)?;
-        if !offset_s.is_finite() {
-            return Err(ParsingError::ObsClockParsing);
-        }
-        observations.clock = Some(ClockObservation::default().with_offset_s(epoch, offset_s));
+    context.epoch = epoch;
+    let clock_start = if header.version.major < 3 { 68 } else { 41 };
+    let clock_end = if header.version.major < 3 { 80 } else { 56 };
+    let clock = line
+        .get(clock_start..line.len().min(clock_end))
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let clock = clock
+        .map(|s| parse_f64(s).map_err(|_| ParsingError::ObsClockParsing))
+        .transpose()?;
+    if clock.is_some_and(|v| !v.is_finite()) {
+        return Err(ParsingError::ObsClockParsing);
     }
-
-    match flag {
-        EpochFlag::Ok | EpochFlag::PowerFailure | EpochFlag::CycleSlip => {
-            parse_observations(header, num_sat, rem, lines, &mut observations.signals)?;
-        },
-        _ => {
-            // Hardware events are not supported yet (coming soon)
-            return Err(ParsingError::ObsHardwareEvent);
-        },
-    }
-
-    Ok(ObsKey { epoch, flag })
+    Ok(EpochDescriptor {
+        epoch,
+        flag,
+        count,
+        clock,
+    })
 }
 
-fn parse_observations(
+// Internal single-block entry point, also used by the existing test toolkit.
+// Output is replaced atomically; failed calls leave it empty.
+#[cfg(test)]
+pub(crate) fn parse_epoch(
     header: &Header,
-    num_sat: u16,
-    rem: &str,
-    mut lines: Lines<'_>,
-    signals: &mut Vec<SignalObservation>,
-) -> Result<(), ParsingError> {
-    // retrieve header specs
-    let constellation = header.constellation;
+    content: &str,
+    ts: TimeScale,
+    observations: &mut Observations,
+) -> Result<ObsKey, ParsingError> {
+    parse_epoch_with_context(header, content, ts, observations).0
+}
 
-    let obs = header.obs.as_ref().unwrap();
-    let observables = &obs.codes;
+#[cfg(test)]
+pub(crate) fn parse_epoch_with_context(
+    header: &Header,
+    content: &str,
+    ts: TimeScale,
+    observations: &mut Observations,
+) -> (Result<ObsKey, ParsingError>, ObsContext) {
+    *observations = Observations::default();
+    let mut context = ObsContext::default();
+    let result = (|| {
+        let first = content.lines().next().ok_or(ParsingError::EmptyEpoch)?;
+        let descriptor = parse_descriptor(header, first, ts, &mut context)?;
+        if !matches!(
+            descriptor.flag,
+            EpochFlag::Ok | EpochFlag::PowerFailure | EpochFlag::CycleSlip
+        ) {
+            return Err(ParsingError::ObsHardwareEvent);
+        }
+        let (data, _) = parse_observations(header, content, &descriptor)?;
+        let key = ObsKey {
+            epoch: descriptor.epoch.ok_or(ParsingError::EpochFormat)?,
+            flag: descriptor.flag,
+        };
+        *observations = data;
+        Ok(key)
+    })();
+    (result, context)
+}
 
-    // V1 / V2 tedious case
-    let rem = rem.trim();
-    let remainder_len = rem.len();
-
+pub(super) fn parse_observations(
+    header: &Header,
+    content: &str,
+    descriptor: &EpochDescriptor,
+) -> Result<(Observations, Vec<SV>), ParsingError> {
+    validate_ascii(content, 1)?;
+    let specs = header
+        .obs
+        .as_ref()
+        .ok_or(ParsingError::BadObsBadTimescaleDefinition)?;
+    let mut lines = content
+        .lines()
+        .enumerate()
+        .filter(|(_, line)| !crate::is_rinex_comment(line));
+    let (_, first) = lines.next().ok_or(ParsingError::EmptyEpoch)?;
+    let mut observations = Observations::default();
+    let mut present_satellites = Vec::with_capacity(descriptor.count);
+    if let (Some(epoch), Some(offset)) = (descriptor.epoch, descriptor.clock) {
+        observations.clock = Some(ClockObservation::default().with_offset_s(epoch, offset));
+    }
     if header.version.major < 3 {
-        // Sets the satellite systems description, which consits in
-        //  - end of current line
-        //  - possible following lines
-
-        // starts with first line content
-        let end = (12 * 3).min(remainder_len);
-        let mut systems_str = rem[..end].to_string();
-        let mut systems_str_len = systems_str.len();
-
-        // grab following lines (if we need to)
-        while systems_str_len / 3 < num_sat.into() {
-            if let Some(line) = lines.next() {
-                let trimmed = line.trim();
-                systems_str_len += trimmed.len();
-                systems_str.push_str(trimmed);
-            } else {
+        let mut satellites = first.get(32..first.len().min(68)).unwrap_or("").to_owned();
+        let extra = descriptor.count.div_ceil(12).saturating_sub(1);
+        for _ in 0..extra {
+            let (_, line) = lines
+                .next()
+                .ok_or(ParsingError::BadV2SatellitesDescription)?;
+            if !line.get(..32).is_some_and(|s| s.trim().is_empty()) {
                 return Err(ParsingError::BadV2SatellitesDescription);
             }
+            satellites.push_str(line.get(32..line.len().min(68)).unwrap_or(""));
         }
-
-        let systems_str_len = systems_str.len();
-        parse_signals_v2(
-            &systems_str,
-            systems_str_len,
-            constellation,
-            observables,
-            &mut lines,
-            signals,
-        );
-    } else {
-        parse_signals_v3(observables, lines, signals);
-    }
-
-    Ok(())
-}
-
-/// Parses all [SignalObservation]s as described by following V2 content.
-/// Old format is tedious:
-///   - vehicle description is contained in first line
-///   - wrapped in as many lines as needed
-/// Inputs
-///   - system_str: first line description
-///   - constellation: [Constellation] specs defined in [Header]
-///   - observables: reference to [Observable]s specs defined in [Header]
-///   - lines: remaining [Lines] Iterator via mutable reference
-fn parse_signals_v2(
-    systems_str: &str,
-    systems_str_len: usize,
-    head_constellation: Option<Constellation>,
-    head_observables: &HashMap<Constellation, Vec<Observable>>,
-    lines: &mut Lines<'_>,
-    signals: &mut Vec<SignalObservation>,
-) {
-    const SVNN_SIZE: usize = 3; // SVNN standard
-    const MAX_OBSERVABLES_LINE: usize = 5; // max in a single line
-    const OBSERVABLE_F14_WIDTH: usize = 14;
-    const OBSERVABLE_WIDTH: usize = OBSERVABLE_F14_WIDTH + 2; // data +lli +snr +1separator
-
-    // basic check that avoid entering the loop for nothing
-    if systems_str_len < SVNN_SIZE {
-        // does not look good (=rubbish first line)
-        //#[cfg(feature = "log")]
-        //error!("parse_sig_v2(aborted): empty content");
-        return;
-    }
-
-    let mut sv_ptr = 0;
-
-    // Process each SV sequentially
-    while sv_ptr < systems_str_len {
-        let sv_end = (sv_ptr + SVNN_SIZE).min(systems_str_len);
-        let system = systems_str[sv_ptr..sv_end].trim();
-
-        if system.is_empty() {
-            // blank slot: fewer than twelve vehicles on a line that
-            // carries a clock offset
-            break;
-        }
-
-        let sv;
-
-        if let Ok(found) = SV::from_str(system) {
-            sv = found;
-        } else {
-            match head_constellation {
-                Some(Constellation::Mixed) | None => break,
-                Some(gnss) => {
-                    if let Ok(prn) = system.trim().parse::<u8>() {
-                        sv = SV {
-                            prn,
-                            constellation: gnss,
-                        };
-                    } else {
-                        break;
-                    }
-                },
+        let mut seen = std::collections::HashSet::new();
+        for index in 0..descriptor.count {
+            let system = satellites
+                .get(index * 3..index * 3 + 3)
+                .ok_or(ParsingError::BadV2SatellitesDescription)?
+                .trim();
+            let sv = SV::from_str(system)
+                .or_else(|_| {
+                    let constellation = header
+                        .constellation
+                        .filter(|c| *c != Constellation::Mixed)
+                        .ok_or(ParsingError::BadV2SatellitesDescription)?;
+                    Ok::<_, ParsingError>(SV {
+                        constellation,
+                        prn: system
+                            .parse::<u8>()
+                            .map_err(|_| ParsingError::BadV2SatellitesDescription)?,
+                    })
+                })
+                .map_err(|_| ParsingError::BadV2SatellitesDescription)?;
+            if !seen.insert(sv) {
+                return Err(ParsingError::BadV2SatellitesDescription);
             }
-        }
-
-        let observables = if sv.constellation.is_sbas() {
-            head_observables.get(&Constellation::SBAS)
-        } else {
-            head_observables.get(&sv.constellation)
-        };
-
-        if let Some(observables) = observables {
-            let num_lines = div_ceil(observables.len(), MAX_OBSERVABLES_LINE);
-            let mut obs_ptr = 0;
-
-            for _ in 0..num_lines {
-                let line = match lines.next() {
-                    Some(l) => l,
-                    None => return, // EOF
-                };
-
-                let line_width = line.len();
-                let trimmed_len = line.trim().len();
-
-                if trimmed_len == 0 {
-                    obs_ptr += MAX_OBSERVABLES_LINE;
-                    continue;
-                }
-
-                let num_obs_this_line = div_ceil(line_width, OBSERVABLE_WIDTH);
-                let mut offset = 0;
-
-                //#[cfg(feature = "log")]
-                //debug!(
-                //   "line: \"{}\" [sv={}/{} obs={}/{}]",
-                //   line,
-                //   sv_ptr,
-                //   systems_str_len,
-                //   obs_ptr,
-                //   observables.len()
-                //);
-
-                for _ in 0..num_obs_this_line {
-                    if obs_ptr >= observables.len() {
-                        break;
-                    }
-
-                    let end = (offset + OBSERVABLE_WIDTH).min(line_width);
-                    let slice = &line[offset..end];
-
-                    let mut lli = Option::<LliFlags>::None;
-                    if slice.len() > OBSERVABLE_F14_WIDTH {
-                        let lli_slice = &slice[OBSERVABLE_F14_WIDTH..OBSERVABLE_F14_WIDTH + 1];
-                        if let Ok(unsigned) = lli_slice.parse::<u8>() {
-                            lli = LliFlags::from_bits(unsigned);
-                        }
-                    }
-
-                    let mut snr = Option::<SNR>::None;
-                    if slice.len() > OBSERVABLE_F14_WIDTH + 1 {
-                        let snr_slice = &slice[OBSERVABLE_F14_WIDTH + 1..OBSERVABLE_F14_WIDTH + 2];
-                        if let Ok(found) = SNR::from_str(snr_slice) {
-                            snr = Some(found);
-                        }
-                    }
-
-                    let end = slice.len().min(OBSERVABLE_F14_WIDTH);
-                    if let Ok(value) = parse_f64(slice[..end].trim()) {
-                        signals.push(SignalObservation {
-                            sv,
-                            snr,
-                            lli,
-                            value,
-                            observable: observables[obs_ptr].clone(),
-                        });
-                    }
-
-                    obs_ptr += 1;
-                    offset += OBSERVABLE_F14_WIDTH + 2;
-                }
-
-                if num_obs_this_line < MAX_OBSERVABLES_LINE {
-                    obs_ptr += MAX_OBSERVABLES_LINE - num_obs_this_line;
-                }
-            }
-        } else {
-            break;
-        }
-        sv_ptr += SVNN_SIZE;
-    }
-}
-
-/// Parses all [SignalObservation]s described by following [Lines].
-fn parse_signals_v3(
-    head_observables: &HashMap<Constellation, Vec<Observable>>,
-    lines: Lines<'_>,
-    signals: &mut Vec<SignalObservation>,
-) {
-    const SVNN_SIZE: usize = 3;
-    const OBSERVABLE_F14_WIDTH: usize = 14;
-    const OBSERVABLE_WIDTH: usize = 16; // F14 +2 flags
-
-    let mut sv; // single alloc
-
-    // browse all lines
-    for line in lines {
-        // identify SV
-        let sv_str = match line.get(..SVNN_SIZE) {
-            Some(s) => s,
-            _ => continue,
-        };
-        match SV::from_str(sv_str) {
-            Ok(found) => {
-                sv = found;
-            },
-            Err(_) => {
-                continue;
-            },
-        }
-
-        // identify [Observable]s
-        let observables = if sv.constellation.is_sbas() {
-            head_observables.get(&Constellation::SBAS)
-        } else {
-            head_observables.get(&sv.constellation)
-        };
-
-        if observables.is_none() {
-            continue;
-        }
-
-        let observables = observables.unwrap();
-
-        let num_obs = div_ceil(line.len() - SVNN_SIZE, OBSERVABLE_WIDTH);
-        let mut offset = SVNN_SIZE;
-
-        for i in 0..num_obs {
-            if i == observables.len() {
-                // line is abnormally long (trailing whitespaces)
-                break;
-            }
-
-            let end = (offset + OBSERVABLE_WIDTH).min(line.len());
-            let slice = &line[offset..end];
-
-            let mut lli = Option::<LliFlags>::None;
-
-            if slice.len() > OBSERVABLE_F14_WIDTH {
-                let lli_slice = &slice[OBSERVABLE_F14_WIDTH..OBSERVABLE_F14_WIDTH + 1];
-                match lli_slice.parse::<u8>() {
-                    Ok(unsigned) => {
-                        lli = LliFlags::from_bits(unsigned);
-                    },
-                    Err(_e) => {
-                        //#[cfg(feature = "log")]
-                        //error!("lli: {}", e);
-                    },
-                }
-            }
-
-            let mut snr = Option::<SNR>::None;
-
-            if slice.len() > OBSERVABLE_F14_WIDTH + 1 {
-                let snr_slice = &slice[OBSERVABLE_F14_WIDTH + 1..OBSERVABLE_F14_WIDTH + 2];
-
-                if let Ok(value) = snr_slice.parse::<u8>() {
-                    snr = Some(SNR::from(value));
-                }
-            }
-
-            let end = OBSERVABLE_F14_WIDTH.min(slice.len());
-
-            if let Ok(value) = parse_f64(slice[..end].trim()) {
-                signals.push(SignalObservation {
+            present_satellites.push(sv);
+            let constellation = if sv.constellation.is_sbas() {
+                Constellation::SBAS
+            } else {
+                sv.constellation
+            };
+            let codes = specs
+                .codes
+                .get(&constellation)
+                .ok_or(ParsingError::BadObservable)?;
+            for chunk in codes.chunks(5) {
+                let (line_index, line) = lines.next().ok_or(ParsingError::ObsSatelliteCount {
+                    expected: descriptor.count,
+                    found: index,
+                })?;
+                parse_signal_fields(
                     sv,
-                    value,
-                    lli,
-                    snr,
-                    observable: observables[i].clone(),
+                    chunk,
+                    line,
+                    0,
+                    line_index + 1,
+                    descriptor.flag == EpochFlag::CycleSlip,
+                    &mut observations.signals,
+                )?;
+            }
+        }
+        if lines.any(|(_, l)| !l.trim().is_empty()) {
+            return Err(ParsingError::ObsSatelliteCount {
+                expected: descriptor.count,
+                found: descriptor.count + 1,
+            });
+        }
+    } else {
+        let mut seen = std::collections::HashSet::new();
+        for (line_index, line) in lines {
+            if line.trim().is_empty() {
+                continue;
+            }
+            let sv = line.get(..3).and_then(|s| SV::from_str(s).ok()).ok_or(
+                ParsingError::ObsSignalParsing {
+                    line: line_index + 1,
+                    byte_column: 1,
+                },
+            )?;
+            if !seen.insert(sv) {
+                return Err(ParsingError::ObsSatelliteCount {
+                    expected: descriptor.count,
+                    found: seen.len() + 1,
                 });
             }
-
-            offset += OBSERVABLE_F14_WIDTH + 2;
+            present_satellites.push(sv);
+            let constellation = if sv.constellation.is_sbas() {
+                Constellation::SBAS
+            } else {
+                sv.constellation
+            };
+            let codes = specs
+                .codes
+                .get(&constellation)
+                .ok_or(ParsingError::BadObservable)?;
+            parse_signal_fields(
+                sv,
+                codes,
+                line,
+                3,
+                line_index + 1,
+                descriptor.flag == EpochFlag::CycleSlip,
+                &mut observations.signals,
+            )?;
         }
-    } //browse all lines
+        if seen.len() != descriptor.count {
+            return Err(ParsingError::ObsSatelliteCount {
+                expected: descriptor.count,
+                found: seen.len(),
+            });
+        }
+    }
+    Ok((observations, present_satellites))
+}
+
+fn parse_signal_fields(
+    sv: SV,
+    codes: &[Observable],
+    line: &str,
+    start: usize,
+    line_number: usize,
+    cycle_slip: bool,
+    signals: &mut Vec<SignalObservation>,
+) -> Result<(), ParsingError> {
+    if line
+        .get(start + codes.len() * 16..)
+        .is_some_and(|s| !s.trim().is_empty())
+    {
+        return Err(ParsingError::ObsSignalParsing {
+            line: line_number,
+            byte_column: start + codes.len() * 16 + 1,
+        });
+    }
+    for (index, observable) in codes.iter().enumerate() {
+        let offset = start + index * 16;
+        let field = line.get(offset..line.len().min(offset + 16)).unwrap_or("");
+        let scalar = field.get(..field.len().min(14)).unwrap_or("").trim();
+        let error = || ParsingError::ObsSignalParsing {
+            line: line_number,
+            byte_column: offset + 1,
+        };
+        let lli = field
+            .get(14..15)
+            .filter(|s| *s != " ")
+            .map(|s| {
+                s.parse::<u8>()
+                    .ok()
+                    .and_then(LliFlags::from_bits)
+                    .ok_or_else(error)
+            })
+            .transpose()?;
+        let snr = field
+            .get(15..16)
+            .filter(|s| *s != " ")
+            .map(|s| s.parse::<u8>().map(SNR::from).map_err(|_| error()))
+            .transpose()?;
+        if cycle_slip
+            && (lli.is_some_and(|v| !v.is_empty()) || snr.is_some_and(|v| v != SNR::DbHz0))
+        {
+            return Err(error());
+        }
+        if scalar.is_empty() {
+            continue;
+        }
+        let value = parse_f64(scalar).map_err(|_| error())?;
+        if !value.is_finite() {
+            return Err(error());
+        }
+        signals.push(SignalObservation {
+            sv,
+            observable: observable.clone(),
+            value,
+            lli,
+            snr,
+        });
+    }
+    Ok(())
 }
 
 #[cfg(test)]
 mod test {
     use super::is_new_epoch;
     use crate::{
-        observation::{ClockObservation, EpochFlag, SignalObservation, SNR},
+        observation::{ClockObservation, EpochFlag, LliFlags, SignalObservation, SNR},
         prelude::{Constellation, Epoch, Observable, Version, SV},
         tests::toolkit::generic_observation_epoch_decoding_test,
     };
@@ -525,8 +465,9 @@ mod test {
 
     #[test]
     fn test_parse_v3_1() {
+        // Five selected source rows; the envelope declares that subset.
         let content =
-"> 2022 03 04  0  0  0.0000000  0 22        .000000000000
+"> 2022 03 04  0  0  0.0000000  0  5        .000000000000
 G01  20832393.682   109474991.854 8        49.500                    20832389.822                                                                    85305196.437 8                                                                        49.500
 G03  20342516.786   106900663.487 8        50.000                    20342512.006                                                                    83299201.382 8                                                                        50.000
 G04  22448754.952   117969025.322 8        48.250                    22448749.312                                                                    91923884.833 7                                                                        43.750
@@ -585,11 +526,12 @@ G09  25493930.890   133971510.403 6        41.250                    25493926.95
 
     #[test]
     fn test_parse_v3_2() {
+        // Three rows and eight selected observable columns.
         let content =
-"> 2022 03 04 00 00  0.0000000  0  9
+"> 2022 03 04 00 00  0.0000000  0  3
 G01  20176608.780   106028802.11808     -1009.418          50.250    20176610.080    82619851.24609      -786.562          54.500
 G03  20719565.760   108882069.81508       762.203          49.750    20719566.420    84843175.68809       593.922          55.000
-G04  21342618.100   112156219.39808      2167.688          48.250    21342617.440    87394474.09607      1689.105          45.500                                                                 104393373.997 6                                                                        41.750
+G04  21342618.100   112156219.39808      2167.688          48.250    21342617.440    87394474.09607      1689.105          45.500
 ";
         generic_observation_epoch_decoding_test(
             content,
@@ -607,8 +549,8 @@ G04  21342618.100   112156219.39808      2167.688          48.250    21342617.44
 
     #[test]
     fn test_parse_v2_1() {
-        let content = " 21 01 01 00 00 00.0000000  0 24G07G08G10G13G15G16G18G20G21G23G26G27
-G30R01R02R03R08R09R15R16R17R18R19R24
+        // Seven selected GPS rows with their explicit final blank record.
+        let content = " 21 01 01 00 00 00.0000000  0  7G07G08G10G13G15G16G18
   24178026.635 6  24178024.891 6                 127056391.69906  99004963.01703
                   24178026.139 3  24178024.181 3        38.066          22.286
 
@@ -629,6 +571,7 @@ G30R01R02R03R08R09R15R16R17R18R19R24
 
   23203962.113 6  23203960.554 6  23203963.222 7 121937655.11806  95016353.74904
   91057352.20207  23203961.787 4  23203960.356 4        41.337          28.313
+
 ";
 
         generic_observation_epoch_decoding_test(
@@ -703,77 +646,101 @@ G30R01R02R03R08R09R15R16R17R18R19R24
 
     #[test]
     fn test_parse_v2_barq() {
-        // extracted from v2/barq0.19d
+        // Source excerpt with synthetic fixed-column padding restored.
         let content = " 19  3 12 16 36  0.0000000  0 15G08G10G14G16G18G20G22G26G27G32R04R05
-        R06R19R20
-111525030.92718  86902614.11057  21222508.060                    21222505.880
-113917475.72718  88766858.51957  21677775.000                    21677773.380
-117582228.43417  91622504.36956  22375154.360                    22375150.800
-116496701.38017  90776637.01356  22168585.640                    22168581.380
-120543799.60817  93930215.60156  22938722.560                    22938718.700
-125411881.34917  97723533.46955  23865086.320                    23865082.480
-124148906.10717  96739381.30556  23624751.240                    23624745.820
-127085060.78216  99027334.17655  24183483.520                    24183486.540
-105970568.06418  82574457.73858  20165528.740                    20165526.020
-114286506.03418  89054414.91257  21747998.820                    21747997.860
-113282224.20717  88108400.20417  21154656.900                    21154656.960
-102507243.91718  79727864.12617  19176099.600                    19176101.880
-116775184.83016                  21883618.780
-112181738.38117  87252468.04516  20971192.900                    20971194.040
-110923986.30317  86274222.72417  20743344.820                    20743348.200
+                                R06R19R20
+ 111525030.92718  86902614.11057  21222508.060                    21222505.880
+ 113917475.72718  88766858.51957  21677775.000                    21677773.380
+ 117582228.43417  91622504.36956  22375154.360                    22375150.800
+ 116496701.38017  90776637.01356  22168585.640                    22168581.380
+ 120543799.60817  93930215.60156  22938722.560                    22938718.700
+ 125411881.34917  97723533.46955  23865086.320                    23865082.480
+ 124148906.10717  96739381.30556  23624751.240                    23624745.820
+ 127085060.78216  99027334.17655  24183483.520                    24183486.540
+ 105970568.06418  82574457.73858  20165528.740                    20165526.020
+ 114286506.03418  89054414.91257  21747998.820                    21747997.860
+ 113282224.20717  88108400.20417  21154656.900                    21154656.960
+ 102507243.91718  79727864.12617  19176099.600                    19176101.880
+ 116775184.83016                  21883618.780
+ 112181738.38117  87252468.04516  20971192.900                    20971194.040
+ 110923986.30317  86274222.72417  20743344.820                    20743348.200
 ";
         generic_observation_epoch_decoding_test(
             content,
             2,
             Constellation::Mixed,
-            &[
-                ("GPS", "L1,    L2,    C1,    P1,    P2,    P1,    P2"),
-                ("GLO", "L1,    L2,    C1,    P1,    P2,    P1,    P2"),
-            ],
+            &[("GPS", "L1, L2, C1, P1, P2"), ("GLO", "L1, L2, C1, P1, P2")],
             "2019-03-12T16:36:00 GPST",
             58,
             "2019-03-12T16:36:00 GPST",
             EpochFlag::Ok,
             None,
-            vec![],
+            vec![
+                SignalObservation {
+                    sv: SV::from_str("G08").unwrap(),
+                    observable: Observable::from_str("L1").unwrap(),
+                    value: 111525030.927,
+                    lli: Some(LliFlags::from_bits(1).unwrap()),
+                    snr: Some(SNR::from(8)),
+                },
+                SignalObservation {
+                    sv: SV::from_str("G10").unwrap(),
+                    observable: Observable::from_str("L1").unwrap(),
+                    value: 113917475.727,
+                    lli: Some(LliFlags::from_bits(1).unwrap()),
+                    snr: Some(SNR::from(8)),
+                },
+            ],
         );
     }
 
     #[test]
     fn test_parse_v2_20th_century() {
-        // extracted from v2/barq0.19d
+        // Source excerpt with synthetic fixed-column padding restored.
         let content = " 95  3 12 16 36  0.0000000  0 15G08G10G14G16G18G20G22G26G27G32R04R05
-        R06R19R20
-111525030.92718  86902614.11057  21222508.060                    21222505.880
-113917475.72718  88766858.51957  21677775.000                    21677773.380
-117582228.43417  91622504.36956  22375154.360                    22375150.800
-116496701.38017  90776637.01356  22168585.640                    22168581.380
-120543799.60817  93930215.60156  22938722.560                    22938718.700
-125411881.34917  97723533.46955  23865086.320                    23865082.480
-124148906.10717  96739381.30556  23624751.240                    23624745.820
-127085060.78216  99027334.17655  24183483.520                    24183486.540
-105970568.06418  82574457.73858  20165528.740                    20165526.020
-114286506.03418  89054414.91257  21747998.820                    21747997.860
-113282224.20717  88108400.20417  21154656.900                    21154656.960
-102507243.91718  79727864.12617  19176099.600                    19176101.880
-116775184.83016                  21883618.780
-112181738.38117  87252468.04516  20971192.900                    20971194.040
-110923986.30317  86274222.72417  20743344.820                    20743348.200
+                                R06R19R20
+ 111525030.92718  86902614.11057  21222508.060                    21222505.880
+ 113917475.72718  88766858.51957  21677775.000                    21677773.380
+ 117582228.43417  91622504.36956  22375154.360                    22375150.800
+ 116496701.38017  90776637.01356  22168585.640                    22168581.380
+ 120543799.60817  93930215.60156  22938722.560                    22938718.700
+ 125411881.34917  97723533.46955  23865086.320                    23865082.480
+ 124148906.10717  96739381.30556  23624751.240                    23624745.820
+ 127085060.78216  99027334.17655  24183483.520                    24183486.540
+ 105970568.06418  82574457.73858  20165528.740                    20165526.020
+ 114286506.03418  89054414.91257  21747998.820                    21747997.860
+ 113282224.20717  88108400.20417  21154656.900                    21154656.960
+ 102507243.91718  79727864.12617  19176099.600                    19176101.880
+ 116775184.83016                  21883618.780
+ 112181738.38117  87252468.04516  20971192.900                    20971194.040
+ 110923986.30317  86274222.72417  20743344.820                    20743348.200
 ";
         generic_observation_epoch_decoding_test(
             content,
             2,
             Constellation::Mixed,
-            &[
-                ("GPS", "L1,    L2,    C1,    P1,    P2,    P1,    P2"),
-                ("GLO", "L1,    L2,    C1,    P1,    P2,    P1,    P2"),
-            ],
+            &[("GPS", "L1, L2, C1, P1, P2"), ("GLO", "L1, L2, C1, P1, P2")],
             "1995-03-12T16:36:00 GPST",
             58,
             "1995-03-12T16:36:00 GPST",
             EpochFlag::Ok,
             None,
-            vec![],
+            vec![
+                SignalObservation {
+                    sv: SV::from_str("G08").unwrap(),
+                    observable: Observable::from_str("L1").unwrap(),
+                    value: 111525030.927,
+                    lli: Some(LliFlags::from_bits(1).unwrap()),
+                    snr: Some(SNR::from(8)),
+                },
+                SignalObservation {
+                    sv: SV::from_str("G10").unwrap(),
+                    observable: Observable::from_str("L1").unwrap(),
+                    value: 113917475.727,
+                    lli: Some(LliFlags::from_bits(1).unwrap()),
+                    snr: Some(SNR::from(8)),
+                },
+            ],
         );
     }
 }

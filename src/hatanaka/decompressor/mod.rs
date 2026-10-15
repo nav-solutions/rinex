@@ -164,6 +164,7 @@ pub struct DecompressorExpert<const M: usize> {
 
     /// Numerical decompression kernel for clock data specifically.
     clock_diff: NumDiff<M>,
+    clock_initialized: bool,
 
     /// Numerical decompression kernels, per SV and physics.
     obs_diff: HashMap<(SV, usize), NumDiff<M>>,
@@ -194,6 +195,7 @@ impl<const M: usize> Default for DecompressorExpert<M> {
             blanks: Vec::with_capacity(64),
             epoch_svs: Vec::with_capacity(64),
             clock_diff: NumDiff::<M>::new(0, M),
+            clock_initialized: false,
         }
     }
 }
@@ -264,8 +266,13 @@ impl<const M: usize> DecompressorExpert<M> {
             Self::V1_NUMSAT_OFFSET
         };
 
-        if let Ok(numsat) = &self.epoch_descriptor[start..start + 3].trim().parse::<u8>() {
-            Some(*numsat as usize)
+        if let Ok(numsat) = self
+            .epoch_descriptor
+            .get(start..start + 3)?
+            .trim()
+            .parse::<usize>()
+        {
+            Some(numsat)
         } else {
             None
         }
@@ -301,6 +308,31 @@ impl<const M: usize> DecompressorExpert<M> {
             epoch_svs: Vec::with_capacity(64),
             epoch_descriptor: String::with_capacity(256),
             clock_diff: NumDiff::<M>::new(0, M),
+            clock_initialized: false,
+        }
+    }
+
+    /// No incomplete epoch or event is pending at EOF.
+    pub(crate) fn at_epoch_boundary(&self) -> bool {
+        self.state == State::Epoch
+    }
+
+    pub(crate) fn output_size(&self, input_len: usize) -> usize {
+        // A V1 descriptor can contain wrapped satellite lists. Reserve their
+        // complete padding, not only the historical minimum size estimate.
+        self.state
+            .size_to_produce(self.v3, self.numsat, self.numobs)
+            .max(self.epoch_desc_len + self.numsat.div_ceil(12) * 33 + 81)
+            .max(input_len + 2)
+    }
+
+    pub(crate) fn update_observables(&mut self, codes: HashMap<Constellation, Vec<Observable>>) {
+        if self.gnss_observables != codes {
+            self.gnss_observables = codes;
+            // Positional kernels no longer describe the same observables.
+            // New observations must explicitly initialise their numeric kernels.
+            self.obs_diff.clear();
+            self.flags_diff.clear();
         }
     }
 
@@ -403,6 +435,9 @@ impl<const M: usize> DecompressorExpert<M> {
             // than in a previous epoch, stale identifiers trail the description.
             // Only numsat vehicles are meaningful.
             let expected_len = Self::sv_slice_start(self.v3, self.numsat);
+            if self.numsat > 0 && self.epoch_desc_len < expected_len {
+                return Err(Error::SatelliteIdentification);
+            }
             if self.epoch_desc_len > expected_len {
                 self.epoch_descriptor.truncate(expected_len);
                 self.epoch_desc_len = expected_len;
@@ -448,7 +483,10 @@ impl<const M: usize> DecompressorExpert<M> {
             Self::V1_NUMSAT_OFFSET
         }) + 3;
 
-        let numrecords = self.epoch_descriptor[numsat_end - 3..numsat_end]
+        let numrecords = self
+            .epoch_descriptor
+            .get(numsat_end - 3..numsat_end)
+            .ok_or(Error::EpochFormat)?
             .trim()
             .parse::<u16>()
             .map_err(|_| Error::CorruptNumsat)?;
@@ -463,7 +501,7 @@ impl<const M: usize> DecompressorExpert<M> {
             return Err(Error::BufferOverflow);
         }
 
-        let produced = self.format_epoch(None, buf);
+        let produced = self.format_epoch(None, buf)?;
 
         self.event_lines = numrecords as usize;
         self.state = if self.event_lines > 0 {
@@ -494,7 +532,7 @@ impl<const M: usize> DecompressorExpert<M> {
     }
 
     /// Fills user buffer with recovered epoch, following either V1 or V3 standards
-    fn format_epoch(&self, clock_data: Option<i64>, buf: &mut [u8]) -> usize {
+    fn format_epoch(&self, clock_data: Option<i64>, buf: &mut [u8]) -> Result<usize, Error> {
         if self.v3 {
             self.format_epoch_v3(clock_data, buf)
         } else {
@@ -503,7 +541,10 @@ impl<const M: usize> DecompressorExpert<M> {
     }
 
     /// Fills user buffer with recovered epoch, following V3 standards
-    fn format_epoch_v3(&self, clock_data: Option<i64>, buf: &mut [u8]) -> usize {
+    fn format_epoch_v3(&self, clock_data: Option<i64>, buf: &mut [u8]) -> Result<usize, Error> {
+        if buf.len() < 35 {
+            return Err(Error::BufferOverflow);
+        }
         // V3 format is much simpler
         // all we need to do is extract SV `XXY` to append in each following lines
         let mut produced = 1;
@@ -522,17 +563,32 @@ impl<const M: usize> DecompressorExpert<M> {
         if let Some(clock_data) = clock_data {
             let value = clock_data as f64 / 1.0E12;
             let formatted = format!("      {:15.12}", value);
-            let fmt_len = formatted.len(); // TODO improve: this is constant
+            if formatted.len() != 21 {
+                return Err(Error::ClockField);
+            }
+            let fmt_len = formatted.len();
+            if produced + fmt_len > buf.len() {
+                return Err(Error::BufferOverflow);
+            }
             let bytes = formatted.as_bytes();
             buf[produced..produced + fmt_len].copy_from_slice(&bytes);
             produced += fmt_len; // TODO improve: this is constant
         }
 
-        produced
+        Ok(produced)
     }
 
     /// Fills user buffer with recovered epoch, following V1 standards
-    fn format_epoch_v1(&self, clock_data: Option<i64>, buf: &mut [u8]) -> usize {
+    fn format_epoch_v1(&self, clock_data: Option<i64>, buf: &mut [u8]) -> Result<usize, Error> {
+        let nb_extra = div_ceil(self.epoch_desc_len.saturating_sub(67), 36);
+        let clock_size = if clock_data.is_some() {
+            80_usize.saturating_sub(1 + self.epoch_desc_len.min(67))
+        } else {
+            0
+        };
+        if buf.len() < 1 + self.epoch_desc_len + nb_extra * 33 + clock_size {
+            return Err(Error::BufferOverflow);
+        }
         let mut produced = 1;
         buf[0] = b' '; // single whitespace
 
@@ -556,7 +612,10 @@ impl<const M: usize> DecompressorExpert<M> {
             }
             let value = clock_data as f64 / 1.0E9;
             let formatted_ck = format!("{:12.9}", value);
-            let fmt_len = formatted_ck.len(); // TODO: improve (constant)
+            if formatted_ck.len() != 12 {
+                return Err(Error::ClockField);
+            }
+            let fmt_len = formatted_ck.len();
             let formatted_ck = formatted_ck.as_bytes();
             buf[produced..produced + fmt_len].copy_from_slice(&formatted_ck);
             produced += fmt_len;
@@ -566,8 +625,6 @@ impl<const M: usize> DecompressorExpert<M> {
         // 12 SVs (36 characters) per continuation line.
         // Lines are separated by '\n', the caller terminates the last one.
         let mut offset = 67;
-        let nb_extra = div_ceil(self.epoch_desc_len.saturating_sub(67), 36);
-
         for _ in 0..nb_extra {
             // conclude previous line
             buf[produced] = b'\n';
@@ -592,7 +649,7 @@ impl<const M: usize> DecompressorExpert<M> {
             produced += size;
         }
 
-        produced
+        Ok(produced)
     }
 
     /// Process following line, in [State::Clock]
@@ -611,29 +668,44 @@ impl<const M: usize> DecompressorExpert<M> {
         let clock_data = if bytes.len() > 2 && bytes[1] == b'&' {
             match (line[..1].parse::<usize>(), line[2..].parse::<i64>()) {
                 (Ok(order), Ok(val)) => {
+                    if order > M {
+                        return Err(Error::CompressionOrder);
+                    }
                     // valid kernel reset
                     self.clock_diff.force_init(val, order);
+                    self.clock_initialized = true;
                     Some(val)
                 },
-                _ => None,
+                _ => return Err(Error::ClockField),
             }
         } else if !line.is_empty() {
             match line.parse::<i64>() {
-                Ok(val) => Some(self.clock_diff.decompress(val)?),
-                Err(_) => None,
+                Ok(val) if self.clock_initialized => Some(self.clock_diff.decompress(val)?),
+                Ok(_) => return Err(Error::UninitializedKernel),
+                Err(_) => return Err(Error::ClockField),
             }
         } else {
+            // A blank clock field terminates this numeric series. Its next
+            // value must explicitly initialize a new kernel.
+            self.clock_initialized = false;
             None
         };
 
         // now that we have potentially recovered clock data
         // we can format the complete epoch description
-        let produced = self.format_epoch(clock_data, buf);
+        let produced = self.format_epoch(clock_data, buf)?;
 
         // prepare for observation state
         self.obs_ptr = 0;
         self.sv_ptr = 0;
         self.first_epoch = false;
+        if self.numsat == 0 {
+            self.epoch_svs.clear();
+            self.flags_diff.clear();
+            self.obs_diff.clear();
+            self.state = State::Epoch;
+            return Ok(produced);
+        }
 
         // this actually grabs the first satellite
         if let Some(sv) = self.next_satellite() {
@@ -771,6 +843,14 @@ impl<const M: usize> DecompressorExpert<M> {
                 Some(value) => format!("{:14.3}  ", value as f64 / 1000.0),
                 None => "                ".to_string(),
             };
+            // Formatting widths are minima in Rust: an oversized value would
+            // shift the remaining columns and may overrun the output buffer.
+            if formatted.len() != 16 {
+                return Err(Error::ObservationField);
+            }
+            if produced + formatted.len() > buf.len() {
+                return Err(Error::BufferOverflow);
+            }
 
             self.blanks[ptr] = value.is_none();
 
@@ -819,9 +899,12 @@ impl<const M: usize> DecompressorExpert<M> {
 
     /// Decompresses one observation field of the current SV.
     /// Returns the recovered value (in 10^-3 units), or None when the
-    /// observation is missing or the field is not interpretable.
+    /// observation is missing. Nonempty corrupt fields are errors.
     fn decompress_field(&mut self, ptr: usize, field: &str) -> Result<Option<i64>, Error> {
         if field.is_empty() {
+            // Only this column's series ends; other observations and the
+            // independently compressed LLI/SNR text retain their state.
+            self.obs_diff.remove(&(self.sv, ptr));
             return Ok(None);
         }
 
@@ -831,11 +914,14 @@ impl<const M: usize> DecompressorExpert<M> {
             // kernel reset
             let level = match field[..1].parse::<usize>() {
                 Ok(level) => level,
-                Err(_) => return Ok(None),
+                Err(_) => return Err(Error::ObservationField),
             };
+            if level > M {
+                return Err(Error::CompressionOrder);
+            }
             let value = match field[2..].parse::<i64>() {
                 Ok(value) => value,
-                Err(_) => return Ok(None),
+                Err(_) => return Err(Error::ObservationField),
             };
 
             if let Some(kernel) = self.obs_diff.get_mut(&(self.sv, ptr)) {
@@ -850,13 +936,13 @@ impl<const M: usize> DecompressorExpert<M> {
 
         let value = match field.parse::<i64>() {
             Ok(value) => value,
-            Err(_) => return Ok(None),
+            Err(_) => return Err(Error::ObservationField),
         };
 
         // compressed value: meaningless without a kernel
         match self.obs_diff.get_mut(&(self.sv, ptr)) {
             Some(kernel) => Ok(Some(kernel.decompress(value)?)),
-            None => Ok(None),
+            None => Err(Error::UninitializedKernel),
         }
     }
 
@@ -911,10 +997,55 @@ impl<const M: usize> DecompressorExpert<M> {
 #[cfg(test)]
 mod test {
     use crate::{
-        hatanaka::decompressor::{Decompressor, State},
-        prelude::SV,
+        hatanaka::{
+            decompressor::{Decompressor, State},
+            Error,
+        },
+        prelude::{Constellation, Observable, SV},
     };
+    use std::collections::HashMap;
     use std::str::{from_utf8, FromStr};
+
+    #[test]
+    fn short_event_descriptor_returns_error() {
+        let mut decompressor = Decompressor::new(true, Constellation::GPS, HashMap::new());
+        let line = format!(">{:28}  4", "");
+        let mut output = [0; 4096];
+        assert!(matches!(
+            decompressor.decompress(&line, line.len(), &mut output, 4096),
+            Err(Error::EpochFormat)
+        ));
+    }
+
+    #[test]
+    fn recovered_values_must_fit_rinex_fields() {
+        for (clock, value, expected_clock_error) in [
+            ("3&9223372036854775807", "3&20000000123", true),
+            ("", "3&9223372036854775807", false),
+        ] {
+            let codes = HashMap::from([(
+                Constellation::GPS,
+                vec![Observable::from_str("C1C").unwrap()],
+            )]);
+            let mut decompressor = Decompressor::new(true, Constellation::GPS, codes);
+            let mut output = [0; 4096];
+            let line = "> 2024 05 10 00 00 00.0000000  0  1      G03";
+            assert_eq!(
+                decompressor.decompress(line, line.len(), &mut output, 4096),
+                Ok(0)
+            );
+            let result = decompressor.decompress(clock, clock.len(), &mut output, 4096);
+            if expected_clock_error {
+                assert!(matches!(result, Err(Error::ClockField)));
+            } else {
+                result.unwrap();
+                assert!(matches!(
+                    decompressor.decompress(value, value.len(), &mut output, 4096),
+                    Err(Error::ObservationField)
+                ));
+            }
+        }
+    }
 
     /// An epoch without any satellite, or a header without observable,
     /// must not underflow the size to produce.

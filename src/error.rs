@@ -69,6 +69,19 @@ pub enum ParsingError {
     #[error("obs: invalid receiver clock offset")]
     ObsClockParsing,
 
+    /// A nonblank observation field or quality indicator is invalid.
+    #[error("obs: invalid field at line {line}, byte column {byte_column}")]
+    ObsSignalParsing { line: usize, byte_column: usize },
+
+    #[error("obs: expected {expected} satellites, decoded {found}")]
+    ObsSatelliteCount { expected: usize, found: usize },
+
+    #[error("obs: invalid header update: {0}")]
+    ObsHeaderUpdate(String),
+
+    #[error("obs: cannot continue reading: {0}")]
+    ObsStream(String),
+
     /// A nonblank, non-spare orbit field failed to decode. The source distinguishes
     /// invalid numeric data from flag mapping or unsupported-definition errors.
     #[error("nav: invalid orbit field {field}: {source}")]

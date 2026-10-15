@@ -5,6 +5,7 @@ mod formatting; // formatter
 mod header;
 mod lli;
 mod parsing; // parser
+mod reader; // pull-based OBS input
 mod rinex; // high level methods
 mod signal;
 mod snr;
@@ -31,7 +32,14 @@ pub use lli::LliFlags;
 pub use signal::SignalObservation;
 pub use snr::SNR;
 
+pub use parsing::ObsContext;
+#[cfg(test)]
 pub(crate) use parsing::{is_new_epoch, parse_epoch};
+pub use reader::{
+    CycleSlip, ObsCollection, ObsCollectionError, ObsDuplicatePolicy, ObsEvent, ObsItem,
+    ObsOutcome, ObsReadError, ObsSourceSpan, ObservationReader, ObservationReaderOptions,
+    ReadStatus, SourceCoordinate, SpecialEvent,
+};
 
 #[cfg(doc)]
 use crate::prelude::{Header, TimeScale};

@@ -5,6 +5,7 @@ mod dlr_identity;
 mod galileo_identity;
 mod navigation;
 mod observation;
+mod observation_reader;
 
 use crate::{prelude::*, record::ParsingDiagnostic};
 use std::io::BufReader;

@@ -789,7 +789,8 @@ impl Rinex {
     /// Attributes potentially described by a file name need to be provided either
     /// manually / externally, or guessed when parsing has been completed.
     /// Uses the same omission and fatal-error rules as [Self::parse_with_diagnostics],
-    /// without collecting diagnostics. Duplicate NAV keys retain the last decoded record.
+    /// without collecting diagnostics. Duplicate NAV/OBS keys retain the last
+    /// successfully decoded record.
     pub fn parse<R: Read>(reader: &mut BufReader<R>) -> Result<Self, ParsingError> {
         let mut header = Header::parse(reader)?;
         let (record, comments) = Record::parse(&mut header, reader)?;
@@ -810,8 +811,16 @@ impl Rinex {
     /// A non-ASCII OBS/NAV block is omitted in full and reported with a position
     /// relative to that block. Header, comment and compressed-input encoding
     /// errors are fatal, as are I/O errors (including invalid UTF-8).
+    /// OBS declarations must contain supported, distinct observable codes and
+    /// match their declared counts; invalid declarations are fatal header errors.
+    /// A malformed nonblank observation field omits the entire OBS block,
+    /// and the diagnostic retains its decoding context.
     /// An epoch finer than native nanosecond resolution returns `EpochPrecision`;
     /// it is never rounded or silently merged with another epoch.
+    /// Valid OBS events are exposed as `ObservationEvent` diagnostics. Header
+    /// changes return `ObsHeaderUpdate`, since this container has a single header.
+    /// Use [observation::ObservationReader] to retain events and header revisions
+    /// in source order. Unrecoverable OBS framing and CRINEX errors are fatal.
     pub fn parse_with_diagnostics<R: Read>(
         reader: &mut BufReader<R>,
     ) -> Result<(Self, Vec<record::ParsingDiagnostic>), ParsingError> {
