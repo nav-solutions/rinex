@@ -130,9 +130,9 @@ version = "0.5"
 optional = true
 
 [dependencies.gnss-protos]
-version = "0.0.2"
+version = "0.1.0"
 optional = true
-features = ["gps"]
+features = ["gps", "galileo"]
 
 [dependencies.ublox]
 version = "0.10"

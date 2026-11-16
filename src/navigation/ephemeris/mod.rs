@@ -36,6 +36,10 @@ mod ublox;
 #[cfg_attr(docsrs, doc(cfg(feature = "rtcm")))]
 mod rtcm;
 
+#[cfg(feature = "protos")]
+#[cfg_attr(docsrs, doc(cfg(feature = "protos")))]
+mod protos;
+
 #[cfg(feature = "nav")]
 use anise::{
     astro::AzElRange,
