@@ -2,11 +2,11 @@ use std::fs::File;
 use std::io::Write;
 
 use rinex::{
-    navigation::GpsQzssEphemerisMessage,
+    navigation::{GpsQzssEphemerisMessage, GpsQzssEphemerisTelemetries},
     prelude::{Constellation, Rinex, SV},
 };
 
-use gnss_protos::GpsQzssFrame;
+use gnss_protos::{GpsQzssFrame, GpsQzssTelemetry};
 
 struct Buffer<'a, const N: usize> {
     /// destination
@@ -98,11 +98,29 @@ pub fn main() {
 
     // limited to ephemeris frames
     for (key, eph) in rinex.nav_ephemeris_frames_iter() {
+        let tlm = GpsQzssEphemerisTelemetries {
+            tlm_1: GpsQzssTelemetry {
+                message: 1,
+                integrity: false,
+                reserved_bit: false,
+            },
+            tlm_2: GpsQzssTelemetry {
+                message: 2,
+                integrity: false,
+                reserved_bit: false,
+            },
+            tlm_3: GpsQzssTelemetry {
+                message: 3,
+                integrity: false,
+                reserved_bit: false,
+            },
+        };
+
         match key.sv {
             g15 => {
                 // extract
                 let burst = eph
-                    .to_gps_qzss_eph_message(key.sv, false, false)
+                    .to_gps_qzss_eph_message(key.sv, key.epoch, false, false, tlm)
                     .unwrap_or_else(|e| {
                         panic!(
                             "Failed to extract an Ephemeris burst for {} @ {}",

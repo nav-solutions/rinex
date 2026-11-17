@@ -1,4 +1,5 @@
-use hifitime::prelude::Unit;
+use hifitime::prelude::{Duration, Unit};
+
 use thiserror::Error;
 
 use crate::{
@@ -32,6 +33,9 @@ pub enum Error {
     #[error("non-consecutive eph-1,2,3 subframes")]
     NonConsecutiveEph123,
 
+    #[error("invalid tx-epoch: > half week away")]
+    InvalidEpoch,
+
     /// We expect correct rotation starting with EPH-1
     #[error("not a valid EPH-1 subframe")]
     InvalidEph1,
@@ -60,10 +64,15 @@ pub enum Error {
     #[error("Failed to compute ToE")]
     ToECalculations,
 
-    /// RINEX file did not describe t_tm correctly (0.9999E9 special value);
+    /// RINEX file did not describe t_tm correctly (9.999E9 special value);
     /// It is impossible to format a valid message
-    #[error("t_tm missing in RINEX file")]
-    TtmMissing,
+    #[error("transmission time undefined in RINEX file")]
+    MissingTtm,
+
+    /// RINEX file did not describe toe correctly.
+    /// It is impossible to format a valid message
+    #[error("ToE undefined in RINEX file")]
+    MissingToE,
 }
 
 /// [GpsQzssEphemerisMessage] represents the first 3/5 of the message
@@ -137,10 +146,20 @@ impl Ephemeris {
     /// satellite & valid rotation.
     ///
     /// ## Input
+    /// - t_rx: usually [Epoch] of message reception.
+    /// In practice, any [Epoch] that is less than 512 weeks from
+    /// the actual transmission time of the following message will work fine here.
+    /// Any [TimeScale] supported, including [TimeScale::UTC].
+    ///
+    /// - satellite: SV
+    ///
+    /// ## Returns
+    /// - (ToC) Time of Clock and [Ephemeris] frame
     pub fn from_gps_qzss_eph_message(
+        t_rx: Epoch,
         satellite: SV,
         msg: GpsQzssEphemerisMessage,
-    ) -> Result<Self, Error> {
+    ) -> Result<(Epoch, Self), Error> {
         let mut orbits = HashMap::<String, OrbitItem>::new();
 
         let (eph_1, eph_2, eph_3) = (msg.eph_1, msg.eph_2, msg.eph_3);
@@ -153,15 +172,15 @@ impl Ephemeris {
             return Err(Error::NonConsecutiveEph123);
         }
 
-        let subf1 = eph_1.subframe.as_eph1().ok_or(Error::InvalidEph1)?;
-
-        let subf2 = eph_2.subframe.as_eph2().ok_or(Error::InvalidEph2)?;
-
-        let subf3 = eph_3.subframe.as_eph3().ok_or(Error::InvalidEph3)?;
+        let (subf1, subf2, subf3) = (
+            eph_1.subframe.as_eph1().ok_or(Error::InvalidEph1)?,
+            eph_2.subframe.as_eph2().ok_or(Error::InvalidEph2)?,
+            eph_3.subframe.as_eph3().ok_or(Error::InvalidEph3)?,
+        );
 
         let iodc = subf1.iodc();
 
-        let (iode_1, iode_2) = (subf2.iode, subf2.iode);
+        let (iode_1, iode_2) = (subf2.iode, subf3.iode);
 
         if iode_1 != iode_2 {
             return Err(Error::IodeMismatch);
@@ -171,20 +190,65 @@ impl Ephemeris {
             return Err(Error::IodcMismatch);
         }
 
-        let toc_gpst = toc.to_time_scale(TimeScale::GPST);
-        let toc_week_seconds = toc_gpst.to_time_of_week().1 / 1_000_000_000;
+        let t_rx_gpst = t_rx.to_time_scale(TimeScale::GPST);
 
-        let unwrapped_week = unwrapped_week_number(toc_gpst, subf1.week);
+        let unwrapped_week = unwrapped_week_number(t_rx_gpst, subf1.week);
+
+        let t_sf1 = (eph_1.how.tow * 6 - 6) as u64;
+        let t_tx = Epoch::from_time_of_week(unwrapped_week, t_sf1 * 1_000_000_000, TimeScale::GPST);
+
+        let (toc_s, toe_s) = (subf1.toc * 16, subf2.toe * 16);
+        let (toc_nanos, toe_nanos) = (toc_s as u64 * 1_000_000_000, toe_s as u64 * 1_000_000_000);
+
+        let (toc_1, toc_2, toc_3) = (
+            Epoch::from_time_of_week(unwrapped_week - 1, toc_nanos, TimeScale::GPST),
+            Epoch::from_time_of_week(unwrapped_week, toc_nanos, TimeScale::GPST),
+            Epoch::from_time_of_week(unwrapped_week + 1, toc_nanos, TimeScale::GPST),
+        );
+
+        let (toe_1, toe_2, toe_3) = (
+            Epoch::from_time_of_week(unwrapped_week - 1, toe_nanos, TimeScale::GPST),
+            Epoch::from_time_of_week(unwrapped_week, toe_nanos, TimeScale::GPST),
+            Epoch::from_time_of_week(unwrapped_week + 1, toe_nanos, TimeScale::GPST),
+        );
+
+        let (dtoc_1, dtoc_2, dtoc_3) = (
+            (t_tx - toc_1).abs(),
+            (t_tx - toc_2).abs(),
+            (t_tx - toc_3).abs(),
+        );
+
+        let (dtoe_1, dtoe_2, dtoe_3) = (
+            (t_tx - toe_1).abs(),
+            (t_tx - toe_2).abs(),
+            (t_tx - toe_3).abs(),
+        );
+
+        let (mut toc, mut toe) = (toc_1, toe_1);
+
+        if dtoc_2 < dtoc_3 && dtoc_2 < dtoc_1 {
+            toc = toc_2;
+        } else if dtoc_3 < dtoc_1 && dtoc_3 < dtoc_2 {
+            toc = toc_3;
+        }
+
+        if dtoe_2 < dtoe_3 && dtoe_2 < dtoe_1 {
+            toe = toe_2;
+        } else if dtoe_3 < dtoe_1 && dtoe_3 < dtoe_2 {
+            toe = toe_3;
+        }
 
         orbits.insert("week".to_string(), OrbitItem::U32(unwrapped_week));
+
+        let t_tm = t_tx.duration.to_unit(Unit::Second) - toe.duration.to_unit(Unit::Second);
+
+        orbits.insert("t_tm".to_string(), OrbitItem::F64(t_tm));
 
         if subf1.l2_p_data_flag {
             orbits.insert("l2Codes".to_string(), OrbitItem::F64(1.0));
         }
 
         let ura_raw = subf1.ura as f64;
-
-        orbits.insert("t_tm".to_string(), OrbitItem::F64(toc_week_seconds as f64));
 
         orbits.insert("tgd".to_string(), OrbitItem::F64(subf1.tgd));
         orbits.insert("accuracy".to_string(), OrbitItem::F64(ura_raw));
@@ -198,7 +262,10 @@ impl Ephemeris {
         orbits.insert("crs".to_string(), OrbitItem::F64(subf2.crs));
         orbits.insert("cuc".to_string(), OrbitItem::F64(subf2.cuc));
         orbits.insert("cus".to_string(), OrbitItem::F64(subf2.cus));
+
+        // TODO AoDo in RINEX?
         // orbits.insert("aodo".to_string(), OrbitItem::U8(subf2.aodo));
+
         orbits.insert("deltaN".to_string(), OrbitItem::F64(dn));
         orbits.insert("sqrta".to_string(), OrbitItem::F64(subf2.sqrt_a));
         orbits.insert("iode".to_string(), OrbitItem::F64(subf2.iode as f64));
@@ -222,12 +289,15 @@ impl Ephemeris {
 
         orbits.insert("health".to_string(), OrbitItem::GpsQzssl1l2l5Health(health));
 
-        Ok(Self {
-            clock_bias: subf1.af0,
-            clock_drift: subf1.af1,
-            clock_drift_rate: subf1.af2,
-            orbits,
-        })
+        Ok((
+            toc,
+            Self {
+                clock_bias: subf1.af0,
+                clock_drift: subf1.af1,
+                clock_drift_rate: subf1.af2,
+                orbits,
+            },
+        ))
     }
 
     /// Dumps this [Ephemeris] frame as [GpsQzssEphemerisMessage] sequence.
@@ -248,6 +318,10 @@ impl Ephemeris {
     ///
     /// - satellite: must be GPS or QZSS, required for internal calculations
     /// prior formatting
+    ///
+    /// - tx_epoch: [Epoch], usually in future, where the TX of this message burst is planned.
+    /// This [Epoch] must lie within +/- half a week from the current frame, otherwise
+    /// this is an invalid setup that will lead to an error.
     ///
     /// - week: week number at transmission time (as u16)
     ///
@@ -282,6 +356,7 @@ impl Ephemeris {
     pub fn to_gps_qzss_eph_message(
         &self,
         satellite: SV,
+        toc: Epoch,
         alert: bool,
         anti_spoofing: bool,
         telemetries: GpsQzssEphemerisTelemetries,
@@ -291,11 +366,29 @@ impl Ephemeris {
             _ => return Err(Error::InvalidSatellite),
         }
 
-        let week = self.get_orbit_f64("week").unwrap_or_default();
+        let toe_gpst = self.toe(satellite).ok_or(Error::ToECalculations)?;
 
-        // TODO manque logique unwrap date avec ToC
-        // let week = (week as u16) & 0x3ff;
-        let week = week as u16;
+        // reconstructing transmission time
+        let toe_week = toe_gpst.to_time_of_week().0;
+
+        // TODO: check t_tm = 0.99999E9 undefined!
+        let t_tm = self.get_orbit_f64("t_tm").ok_or(Error::MissingTtm)?;
+
+        let mut t_tx = Epoch::from_time_of_week(toe_week, 0, TimeScale::GPST);
+        t_tx += t_tm * Unit::Second;
+
+        let (week, tow) = t_tx.to_time_of_week();
+        let week = week % 1024;
+
+        let tow = Duration::from_seconds((tow / 1_000_000_000) as f64).floor(30.0 * Unit::Second);
+        let tow_s = tow.to_unit(Unit::Second).round() as u32;
+
+        // SF1.toc is toc in seconds of week /16
+        let toc_s = toc.to_time_of_week().1 / 1_000_000_000 / 16;
+
+        // SF2.toe is toe /16
+        let toe_s = self.get_orbit_f64("toe").ok_or(Error::MissingToE)? as u32;
+        let toe_s = toe_s / 16;
 
         let l2p_code = self.get_orbit_f64("l2Codes").unwrap_or_default();
         let l2p_flag = self.get_orbit_f64("l2p").unwrap_or_default() > 0.0;
@@ -308,7 +401,7 @@ impl Ephemeris {
         let iodc = self.get_orbit_f64("iodc").unwrap_or_default();
 
         let mut subframe1 = GpsQzssFrame1::default()
-            .with_week(week)
+            .with_week(week as u16)
             .with_iodc(iodc as u16)
             .with_ca_or_p_l2_mask(l2p_code as u8)
             .with_health((health as u8).into())
@@ -321,12 +414,6 @@ impl Ephemeris {
         if l2p_flag {
             subframe1 = subframe1.with_l2p_flag();
         }
-
-        let toe_s = self
-            .toe(satellite)
-            .ok_or(Error::ToECalculations)?
-            .duration
-            .to_unit(Unit::Second);
 
         let ecc = self.get_orbit_f64("e").unwrap_or_default();
         let m0_rad = self.get_orbit_f64("m0").unwrap_or_default();
@@ -381,9 +468,9 @@ impl Ephemeris {
             eph_1: GpsQzssFrame {
                 how: {
                     GpsQzssHow {
-                        tow,
                         alert,
                         anti_spoofing,
+                        tow: (tow_s + 1 * 6) / 6,
                         frame_id: GpsQzssFrameId::Ephemeris1,
                     }
                 },
@@ -393,9 +480,9 @@ impl Ephemeris {
             eph_2: GpsQzssFrame {
                 how: {
                     GpsQzssHow {
-                        tow,
                         alert,
                         anti_spoofing,
+                        tow: (tow_s + 2 * 6) / 6,
                         frame_id: GpsQzssFrameId::Ephemeris2,
                     }
                 },
@@ -405,9 +492,9 @@ impl Ephemeris {
             eph_3: GpsQzssFrame {
                 how: {
                     GpsQzssHow {
-                        tow,
                         alert,
                         anti_spoofing,
+                        tow: (tow_s + 3 * 6) / 6,
                         frame_id: GpsQzssFrameId::Ephemeris3,
                     }
                 },

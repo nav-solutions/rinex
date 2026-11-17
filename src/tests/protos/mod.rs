@@ -1,2 +1,2 @@
-mod gal;
+// mod gal;
 mod gps_qzss;
