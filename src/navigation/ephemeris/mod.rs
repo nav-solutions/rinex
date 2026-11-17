@@ -1,9 +1,10 @@
-mod formatting;
 pub mod orbits;
-mod parsing;
 
 /// Ephemeris NAV flags definitions & support
 pub mod flags;
+
+mod formatting;
+mod parsing;
 
 use orbits::OrbitItem;
 
@@ -38,7 +39,7 @@ mod rtcm;
 
 #[cfg(feature = "protos")]
 #[cfg_attr(docsrs, doc(cfg(feature = "protos")))]
-mod protos;
+pub(crate) mod protos;
 
 #[cfg(feature = "nav")]
 use anise::{

@@ -7,7 +7,7 @@ use crate::{
 use std::collections::HashMap;
 
 #[test]
-fn test_lnav_v2_to_raw() {
+fn test_lnav_v2() {
     let mut count = 0;
 
     let file = env!("CARGO_MANIFEST_DIR").to_owned() + "/data/NAV/V2/cbw10010.21n.gz";

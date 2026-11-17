@@ -2,21 +2,18 @@ use hifitime::prelude::Unit;
 use thiserror::Error;
 
 use crate::{
-    navigation::{ephemeris::GpsQzssl1l2l5Health, Ephemeris, OrbitItem},
+    navigation::ephemeris::{
+        protos::semicircles_to_rad, Ephemeris, GpsQzssl1l2l5Health, OrbitItem,
+    },
     prelude::{Constellation, Epoch, TimeScale, SV},
 };
 
 use std::collections::HashMap;
 
-use gnss_protos::{GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3};
-
-fn rad_to_semicircles(rad: f64) -> f64 {
-    rad / core::f64::consts::PI
-}
-
-fn semicircles_to_rad(semic: f64) -> f64 {
-    semic * core::f64::consts::PI
-}
+use gnss_protos::{
+    GpsQzssFrame, GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3, GpsQzssFrameId, GpsQzssHow,
+    GpsQzssSubframe, GpsQzssTelemetry,
+};
 
 /// Returns unwrapped week number using any close-by GPST epoch
 /// and wrapped week number counter
@@ -29,6 +26,24 @@ fn unwrapped_week_number(t_gpst: Epoch, wn: u16) -> u32 {
 
 #[derive(Error, Debug)]
 pub enum Error {
+    /// EPH-1, EPH-2 and EPH-3 are not consecutive in time, that is,
+    /// most likely not part of the same message.
+    /// Each meessag should be evenly spaced in time with 6s interval.
+    #[error("non-consecutive eph-1,2,3 subframes")]
+    NonConsecutiveEph123,
+
+    /// We expect correct rotation starting with EPH-1
+    #[error("not a valid EPH-1 subframe")]
+    InvalidEph1,
+
+    /// We expect correct rotation, EPH-2 following EPH-1
+    #[error("not a valid EPH-2 subframe")]
+    InvalidEph2,
+
+    /// We expect correct rotation, EPH-3 following EPH-2
+    #[error("not a valid EPH-3 subframe")]
+    InvalidEph3,
+
     /// EPH-1 and EPH-2 IODE codes do not match: invalid message burst
     #[error("EPH-1/EPH-2 IODE mismatch")]
     IodeMismatch,
@@ -44,44 +59,109 @@ pub enum Error {
     /// ToE Time of Issue of Ephemeris internal calculations failed
     #[error("Failed to compute ToE")]
     ToECalculations,
+
+    /// RINEX file did not describe t_tm correctly (0.9999E9 special value);
+    /// It is impossible to format a valid message
+    #[error("t_tm missing in RINEX file")]
+    TtmMissing,
 }
 
-/// [GpsQzssSubframes] burst that we can encode from any [Ephemeris]
-/// produced by any GPS/QZSS satellite. This API proposes the mirror operation,
-/// converting any [Ephemeris] message to such a burst.
+/// [GpsQzssEphemerisMessage] represents the first 3/5 of the message
+/// rotation of any given satellite, and can be formed from any
+/// RINEX [Ephemeris].
 #[derive(Debug, Copy, Clone, Default)]
-pub struct GpsQzssSubframes {
-    /// EPH-1 first message (1st/5 in rotation)
-    pub eph_1: GpsQzssFrame1,
+pub struct GpsQzssEphemerisMessage {
+    /// EPH-1: 1/5 in message rotation, ready to encode
+    pub eph_1: GpsQzssFrame,
 
-    /// EPH-2 second message (2nd/5 in rotation)
-    pub eph_2: GpsQzssFrame2,
+    /// EPH-2: 2/5 in message rotation, ready to encode
+    pub eph_2: GpsQzssFrame,
 
-    /// EPH-3 third message (3rd/5 in rotation)
-    pub eph_3: GpsQzssFrame3,
+    /// EPH-3: 3/5 in message rotation, ready to encode
+    pub eph_3: GpsQzssFrame,
+}
+
+/// [GpsQzssEphemerisTelemetries] allows you to compose each
+/// [GpsQzssTelemetry] to be attached to each individual subframe
+/// composing the ephemeris (first 3/5) of the message rotation.
+/// In particular, this is most useful to advanced users that can take
+/// advantage of this API to compose the TLM and private bits of the bitstream.
+pub struct GpsQzssEphemerisTelemetries {
+    /// TLM-1 to be associated to EPH-1
+    pub tlm_1: GpsQzssTelemetry,
+
+    /// TLM-2 to be associated to EPH-2
+    pub tlm_2: GpsQzssTelemetry,
+
+    /// TLM-3 to be associated to EPH-3
+    pub tlm_3: GpsQzssTelemetry,
+}
+
+/// [GpsQzssMessage] sequence that consists in 5 [GpsQzssFrame]s
+/// streamed in strict order, by any satellite.
+/// The first 3/5 parts can be formed from any RINEX [Ephemeris].
+/// The last 4/5 and 5/5 (Almanach) frames can be [...]
+pub struct GpsQzssMessage {
+    /// Ephemeris 3/5 of the message rotation
+    pub eph: GpsQzssEphemerisMessage,
+
+    /// ALM-4: 4/5 in message rotation, ready to encode
+    pub alm_4: GpsQzssFrame,
+
+    /// ALM-5: 5/5 in message rotation, ready to encode
+    pub alm_5: GpsQzssFrame,
+}
+
+/// [GpsQzssMessageTelemetries] allows you to compose each
+/// [GpsQzssTelemetry] of a complete message rotation.
+/// This is most useful to advanced users that can take
+/// advantage of this API to compose the TLM and private bits of the bitstream.
+pub struct GpsQzssTelemetries {
+    /// 3x [GpsQzssTelemetry] to be associated with the first 3/5 subframes
+    pub eph_tlm: GpsQzssEphemerisTelemetries,
+
+    /// ALM-4 [GpsQzssTelemetry] associated with subframe 4/5
+    pub tlm_4: GpsQzssTelemetry,
+
+    /// ALM-5 [GpsQzssTelemetry] associated with subframe 5/5
+    pub tlm_5: GpsQzssTelemetry,
 }
 
 impl Ephemeris {
-    /// Builds an [Ephemeris] frame from [GpsQzssSubframes] sequence.
-    /// The sequence must be extracted from the first 3 parts of the 5 message rotation of a given
-    /// satellite. This API only deals with Ephemeris frames 1, 2 & 3,
-    /// and it does not tolerate incorrect message association.
+    /// Builds an [Ephemeris] frame first 3/5 part of a GPS/QZSS
+    /// bitstream messge rotation. The first 3/5 ephemeris messages
+    /// can help form any RINEX [Ephemeris] frames.
+    ///
+    /// This API guards against invalid GPS/QZSS message associations,
+    /// it is illegal to group messages that do not belong to the same
+    /// satellite & valid rotation.
     ///
     /// ## Input
-    ///
-    /// - tow: ToW elapsed time within current GPS week (in seconds)
-    /// should be extracted from GpsQzssHow Hand Over data Word.
-    pub fn from_gps_qzss_subframes(
+    pub fn from_gps_qzss_eph_message(
         satellite: SV,
-        toc: Epoch,
-        subframes: GpsQzssSubframes,
+        msg: GpsQzssEphemerisMessage,
     ) -> Result<Self, Error> {
         let mut orbits = HashMap::<String, OrbitItem>::new();
 
-        let (eph_1, eph_2, eph_3) = (subframes.eph_1, subframes.eph_2, subframes.eph_3);
+        let (eph_1, eph_2, eph_3) = (msg.eph_1, msg.eph_2, msg.eph_3);
 
-        let iodc = eph_1.iodc();
-        let (iode_1, iode_2) = (eph_2.iode, eph_3.iode);
+        if eph_2.how.tow != eph_1.how.tow + 1 {
+            return Err(Error::NonConsecutiveEph123);
+        }
+
+        if eph_3.how.tow != eph_1.how.tow + 2 {
+            return Err(Error::NonConsecutiveEph123);
+        }
+
+        let subf1 = eph_1.subframe.as_eph1().ok_or(Error::InvalidEph1)?;
+
+        let subf2 = eph_2.subframe.as_eph2().ok_or(Error::InvalidEph2)?;
+
+        let subf3 = eph_3.subframe.as_eph3().ok_or(Error::InvalidEph3)?;
+
+        let iodc = subf1.iodc();
+
+        let (iode_1, iode_2) = (subf2.iode, subf2.iode);
 
         if iode_1 != iode_2 {
             return Err(Error::IodeMismatch);
@@ -94,68 +174,63 @@ impl Ephemeris {
         let toc_gpst = toc.to_time_scale(TimeScale::GPST);
         let toc_week_seconds = toc_gpst.to_time_of_week().1 / 1_000_000_000;
 
-        let unwrapped_week = unwrapped_week_number(toc_gpst, eph_1.week);
+        let unwrapped_week = unwrapped_week_number(toc_gpst, subf1.week);
 
         orbits.insert("week".to_string(), OrbitItem::U32(unwrapped_week));
 
-        if eph_1.l2_p_data_flag {
+        if subf1.l2_p_data_flag {
             orbits.insert("l2Codes".to_string(), OrbitItem::F64(1.0));
         }
 
-        let ura_raw = eph_1.ura as f64;
+        let ura_raw = subf1.ura as f64;
 
         orbits.insert("t_tm".to_string(), OrbitItem::F64(toc_week_seconds as f64));
 
-        orbits.insert("tgd".to_string(), OrbitItem::F64(eph_1.tgd));
+        orbits.insert("tgd".to_string(), OrbitItem::F64(subf1.tgd));
         orbits.insert("accuracy".to_string(), OrbitItem::F64(ura_raw));
-        orbits.insert("iodc".to_string(), OrbitItem::F64(eph_1.iodc() as f64));
+        orbits.insert("iodc".to_string(), OrbitItem::F64(subf1.iodc() as f64));
 
-        let dn = semicircles_to_rad(eph_2.dn);
-        let m0 = semicircles_to_rad(eph_2.m0);
+        let dn = semicircles_to_rad(subf2.dn);
+        let m0 = semicircles_to_rad(subf2.m0);
 
-        orbits.insert("e".to_string(), OrbitItem::F64(eph_2.e));
+        orbits.insert("e".to_string(), OrbitItem::F64(subf2.e));
         orbits.insert("m0".to_string(), OrbitItem::F64(m0));
-        orbits.insert("crs".to_string(), OrbitItem::F64(eph_2.crs));
-        orbits.insert("cuc".to_string(), OrbitItem::F64(eph_2.cuc));
-        orbits.insert("cus".to_string(), OrbitItem::F64(eph_2.cus));
-        // orbits.insert("aodo".to_string(), OrbitItem::U8(eph_2.aodo));
+        orbits.insert("crs".to_string(), OrbitItem::F64(subf2.crs));
+        orbits.insert("cuc".to_string(), OrbitItem::F64(subf2.cuc));
+        orbits.insert("cus".to_string(), OrbitItem::F64(subf2.cus));
+        // orbits.insert("aodo".to_string(), OrbitItem::U8(subf2.aodo));
         orbits.insert("deltaN".to_string(), OrbitItem::F64(dn));
-        orbits.insert("sqrta".to_string(), OrbitItem::F64(eph_2.sqrt_a));
-        orbits.insert("iode".to_string(), OrbitItem::F64(eph_2.iode as f64));
+        orbits.insert("sqrta".to_string(), OrbitItem::F64(subf2.sqrt_a));
+        orbits.insert("iode".to_string(), OrbitItem::F64(subf2.iode as f64));
 
-        let i0_rad = semicircles_to_rad(eph_3.i0);
-        let omega_rad = semicircles_to_rad(eph_3.omega);
-        let omega0_rad = semicircles_to_rad(eph_3.omega0);
-        let omega_dot_rad_s = semicircles_to_rad(eph_3.omega_dot);
+        let i0_rad = semicircles_to_rad(subf3.i0);
+        let omega_rad = semicircles_to_rad(subf3.omega);
+        let omega0_rad = semicircles_to_rad(subf3.omega0);
+        let omega_dot_rad_s = semicircles_to_rad(subf3.omega_dot);
 
-        orbits.insert("crc".to_string(), OrbitItem::F64(eph_3.crc));
-        orbits.insert("cic".to_string(), OrbitItem::F64(eph_3.cic));
-        orbits.insert("cis".to_string(), OrbitItem::F64(eph_3.cis));
+        orbits.insert("crc".to_string(), OrbitItem::F64(subf3.crc));
+        orbits.insert("cic".to_string(), OrbitItem::F64(subf3.cic));
+        orbits.insert("cis".to_string(), OrbitItem::F64(subf3.cis));
         orbits.insert("i0".to_string(), OrbitItem::F64(i0_rad));
-        orbits.insert("idot".to_string(), OrbitItem::F64(eph_3.idot));
+        orbits.insert("idot".to_string(), OrbitItem::F64(subf3.idot));
         orbits.insert("omega".to_string(), OrbitItem::F64(omega_rad));
         orbits.insert("omega0".to_string(), OrbitItem::F64(omega0_rad));
         orbits.insert("omegaDot".to_string(), OrbitItem::F64(omega_dot_rad_s));
 
-        let health = Into::<u8>::into(eph_1.health);
+        let health = Into::<u8>::into(subf1.health);
         let health = GpsQzssl1l2l5Health(health as u32);
 
         orbits.insert("health".to_string(), OrbitItem::GpsQzssl1l2l5Health(health));
 
         Ok(Self {
-            clock_bias: eph_1.af0,
-            clock_drift: eph_1.af1,
-            clock_drift_rate: eph_1.af2,
+            clock_bias: subf1.af0,
+            clock_drift: subf1.af1,
+            clock_drift_rate: subf1.af2,
             orbits,
         })
     }
 
-    /// Dumps this [Ephemeris] frame as [GpsQzssSubframe] sequence.
-    ///
-    /// The sequence describes the first 3 frames of the 5 frame message rotation
-    /// of a given satellite.  To correctly encode each message, you will have to
-    /// wrap each subframe as GpsQzssFrame which can then be streamed to binary.
-    /// In particular:
+    /// Dumps this [Ephemeris] frame as [GpsQzssEphemerisMessage] sequence.
     ///
     /// - you control ToW for each message, which should reflect the correct data transmission rate
     /// if you are aiming towards realistic bitstream synthesis
@@ -204,13 +279,20 @@ impl Ephemeris {
     ///
     /// assert_eq!(reciprocal, ephemeris);
     /// ```
-    pub fn to_gps_qzss_subframes(&self, satellite: SV) -> Result<GpsQzssSubframes, Error> {
+    pub fn to_gps_qzss_eph_message(
+        &self,
+        satellite: SV,
+        alert: bool,
+        anti_spoofing: bool,
+        telemetries: GpsQzssEphemerisTelemetries,
+    ) -> Result<GpsQzssEphemerisMessage, Error> {
         match satellite.constellation {
             Constellation::GPS | Constellation::QZSS => {},
             _ => return Err(Error::InvalidSatellite),
         }
 
         let week = self.get_orbit_f64("week").unwrap_or_default();
+
         // TODO manque logique unwrap date avec ToC
         // let week = (week as u16) & 0x3ff;
         let week = week as u16;
@@ -295,10 +377,43 @@ impl Ephemeris {
             .with_omega_radians(omega_rad)
             .with_omega_dot_rad_s(omega_dot_rad_s);
 
-        Ok(GpsQzssSubframes {
-            eph_1: subframe1,
-            eph_2: subframe2,
-            eph_3: subframe3,
+        Ok(GpsQzssEphemerisMessage {
+            eph_1: GpsQzssFrame {
+                how: {
+                    GpsQzssHow {
+                        tow,
+                        alert,
+                        anti_spoofing,
+                        frame_id: GpsQzssFrameId::Ephemeris1,
+                    }
+                },
+                telemetry: telemetries.tlm_1,
+                subframe: GpsQzssSubframe::Ephemeris1(subframe1),
+            },
+            eph_2: GpsQzssFrame {
+                how: {
+                    GpsQzssHow {
+                        tow,
+                        alert,
+                        anti_spoofing,
+                        frame_id: GpsQzssFrameId::Ephemeris2,
+                    }
+                },
+                telemetry: telemetries.tlm_2,
+                subframe: GpsQzssSubframe::Ephemeris2(subframe2),
+            },
+            eph_3: GpsQzssFrame {
+                how: {
+                    GpsQzssHow {
+                        tow,
+                        alert,
+                        anti_spoofing,
+                        frame_id: GpsQzssFrameId::Ephemeris3,
+                    }
+                },
+                telemetry: telemetries.tlm_3,
+                subframe: GpsQzssSubframe::Ephemeris3(subframe3),
+            },
         })
     }
 }
