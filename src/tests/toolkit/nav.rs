@@ -1,8 +1,30 @@
 use crate::{
-    navigation::{HeaderFields, NavMessageType},
+    navigation::{Ephemeris, HeaderFields, NavMessageType},
     prelude::{Constellation, Rinex, RinexType},
     tests::toolkit::{generic_rinex_test, sv_csv as sv_csv_parser, TimeFrame},
 };
+
+pub fn panic_eq_ephemeris(dut: &Ephemeris, model: &Ephemeris) {
+    assert_eq!(dut.clock_bias, model.clock_bias, "clock bias mismatch");
+    assert_eq!(dut.clock_drift, model.clock_drift, "clock drift mismatch");
+    assert_eq!(
+        dut.clock_drift_rate, model.clock_drift_rate,
+        "clock drift rate mismatch"
+    );
+
+    for (k, v) in dut.orbits.iter() {
+        let value = model.orbits.get(k).unwrap_or_else(|| {
+            panic!("{} missing item", k);
+        });
+        assert_eq!(v, value, "{} invalid item value", k);
+    }
+
+    for (k, v) in model.orbits.iter() {
+        if dut.orbits.get(k).is_none() {
+            panic!("found unexpected item '{}'", k);
+        }
+    }
+}
 
 // use crate::navigation::KbModel;
 // use crate::navigation::NgModel;

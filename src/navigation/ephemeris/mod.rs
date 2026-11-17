@@ -11,7 +11,7 @@ use flags::{
     bds::{BdsHealth, BdsSatH1},
     gal::GalDataSource,
     glonass::{GlonassHealth, GlonassHealth2},
-    gps::GpsQzssl1cHealth,
+    gps::{GpsQzssl1cHealth, GpsQzssl1l2l5Health},
 };
 
 #[cfg(feature = "log")]

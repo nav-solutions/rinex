@@ -2,8 +2,8 @@ use hifitime::prelude::Unit;
 use thiserror::Error;
 
 use crate::{
-    navigation::{ephemeris::GpsQzssl1cHealth, Ephemeris, OrbitItem},
-    prelude::{Constellation, SV},
+    navigation::{ephemeris::GpsQzssl1l2l5Health, Ephemeris, OrbitItem},
+    prelude::{Constellation, Epoch, TimeScale, SV},
 };
 
 use std::collections::HashMap;
@@ -16,6 +16,15 @@ fn rad_to_semicircles(rad: f64) -> f64 {
 
 fn semicircles_to_rad(semic: f64) -> f64 {
     semic * core::f64::consts::PI
+}
+
+/// Returns unwrapped week number using any close-by GPST epoch
+/// and wrapped week number counter
+fn unwrapped_week_number(t_gpst: Epoch, wn: u16) -> u32 {
+    let current_week = t_gpst.to_time_of_week().0;
+    let delta = current_week - wn as u32;
+    let rollover = (delta as f64 / 1024.0).round() as u32;
+    wn as u32 + rollover * 1024
 }
 
 #[derive(Error, Debug)]
@@ -60,9 +69,13 @@ impl Ephemeris {
     ///
     /// ## Input
     ///
-    /// - sow: Seconds in GPS week at transmission time,
-    /// derived from Z-count in Hand Over Word (HOW)
-    pub fn from_gps_qzss_subframes(sow: u32, subframes: GpsQzssSubframes) -> Result<Self, Error> {
+    /// - tow: ToW elapsed time within current GPS week (in seconds)
+    /// should be extracted from GpsQzssHow Hand Over data Word.
+    pub fn from_gps_qzss_subframes(
+        satellite: SV,
+        toc: Epoch,
+        subframes: GpsQzssSubframes,
+    ) -> Result<Self, Error> {
         let mut orbits = HashMap::<String, OrbitItem>::new();
 
         let (eph_1, eph_2, eph_3) = (subframes.eph_1, subframes.eph_2, subframes.eph_3);
@@ -78,8 +91,12 @@ impl Ephemeris {
             return Err(Error::IodcMismatch);
         }
 
-        // orbits.insert("i0".to_string(), eph_1.i0_rad);
-        orbits.insert("week".to_string(), OrbitItem::U32(eph_1.week.into()));
+        let toc_gpst = toc.to_time_scale(TimeScale::GPST);
+        let toc_week_seconds = toc_gpst.to_time_of_week().1 / 1_000_000_000;
+
+        let unwrapped_week = unwrapped_week_number(toc_gpst, eph_1.week);
+
+        orbits.insert("week".to_string(), OrbitItem::U32(unwrapped_week));
 
         if eph_1.l2_p_data_flag {
             orbits.insert("l2Codes".to_string(), OrbitItem::F64(1.0));
@@ -87,7 +104,7 @@ impl Ephemeris {
 
         let ura_raw = eph_1.ura as f64;
 
-        orbits.insert("t_tm".to_string(), OrbitItem::F64(sow as f64));
+        orbits.insert("t_tm".to_string(), OrbitItem::F64(toc_week_seconds as f64));
 
         orbits.insert("tgd".to_string(), OrbitItem::F64(eph_1.tgd));
         orbits.insert("accuracy".to_string(), OrbitItem::F64(ura_raw));
@@ -101,7 +118,7 @@ impl Ephemeris {
         orbits.insert("crs".to_string(), OrbitItem::F64(eph_2.crs));
         orbits.insert("cuc".to_string(), OrbitItem::F64(eph_2.cuc));
         orbits.insert("cus".to_string(), OrbitItem::F64(eph_2.cus));
-        orbits.insert("aodo".to_string(), OrbitItem::U8(eph_2.aodo));
+        // orbits.insert("aodo".to_string(), OrbitItem::U8(eph_2.aodo));
         orbits.insert("deltaN".to_string(), OrbitItem::F64(dn));
         orbits.insert("sqrta".to_string(), OrbitItem::F64(eph_2.sqrt_a));
         orbits.insert("iode".to_string(), OrbitItem::F64(eph_2.iode as f64));
@@ -120,13 +137,10 @@ impl Ephemeris {
         orbits.insert("omega0".to_string(), OrbitItem::F64(omega0_rad));
         orbits.insert("omegaDot".to_string(), OrbitItem::F64(omega_dot_rad_s));
 
-        let l1c_health = Into::<u8>::into(eph_1.health);
-        let l1c_health = GpsQzssl1cHealth::from_bits(l1c_health as u32).unwrap_or_default();
+        let health = Into::<u8>::into(eph_1.health);
+        let health = GpsQzssl1l2l5Health(health as u32);
 
-        orbits.insert(
-            "health".to_string(),
-            OrbitItem::GpsQzssl1cHealth(l1c_health),
-        );
+        orbits.insert("health".to_string(), OrbitItem::GpsQzssl1l2l5Health(health));
 
         Ok(Self {
             clock_bias: eph_1.af0,
@@ -233,7 +247,6 @@ impl Ephemeris {
             .to_unit(Unit::Second);
 
         let ecc = self.get_orbit_f64("e").unwrap_or_default();
-        let aodo = self.get_orbit_f64("aodo").unwrap_or_default();
         let m0_rad = self.get_orbit_f64("m0").unwrap_or_default();
         let crs_m = self.get_orbit_f64("crs").unwrap_or_default();
         let cus_rad = self.get_orbit_f64("cus").unwrap_or_default();
@@ -243,8 +256,11 @@ impl Ephemeris {
 
         let iode = self.get_orbit_f64("iode").unwrap_or_default();
 
+        // TODO AoDo in RINEX ??
+        let aodo = self.get_orbit_f64("aodo").unwrap_or_default();
+
         let subframe2 = GpsQzssFrame2::default()
-            .with_aodo(aodo as u8)
+            .with_aodo(0) // TODO aodo as u8)
             .with_toe_seconds(toe_s as u32)
             .with_mean_anomaly_radians(m0_rad)
             .with_crs_meters(crs_m)

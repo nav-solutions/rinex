@@ -1,6 +1,7 @@
 use crate::{
     navigation::{Ephemeris, OrbitItem},
     prelude::{Constellation, Rinex, SV},
+    tests::toolkit::nav::panic_eq_ephemeris,
 };
 
 use std::collections::HashMap;
@@ -21,11 +22,9 @@ fn test_lnav_v2_to_raw() {
             );
         });
 
-        let (_week, sow) = key.epoch.to_time_of_week();
+        let reciprocal = Ephemeris::from_gps_qzss_subframes(key.sv, key.epoch, burst).unwrap();
 
-        let reciprocal = Ephemeris::from_gps_qzss_subframes(sow as u32, burst).unwrap();
-
-        assert_eq!(reciprocal, *eph);
+        panic_eq_ephemeris(&reciprocal, eph);
 
         count += 1;
     }

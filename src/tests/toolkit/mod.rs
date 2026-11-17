@@ -15,7 +15,7 @@ mod observation;
 
 // NAV RINEX dedicated tools
 #[cfg(feature = "nav")]
-mod nav;
+pub mod nav;
 
 // Meteo RINEX dedicated tests
 #[cfg(feature = "meteo")]
