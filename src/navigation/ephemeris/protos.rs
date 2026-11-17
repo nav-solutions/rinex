@@ -1,28 +1,73 @@
-use hifitime::prelude::{Duration, Unit};
+use thiserror::Error;
+use hifitime::prelude::{Unit};
 
 use crate::{
     navigation::{ephemeris::GpsQzssl1cHealth, Ephemeris, OrbitItem},
-    prelude::{Constellation, Epoch, SV},
+    prelude::{Constellation, SV},
 };
 
 use std::collections::HashMap;
 
 use gnss_protos::{
-    GpsQzssFrame, GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3, GpsQzssFrameId, GpsQzssHow,
-    GpsQzssSubframe, GpsQzssTelemetry,
+    GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3, 
 };
 
+
+#[derive(Error, Debug)]
+pub enum Error {
+    /// EPH-1 and EPH-2 IODE codes do not match: invalid message burst
+    #[error("EPH-1/EPH-2 IODE mismatch")]
+    IodeMismatch,
+
+    /// EPH-x IODE and EPH-3 IODC do not match: invalid message burst
+    #[error("EPH-3 IODC mismatch")]
+    IodcMismatch,
+    
+    /// Not a GPS or QZSS satellite
+    #[error("Invalid Satellite")]
+    InvalidSatellite,
+
+    /// ToE Time of Issue of Ephemeris internal calculations failed
+    #[error("Failed to compute ToE")]
+    ToECalculations,
+}
+
+/// [GpsQzssSubframes] burst that we can encode from any [Ephemeris]
+/// produced by any GPS/QZSS satellite. This API proposes the mirror operation,
+/// converting any [Ephemeris] message to such a burst.
+#[derive(Debug, Copy, Clone, Default)]
+pub struct GpsQzssSubframes {
+    /// EPH-1 first message (1st/5 in rotation)
+    pub eph_1: GpsQzssFrame1,
+
+    /// EPH-2 second message (2nd/5 in rotation)
+    pub eph_2: GpsQzssFrame2,
+
+    /// EPH-3 third message (3rd/5 in rotation)
+    pub eph_3: GpsQzssFrame3,
+}
+
 impl Ephemeris {
-    /// Builds an [Ephemeris] frame from a serie of received [GpsQzssFrame] decoded
-    /// from a raw binary stream.
-    /// This method does not verify the validity of the message and combination
-    /// of the 3 messages, which should be done prior calling this method.
-    pub fn from_gps_qzss_messages(
-        eph_1: GpsQzssFrame1,
-        eph_2: GpsQzssFrame2,
-        eph_3: GpsQzssFrame3,
-    ) -> Self {
+    /// Builds an [Ephemeris] frame from [GpsQzssSubframes] sequence.
+    /// The sequence must be extracted from the first 3 parts of the 5 message rotation of a given
+    /// satellite. This API does not tolerate incorrect message collection.
+    pub fn from_gps_qzss_subframes(
+        subframes: GpsQzssSubframes,
+    ) -> Result<Self, Error> {
         let mut orbits = HashMap::<String, OrbitItem>::new();
+
+        let (eph_1, eph_2, eph_3) = (subframes.eph_1, subframes.eph_2, subframes.eph_3);
+
+        let iodc = eph_1.iodc();
+        let (iode_1, iode_2) = (eph_2.iode, eph_3.iode);
+
+        if iode_1 != iode_2 {
+            return Err(Error::IodeMismatch);
+        }
+
+        if (iodc & 0x0f) as u8 != iode_1 {
+            return Err(Error::IodcMismatch);
+        }
 
         // orbits.insert("i0".to_string(), eph_1.i0_rad);
         orbits.insert("week".to_string(), OrbitItem::U32(eph_1.week.into()));
@@ -41,41 +86,81 @@ impl Ephemeris {
             OrbitItem::GpsQzssl1cHealth(l1c_health),
         );
 
-        Self {
+        Ok(Self {
             clock_bias: eph_1.af0,
             clock_drift: eph_1.af1,
             clock_drift_rate: eph_1.af2,
             orbits,
-        }
+        })
     }
 
-    /// Converts this [Ephemeris] frame to a burst of [GpsQzssFrame]s, which
-    /// you can then stream in binary.
-    /// The burst will contain:
-    /// - TODO
+    /// Dumps this [Ephemeris] frame as [GpsQzssSubframe] sequence.
+    /// The sequence describes the 3 subframes of the 3/5 first part of the message rotation
+    /// of a given satellite. To correctly encode the 3/5 first part of the message rotation,
+    /// you need to wrap the subframes into the correct proto structure. In particular:
+    ///
+    /// - you control ToW for each message, which should reflect the correct data transmission rate
+    /// if you are aiming towards realistic bitstream synthesis
+    ///
+    /// - our framework gives you access to TLM Message number and basically every single bit
+    /// of the binary message. In particular, this allows advanced users and private operators to
+    /// encode the non-public part of the message.
+    ///
+    /// Once the 3/5 subframes have been wrapped to [GpsQzssFrame] you have 3/5 of the message that
+    /// is compatible with streaming. If you want to complete the last 2/5 of the message rotation,
+    /// you need to create the two almanach subframes, very similarly but describing different
+    /// physical information. This library may offer options to facilitate this step as well,
+    /// but that does not exist at the moment. if you are limiting to the first 3/5 part of the
+    /// message, you can stream zeros to conclude the rotation of this vehicle (no almanach
+    /// information).
     ///
     /// ## Input
-    /// - toc: Time of Clock as [Epoch]
-    /// - sv: attached satellite as [SV] which must either be GPS or QZSS satellite.
-    /// - iodc: IODC message identifier
-    /// - telemetry: attached [GpsQzssTelemetry]
+    ///
+    /// - satellite: must be GPS or QZSS, required for internal calculations
+    /// prior formatting
+    ///
+    /// - week: week number at transmission time (as u16)
+    ///
+    /// - iodc: IODC message identifier. This API verifies correctness of both identifiers.
+    /// information. With great power come great responsabilities.
+    ///
+    /// - iode: IODE message identifier. This API verifies correctness of both identifiers.
     ///
     /// ## Output
-    /// - burst of [GpsQzssFrame]s
+    /// - 3/5 of the message rotation, described as [GpsQzssSubframes] without
+    /// "header" information that you still have to complete.
+    ///
+    /// ```
+    /// let ephemeris = Ephemeris::default();
+    ///
+    /// let g01 = SV(Constellation::GPS, 1);
+    /// let toc = Epoch::from_gregorian_utc_at_midnight(2000, 1, 1);
+    ///
+    /// // Message combination must be valid
+    /// let iodc = 0x3f;
+    /// let iode = 0x3f;
+    ///
+    /// let message_burst = ephemeris.to_gps_qzss_subframes(toc, g01, iode, iodc)
+    ///     .unwrap();
+    ///
+    /// // bit true reciprocity
+    /// let reciprocal = Ephemeris::from_gps_qzss_messages(message_burst)
+    ///     .unwrap();
+    ///
+    /// assert_eq!(reciprocal, ephemeris);
+    /// ```
     pub fn to_gps_qzss_messages(
         &self,
-        toc: Epoch,
-        sv: SV,
-        iodc: u16,
-        telemetry: GpsQzssTelemetry,
-    ) -> Option<[GpsQzssFrame; 3]> {
-        match sv.constellation {
+        satellite: SV,
+    ) -> Result<GpsQzssSubframes, Error> {
+
+        match satellite.constellation {
             Constellation::GPS | Constellation::QZSS => {},
-            _ => return None,
+            _ => return Err(Error::InvalidSatellite),
         }
 
-        let (tow, week) = toc.to_time_of_week();
-        let week = (week & 0x3ff) as u16;
+        let week = self.get_orbit_f64("week").unwrap_or_default();
+        let week = (week as u16) & 0x3ff;
 
         let l2p_mask = self.get_orbit_f64("l2p").unwrap_or_default();
         let health = self.get_orbit_f64("health").unwrap_or_default();
@@ -83,9 +168,11 @@ impl Ephemeris {
 
         let ura_m = self.get_orbit_f64("accuracy").unwrap_or_default();
 
-        let mut subframe1 = GpsQzssFrame1::default()
+        let iodc = self.get_orbit_f64("iodc").unwrap_or_default();
+
+        let subframe1 = GpsQzssFrame1::default()
             .with_week(week)
-            .with_iodc(iodc)
+            .with_iodc(iodc as u16)
             .with_ca_or_p_l2_mask(l2p_mask as u8)
             .with_health((health as u8).into())
             .with_clock_offset_seconds(self.clock_bias)
@@ -96,23 +183,9 @@ impl Ephemeris {
 
         // TODO .with_l2p_flag
 
-        let frame1 = GpsQzssFrame {
-            telemetry,
-            how: GpsQzssHow {
-                tow,
-                // The alert bit serves two purposes.
-                // For block 000 satellites, '1' here indicates a maneuver.
-                // For other satellites, '1' here means the URA may be worse than indicated in subframe 1
-                // and user shall use this SV at their own risk.
-                alert: false,
-                // is this lost in the RINEX fmt ?
-                anti_spoofing: false,
-                frame_id: GpsQzssFrameId::Ephemeris1,
-            },
-            subframe: GpsQzssSubframe::Ephemeris1(subframe1),
-        };
-
-        let toe_s = self.toe(sv)?.duration.to_unit(Unit::Second);
+        let toe_s = self.toe(satellite)
+            .ok_or(Error::ToECalculations)?
+            .duration.to_unit(Unit::Second);
 
         let i0_rad = self.get_orbit_f64("i0").unwrap_or_default();
         let crs_m = self.get_orbit_f64("crs").unwrap_or_default();
@@ -122,7 +195,7 @@ impl Ephemeris {
 
         let iode = self.get_orbit_f64("iode").unwrap_or_default();
 
-        let mut subframe2 = GpsQzssFrame2::default()
+        let subframe2 = GpsQzssFrame2::default()
             .with_toe_seconds(toe_s as u32)
             .with_mean_anomaly_radians(i0_rad)
             .with_crs_meters(crs_m)
@@ -133,22 +206,6 @@ impl Ephemeris {
             .with_cus_radians(cus_rad);
 
         // TODO subframe2 .with_fit_interval
-
-        let frame2 = GpsQzssFrame {
-            telemetry,
-            how: GpsQzssHow {
-                tow,
-                // The alert bit serves two purposes.
-                // For block 000 satellites, '1' here indicates a maneuver.
-                // For other satellites, '1' here means the URA may be worse than indicated in subframe 1
-                // and user shall use this SV at their own risk.
-                alert: false,
-                // is this lost in the RINEX fmt ?
-                anti_spoofing: false,
-                frame_id: GpsQzssFrameId::Ephemeris2,
-            },
-            subframe: GpsQzssSubframe::Ephemeris2(subframe2),
-        };
 
         let i0_rad = self.get_orbit_f64("i0").unwrap_or_default();
         let idot_rad_s = self.get_orbit_f64("idot").unwrap_or_default();
@@ -161,7 +218,7 @@ impl Ephemeris {
         let omega_rad = self.get_orbit_f64("omega").unwrap_or_default();
         let omega_dot_rad_s = self.get_orbit_f64("omegaDot").unwrap_or_default();
 
-        let mut subframe3 = GpsQzssFrame3::default()
+        let subframe3 = GpsQzssFrame3::default()
             .with_cic_radians(cic_rad)
             .with_cis_radians(cis_rad)
             .with_crc_meters(crc_m)
@@ -172,22 +229,10 @@ impl Ephemeris {
             .with_omega_radians(omega_rad)
             .with_omega_dot_rad_s(omega_dot_rad_s);
 
-        let frame3 = GpsQzssFrame {
-            telemetry,
-            how: GpsQzssHow {
-                tow,
-                // The alert bit serves two purposes.
-                // For block 000 satellites, '1' here indicates a maneuver.
-                // For other satellites, '1' here means the URA may be worse than indicated in subframe 1
-                // and user shall use this SV at their own risk.
-                alert: false,
-                // is this lost in the RINEX fmt ?
-                anti_spoofing: false,
-                frame_id: GpsQzssFrameId::Ephemeris3,
-            },
-            subframe: GpsQzssSubframe::Ephemeris3(subframe3),
-        };
-
-        Some([frame1, frame2, frame3])
+        Ok(GpsQzssSubframes {
+            eph_1: subframe1,
+            eph_2: subframe2,
+            eph_3: subframe3,
+        })
     }
 }
