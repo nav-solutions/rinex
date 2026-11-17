@@ -3,7 +3,7 @@ use std::io::Write;
 
 use rinex::{
     navigation::{GpsQzssEphemerisMessage, GpsQzssEphemerisTelemetries},
-    prelude::{Constellation, Rinex, SV},
+    prelude::{Constellation, Rinex},
 };
 
 use gnss_protos::{GpsQzssFrame, GpsQzssTelemetry};
@@ -29,8 +29,19 @@ impl<'a, const N: usize> Buffer<'a, N> {
         }
     }
 
-    /// Encode EPH-1,2,3 burst
-    pub fn encode_frame(&mut self, frame: GpsQzssFrame) {}
+    /// Encodes EPH-1,2,3 burst
+    pub fn encode_eph123_burst(&mut self, burst: GpsQzssEphemerisMessage) {
+        self.encode_frame(burst.eph_1);
+        self.encode_frame(burst.eph_2);
+        self.encode_frame(burst.eph_3);
+    }
+
+    /// Encodes one GPS frame 
+    pub fn encode_frame(&mut self, frame: GpsQzssFrame) {
+        let size = frame.encode_at(&mut self.buffer[self.ptr..], 0)
+            .unwrap();
+        self.ptr += size; 
+    }
 
     /// Dump buffer to static file
     pub fn save_file(&self) {
@@ -38,7 +49,7 @@ impl<'a, const N: usize> Buffer<'a, N> {
             panic!("Failed to open (WR) file: {} - {}", self.path, e);
         });
 
-        fd.write_all(&self.buffer).unwrap_or_else(|e| {
+        fd.write_all(&self.buffer[..self.ptr]).unwrap_or_else(|e| {
             panic!("Failed to dump buffer to file: {} - {}", self.path, e);
         });
     }
@@ -108,18 +119,112 @@ pub fn main() {
                     .to_gps_qzss_eph_message(key.sv, key.epoch, false, false, tlm)
                     .unwrap_or_else(|e| {
                         panic!(
-                            "Failed to extract an Ephemeris burst for {} @ {}",
-                            key.sv, key.epoch
+                            "Failed to extract an Ephemeris burst for {} @ {} - {}",
+                            key.sv, key.epoch, e
                         );
                     });
-
-                g15_buf.encode_frame(burst.eph_1); // EPH-1
-                g15_buf.encode_frame(burst.eph_2); // EPH-2
-                g15_buf.encode_frame(burst.eph_3); // EPH-3
+                g15_buf.encode_eph123_burst(burst);
             },
+            (Constellation::GPS, 24) => {
+                // extract
+                let burst = eph
+                    .to_gps_qzss_eph_message(key.sv, key.epoch, false, false, tlm)
+                    .unwrap_or_else(|e| {
+                        panic!(
+                            "Failed to extract an Ephemeris burst for {} @ {} - {}",
+                            key.sv, key.epoch, e,
+                        );
+                    });
+                g24_buf.encode_eph123_burst(burst);
+            },
+            (Constellation::GPS, 31) => {
+                // extract
+                let burst = eph
+                    .to_gps_qzss_eph_message(key.sv, key.epoch, false, false, tlm)
+                    .unwrap_or_else(|e| {
+                        panic!(
+                            "Failed to extract an Ephemeris burst for {} @ {} - {}",
+                            key.sv, key.epoch, e
+                        );
+                    });
+                g31_buf.encode_eph123_burst(burst);
+            },
+            (Constellation::QZSS, 1) => {
+                // extract
+                let burst = eph
+                    .to_gps_qzss_eph_message(key.sv, key.epoch, false, false, tlm)
+                    .unwrap_or_else(|e| {
+                        panic!(
+                            "Failed to extract an Ephemeris burst for {} @ {} - {}",
+                            key.sv, key.epoch, e
+                        );
+                    });
+                j01_buf.encode_eph123_burst(burst);
+            },
+            (Constellation::QZSS, 2) => {
+                // extract
+                let burst = eph
+                    .to_gps_qzss_eph_message(key.sv, key.epoch, false, false, tlm)
+                    .unwrap_or_else(|e| {
+                        panic!(
+                            "Failed to extract an Ephemeris burst for {} @ {} - {}",
+                            key.sv, key.epoch, e
+                        );
+                    });
+                j02_buf.encode_eph123_burst(burst);
+            },
+            (Constellation::QZSS, 3) => {
+                // extract
+                let burst = eph
+                    .to_gps_qzss_eph_message(key.sv, key.epoch, false, false, tlm)
+                    .unwrap_or_else(|e| {
+                        panic!(
+                            "Failed to extract an Ephemeris burst for {} @ {} - {}",
+                            key.sv, key.epoch, e
+                        );
+                    });
+                j03_buf.encode_eph123_burst(burst);
+            },
+            // (Constellation::Galileo, 7) => {
+            //     // extract
+            //     let burst = eph
+            //         .to_gps_qzss_eph_message(key.sv, key.epoch, false, false, tlm)
+            //         .unwrap_or_else(|e| {
+            //             panic!(
+            //                 "Failed to extract an Ephemeris burst for {} @ {}",
+            //                 key.sv, key.epoch
+            //             );
+            //         });
+            //     e07_buf.encode_eph123_burst(burst);
+            // },
+            // (Constellation::Galileo, 11) => {
+            //     // extract
+            //     let burst = eph
+            //         .to_gps_qzss_eph_message(key.sv, key.epoch, false, false, tlm)
+            //         .unwrap_or_else(|e| {
+            //             panic!(
+            //                 "Failed to extract an Ephemeris burst for {} @ {}",
+            //                 key.sv, key.epoch
+            //             );
+            //         });
+            //     e11_buf.encode_eph123_burst(burst);
+            // },
+            // (Constellation::Galileo, 15) => {
+            //     // extract
+            //     let burst = eph
+            //         .to_gps_qzss_eph_message(key.sv, key.epoch, false, false, tlm)
+            //         .unwrap_or_else(|e| {
+            //             panic!(
+            //                 "Failed to extract an Ephemeris burst for {} @ {}",
+            //                 key.sv, key.epoch
+            //             );
+            //         });
+            //     e15_buf.encode_eph123_burst(burst);
+            // },
             _ => {},
         }
     }
+
     // generate each files
     g15_buf.save_file();
     g24_buf.save_file();
