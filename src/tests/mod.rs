@@ -1,11 +1,11 @@
 //! integrated tests
+pub mod formatting;
 pub mod toolkit;
 
 mod antex;
 mod compression;
 mod crinex;
 mod filename;
-pub mod formatting;
 mod parsing;
 
 #[cfg(all(feature = "flate2", feature = "qc"))]
@@ -13,6 +13,9 @@ mod sbas;
 
 #[cfg(feature = "flate2")]
 mod production;
+
+#[cfg(feature = "protos")]
+mod protos;
 
 #[cfg(feature = "qc")]
 mod merge;

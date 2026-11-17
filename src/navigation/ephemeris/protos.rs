@@ -1,5 +1,5 @@
+use hifitime::prelude::Unit;
 use thiserror::Error;
-use hifitime::prelude::{Unit};
 
 use crate::{
     navigation::{ephemeris::GpsQzssl1cHealth, Ephemeris, OrbitItem},
@@ -8,10 +8,15 @@ use crate::{
 
 use std::collections::HashMap;
 
-use gnss_protos::{
-    GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3, 
-};
+use gnss_protos::{GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3};
 
+fn rad_to_semicircles(rad: f64) -> f64 {
+    rad / core::f64::consts::PI
+}
+
+fn semicircles_to_rad(semic: f64) -> f64 {
+    semic * core::f64::consts::PI
+}
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -22,7 +27,7 @@ pub enum Error {
     /// EPH-x IODE and EPH-3 IODC do not match: invalid message burst
     #[error("EPH-3 IODC mismatch")]
     IodcMismatch,
-    
+
     /// Not a GPS or QZSS satellite
     #[error("Invalid Satellite")]
     InvalidSatellite,
@@ -50,10 +55,14 @@ pub struct GpsQzssSubframes {
 impl Ephemeris {
     /// Builds an [Ephemeris] frame from [GpsQzssSubframes] sequence.
     /// The sequence must be extracted from the first 3 parts of the 5 message rotation of a given
-    /// satellite. This API does not tolerate incorrect message collection.
-    pub fn from_gps_qzss_subframes(
-        subframes: GpsQzssSubframes,
-    ) -> Result<Self, Error> {
+    /// satellite. This API only deals with Ephemeris frames 1, 2 & 3,
+    /// and it does not tolerate incorrect message association.
+    ///
+    /// ## Input
+    ///
+    /// - sow: Seconds in GPS week at transmission time,
+    /// derived from Z-count in Hand Over Word (HOW)
+    pub fn from_gps_qzss_subframes(sow: u32, subframes: GpsQzssSubframes) -> Result<Self, Error> {
         let mut orbits = HashMap::<String, OrbitItem>::new();
 
         let (eph_1, eph_2, eph_3) = (subframes.eph_1, subframes.eph_2, subframes.eph_3);
@@ -71,12 +80,45 @@ impl Ephemeris {
 
         // orbits.insert("i0".to_string(), eph_1.i0_rad);
         orbits.insert("week".to_string(), OrbitItem::U32(eph_1.week.into()));
-        orbits.insert(
-            "l2p".to_string(),
-            OrbitItem::Gpsl2pFlag(eph_1.l2_p_data_flag),
-        );
+
+        if eph_1.l2_p_data_flag {
+            orbits.insert("l2Codes".to_string(), OrbitItem::F64(1.0));
+        }
+
+        let ura_raw = eph_1.ura as f64;
+
+        orbits.insert("t_tm".to_string(), OrbitItem::F64(sow as f64));
+
         orbits.insert("tgd".to_string(), OrbitItem::F64(eph_1.tgd));
-        orbits.insert("ura".to_string(), OrbitItem::U8(eph_1.ura));
+        orbits.insert("accuracy".to_string(), OrbitItem::F64(ura_raw));
+        orbits.insert("iodc".to_string(), OrbitItem::F64(eph_1.iodc() as f64));
+
+        let dn = semicircles_to_rad(eph_2.dn);
+        let m0 = semicircles_to_rad(eph_2.m0);
+
+        orbits.insert("e".to_string(), OrbitItem::F64(eph_2.e));
+        orbits.insert("m0".to_string(), OrbitItem::F64(m0));
+        orbits.insert("crs".to_string(), OrbitItem::F64(eph_2.crs));
+        orbits.insert("cuc".to_string(), OrbitItem::F64(eph_2.cuc));
+        orbits.insert("cus".to_string(), OrbitItem::F64(eph_2.cus));
+        orbits.insert("aodo".to_string(), OrbitItem::U8(eph_2.aodo));
+        orbits.insert("deltaN".to_string(), OrbitItem::F64(dn));
+        orbits.insert("sqrta".to_string(), OrbitItem::F64(eph_2.sqrt_a));
+        orbits.insert("iode".to_string(), OrbitItem::F64(eph_2.iode as f64));
+
+        let i0_rad = semicircles_to_rad(eph_3.i0);
+        let omega_rad = semicircles_to_rad(eph_3.omega);
+        let omega0_rad = semicircles_to_rad(eph_3.omega0);
+        let omega_dot_rad_s = semicircles_to_rad(eph_3.omega_dot);
+
+        orbits.insert("crc".to_string(), OrbitItem::F64(eph_3.crc));
+        orbits.insert("cic".to_string(), OrbitItem::F64(eph_3.cic));
+        orbits.insert("cis".to_string(), OrbitItem::F64(eph_3.cis));
+        orbits.insert("i0".to_string(), OrbitItem::F64(i0_rad));
+        orbits.insert("idot".to_string(), OrbitItem::F64(eph_3.idot));
+        orbits.insert("omega".to_string(), OrbitItem::F64(omega_rad));
+        orbits.insert("omega0".to_string(), OrbitItem::F64(omega0_rad));
+        orbits.insert("omegaDot".to_string(), OrbitItem::F64(omega_dot_rad_s));
 
         let l1c_health = Into::<u8>::into(eph_1.health);
         let l1c_health = GpsQzssl1cHealth::from_bits(l1c_health as u32).unwrap_or_default();
@@ -95,9 +137,11 @@ impl Ephemeris {
     }
 
     /// Dumps this [Ephemeris] frame as [GpsQzssSubframe] sequence.
-    /// The sequence describes the 3 subframes of the 3/5 first part of the message rotation
-    /// of a given satellite. To correctly encode the 3/5 first part of the message rotation,
-    /// you need to wrap the subframes into the correct proto structure. In particular:
+    ///
+    /// The sequence describes the first 3 frames of the 5 frame message rotation
+    /// of a given satellite.  To correctly encode each message, you will have to
+    /// wrap each subframe as GpsQzssFrame which can then be streamed to binary.
+    /// In particular:
     ///
     /// - you control ToW for each message, which should reflect the correct data transmission rate
     /// if you are aiming towards realistic bitstream synthesis
@@ -106,13 +150,10 @@ impl Ephemeris {
     /// of the binary message. In particular, this allows advanced users and private operators to
     /// encode the non-public part of the message.
     ///
-    /// Once the 3/5 subframes have been wrapped to [GpsQzssFrame] you have 3/5 of the message that
-    /// is compatible with streaming. If you want to complete the last 2/5 of the message rotation,
-    /// you need to create the two almanach subframes, very similarly but describing different
-    /// physical information. This library may offer options to facilitate this step as well,
-    /// but that does not exist at the moment. if you are limiting to the first 3/5 part of the
-    /// message, you can stream zeros to conclude the rotation of this vehicle (no almanach
-    /// information).
+    /// Once the 3/5 subframes have been wrapped, you can stream 3/5th of the message rotation.
+    /// You can complete the rotation with zeros if you don't know how to encode Almanach
+    /// information. This library may offer options to faciliate as well, but it is not available
+    /// yet.
     ///
     /// ## Input
     ///
@@ -149,61 +190,70 @@ impl Ephemeris {
     ///
     /// assert_eq!(reciprocal, ephemeris);
     /// ```
-    pub fn to_gps_qzss_messages(
-        &self,
-        satellite: SV,
-    ) -> Result<GpsQzssSubframes, Error> {
-
+    pub fn to_gps_qzss_subframes(&self, satellite: SV) -> Result<GpsQzssSubframes, Error> {
         match satellite.constellation {
             Constellation::GPS | Constellation::QZSS => {},
             _ => return Err(Error::InvalidSatellite),
         }
 
         let week = self.get_orbit_f64("week").unwrap_or_default();
-        let week = (week as u16) & 0x3ff;
+        // TODO manque logique unwrap date avec ToC
+        // let week = (week as u16) & 0x3ff;
+        let week = week as u16;
 
-        let l2p_mask = self.get_orbit_f64("l2p").unwrap_or_default();
+        let l2p_code = self.get_orbit_f64("l2Codes").unwrap_or_default();
+        let l2p_flag = self.get_orbit_f64("l2p").unwrap_or_default() > 0.0;
+
         let health = self.get_orbit_f64("health").unwrap_or_default();
-        let tgd_nanos = self.get_orbit_f64("tgd").unwrap_or_default();
+        let tgd_s = self.get_orbit_f64("tgd").unwrap_or_default();
 
         let ura_m = self.get_orbit_f64("accuracy").unwrap_or_default();
 
         let iodc = self.get_orbit_f64("iodc").unwrap_or_default();
 
-        let subframe1 = GpsQzssFrame1::default()
+        let mut subframe1 = GpsQzssFrame1::default()
             .with_week(week)
             .with_iodc(iodc as u16)
-            .with_ca_or_p_l2_mask(l2p_mask as u8)
+            .with_ca_or_p_l2_mask(l2p_code as u8)
             .with_health((health as u8).into())
             .with_clock_offset_seconds(self.clock_bias)
             .with_clock_drift_seconds_s(self.clock_drift)
             .with_user_range_accuracy_m(ura_m)
             .with_clock_drift_rate_seconds_s2(self.clock_drift_rate)
-            .with_total_group_delay_nanos(tgd_nanos);
+            .with_total_group_delay_seconds(tgd_s);
 
-        // TODO .with_l2p_flag
+        if l2p_flag {
+            subframe1 = subframe1.with_l2p_flag();
+        }
 
-        let toe_s = self.toe(satellite)
+        let toe_s = self
+            .toe(satellite)
             .ok_or(Error::ToECalculations)?
-            .duration.to_unit(Unit::Second);
+            .duration
+            .to_unit(Unit::Second);
 
-        let i0_rad = self.get_orbit_f64("i0").unwrap_or_default();
+        let ecc = self.get_orbit_f64("e").unwrap_or_default();
+        let aodo = self.get_orbit_f64("aodo").unwrap_or_default();
+        let m0_rad = self.get_orbit_f64("m0").unwrap_or_default();
         let crs_m = self.get_orbit_f64("crs").unwrap_or_default();
         let cus_rad = self.get_orbit_f64("cus").unwrap_or_default();
-        let semi_major_axis_m = self.get_orbit_f64("sqrt_a").unwrap_or_default().powi(2);
-        let mean_motion_diff_rad = self.get_orbit_f64("delta_n").unwrap_or_default();
+        let cuc_rad = self.get_orbit_f64("cuc").unwrap_or_default();
+        let semi_major_axis_m = self.get_orbit_f64("sqrta").unwrap_or_default().powi(2);
+        let mean_motion_diff_rad_s = self.get_orbit_f64("deltaN").unwrap_or_default();
 
         let iode = self.get_orbit_f64("iode").unwrap_or_default();
 
         let subframe2 = GpsQzssFrame2::default()
+            .with_aodo(aodo as u8)
             .with_toe_seconds(toe_s as u32)
-            .with_mean_anomaly_radians(i0_rad)
+            .with_mean_anomaly_radians(m0_rad)
             .with_crs_meters(crs_m)
             .with_iode(iode as u8)
-            .with_eccentricity(self.get_orbit_f64("e").unwrap_or_default())
+            .with_cuc_radians(cuc_rad)
+            .with_cus_radians(cus_rad)
+            .with_eccentricity(ecc)
             .with_semi_major_axis_meters(semi_major_axis_m)
-            .with_mean_motion_difference_radians(mean_motion_diff_rad)
-            .with_cus_radians(cus_rad);
+            .with_mean_motion_difference_radians(mean_motion_diff_rad_s);
 
         // TODO subframe2 .with_fit_interval
 
