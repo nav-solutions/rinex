@@ -1,4 +1,4 @@
-use hifitime::prelude::Unit;
+use hifitime::{prelude::Unit, NANOSECONDS_PER_SECOND};
 
 use thiserror::Error;
 
@@ -13,26 +13,13 @@ use crate::{
 use std::collections::HashMap;
 
 use gnss_protos::{
-    GpsQzssFrame, GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3, GpsQzssFrameId, GpsQzssHow,
-    GpsQzssSubframe, GpsQzssTelemetry,
+    constants::SECONDS_PER_WEEK,
+    gps::{
+        GpsQzssFrame, GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3, GpsQzssFrameId, GpsQzssHow,
+        GpsQzssSubframe, GpsQzssTelemetry, GPS_FRAME_DURATION_S, GPS_SUBFRAME_DURATION_S,
+        GPS_TOC_TOE_LSB_S, GPS_WEEK_ROLLOVER,
+    },
 };
-
-const NANOS_PER_SECOND: u64 = 1_000_000_000;
-
-/// Number of seconds in one GPS week.
-const SECONDS_PER_WEEK: i64 = 604_800;
-
-/// A GPS/QZSS frame (5 subframes) lasts 30s, frames are aligned to the week start.
-const FRAME_DURATION_S: u64 = 30;
-
-/// A GPS/QZSS subframe lasts 6s.
-const SUBFRAME_DURATION_S: u32 = 6;
-
-/// SF1.toc and SF2.toe are expressed with a 16s LSB.
-const TOC_TOE_LSB_S: u32 = 16;
-
-/// The week number is broadcast modulo 1024.
-const WEEK_ROLLOVER: i64 = 1024;
 
 /// RINEX describes an unknown transmission time with 0.9999E9.
 /// Any |t_tm| greater than this threshold cannot be a valid transmission time.
@@ -46,35 +33,9 @@ const NOMINAL_URA_M: [f64; 16] = [
     8192.0,
 ];
 
-/// Returns unwrapped (continuous) week number, using any GPST [Epoch]
-/// that lies within 512 weeks of the transmission time.
-fn unwrapped_week_number(t_gpst: Epoch, wn: u16) -> u32 {
-    let reference_week = t_gpst.to_time_of_week().0 as i64;
-    let wn = (wn as i64) % WEEK_ROLLOVER;
-
-    // candidate within the same 1024 week cycle as the reference
-    let mut week = reference_week - reference_week.rem_euclid(WEEK_ROLLOVER) + wn;
-
-    // pick the closest candidate
-    let delta = week - reference_week;
-
-    if delta > WEEK_ROLLOVER / 2 {
-        week -= WEEK_ROLLOVER;
-    } else if delta < -WEEK_ROLLOVER / 2 {
-        week += WEEK_ROLLOVER;
-    }
-
-    // weeks prior GPST origin do not exist
-    if week < 0 {
-        week += WEEK_ROLLOVER;
-    }
-
-    week as u32
-}
-
 /// Builds the GPST [Epoch] located at `seconds` within `week`.
 fn gpst_epoch(week: u32, seconds: u64) -> Epoch {
-    Epoch::from_time_of_week(week, seconds * NANOS_PER_SECOND, TimeScale::GPST)
+    Epoch::from_time_of_week(week, seconds * NANOSECONDS_PER_SECOND, TimeScale::GPST)
 }
 
 /// ToC and ToE are only broadcast as seconds within the week.
@@ -224,6 +185,7 @@ pub struct GpsQzssEphemerisMessage {
 /// composing the ephemeris (first 3/5) of the message rotation.
 /// In particular, this is most useful to advanced users that can take
 /// advantage of this API to compose the TLM and private bits of the bitstream.
+#[derive(Debug, Copy, Clone, Default)]
 pub struct GpsQzssEphemerisTelemetries {
     /// TLM-1 to be associated to EPH-1
     pub tlm_1: GpsQzssTelemetry,
@@ -239,6 +201,7 @@ pub struct GpsQzssEphemerisTelemetries {
 /// streamed in strict order, by any satellite.
 /// The first 3/5 parts can be formed from any RINEX [Ephemeris].
 /// The last 4/5 and 5/5 (Almanach) frames can be [...]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct GpsQzssMessage {
     /// Ephemeris 3/5 of the message rotation
     pub eph: GpsQzssEphemerisMessage,
@@ -254,6 +217,7 @@ pub struct GpsQzssMessage {
 /// [GpsQzssTelemetry] of a complete message rotation.
 /// This is most useful to advanced users that can take
 /// advantage of this API to compose the TLM and private bits of the bitstream.
+#[derive(Debug, Copy, Clone, Default)]
 pub struct GpsQzssTelemetries {
     /// 3x [GpsQzssTelemetry] to be associated with the first 3/5 subframes
     pub eph_tlm: GpsQzssEphemerisTelemetries,
@@ -307,11 +271,11 @@ impl Ephemeris {
 
         // HOW.tow is expressed in seconds:
         // start of the following subframe.
-        if eph_2.how.tow != eph_1.how.tow + SUBFRAME_DURATION_S {
+        if eph_2.how.tow != eph_1.how.tow + GPS_SUBFRAME_DURATION_S {
             return Err(Error::NonConsecutiveEph123);
         }
 
-        if eph_3.how.tow != eph_1.how.tow + 2 * SUBFRAME_DURATION_S {
+        if eph_3.how.tow != eph_1.how.tow + 2 * GPS_SUBFRAME_DURATION_S {
             return Err(Error::NonConsecutiveEph123);
         }
 
@@ -333,13 +297,13 @@ impl Ephemeris {
 
         // Transmission time: EPH-1 starts 6s before the HOW(EPH-1) instant,
         // and EPH-1 always starts a 30s frame.
-        if eph_1.how.tow < SUBFRAME_DURATION_S {
+        if eph_1.how.tow < GPS_SUBFRAME_DURATION_S {
             return Err(Error::MisalignedFrame);
         }
 
-        let t_sf1_s = (eph_1.how.tow - SUBFRAME_DURATION_S) as u64;
+        let t_sf1_s = (eph_1.how.tow - GPS_SUBFRAME_DURATION_S) as u64;
 
-        if t_sf1_s % FRAME_DURATION_S != 0 {
+        if t_sf1_s % GPS_FRAME_DURATION_S != 0 {
             return Err(Error::MisalignedFrame);
         }
 
@@ -512,8 +476,9 @@ impl Ephemeris {
     ///         .unwrap();
     ///
     ///     // reciprocal (RINEX [Ephemeris] frame, and its ToC)
-    ///     let (toc, decoded) = Ephemeris::from_gps_qzss_eph_message(key.epoch, key.sv, message)
-    ///         .unwrap();
+    ///     let (toc, decoded) = Ephemeris::from_gps_qzss_eph_message(key.sv, key.epoch, false,
+    ///         false, message)
+    ///     .unwrap();
     ///
     ///     assert_eq!(toc, key.epoch);
     /// }
@@ -535,17 +500,20 @@ impl Ephemeris {
         let toc_gpst = toc.to_time_scale(TimeScale::GPST);
         let toc_nanos = toc_gpst.to_time_of_week().1;
 
-        if toc_nanos % NANOS_PER_SECOND != 0 {
+        if toc_nanos % NANOSECONDS_PER_SECOND != 0 {
             return Err(Error::InvalidToC);
         }
 
-        let toc_s = quantized_seconds_of_week((toc_nanos / NANOS_PER_SECOND) as f64, TOC_TOE_LSB_S)
-            .ok_or(Error::InvalidToC)?;
+        let toc_s = quantized_seconds_of_week(
+            (toc_nanos / NANOSECONDS_PER_SECOND) as f64,
+            GPS_TOC_TOE_LSB_S,
+        )
+        .ok_or(Error::InvalidToC)?;
 
         // ToE: seconds within the RINEX week
         let toe_week = self.get_week().ok_or(Error::MissingToE)?;
         let toe_s = self.get_orbit_f64("toe").ok_or(Error::MissingToE)?;
-        let toe_s = quantized_seconds_of_week(toe_s, TOC_TOE_LSB_S).ok_or(Error::InvalidToE)?;
+        let toe_s = quantized_seconds_of_week(toe_s, GPS_TOC_TOE_LSB_S).ok_or(Error::InvalidToE)?;
         let toe_gpst = gpst_epoch(toe_week, toe_s as u64);
 
         // Transmission time: t_tm is relative to the week of ToE,
@@ -559,8 +527,8 @@ impl Ephemeris {
         let (tx_week, tx_nanos) = t_tx.to_time_of_week();
 
         // align to the beginning of the frame (start of EPH-1)
-        let tx_s = tx_nanos / NANOS_PER_SECOND;
-        let frame_start_s = tx_s - tx_s % FRAME_DURATION_S;
+        let tx_s = tx_nanos / NANOSECONDS_PER_SECOND;
+        let frame_start_s = tx_s - tx_s % GPS_FRAME_DURATION_S;
         let frame_start = gpst_epoch(tx_week, frame_start_s);
 
         // ToC/ToE must be recoverable from the transmission time
@@ -570,7 +538,7 @@ impl Ephemeris {
 
         // HOW: beginning of the following subframe, in seconds.
         // Frame start + 18s < 604800 for EPH-1,2,3: no week rollover possible.
-        let how_tow = |n: u32| frame_start_s as u32 + n * SUBFRAME_DURATION_S;
+        let how_tow = |n: u32| frame_start_s as u32 + n * GPS_SUBFRAME_DURATION_S;
 
         // Message identifiers
         let iodc = self.get_orbit_f64("iodc").unwrap_or_default() as u16;
@@ -587,7 +555,7 @@ impl Ephemeris {
         let ura_m = self.get_orbit_f64("accuracy").unwrap_or_default();
 
         let mut subframe1 = GpsQzssFrame1::default()
-            .with_week((tx_week % WEEK_ROLLOVER as u32) as u16)
+            .with_week((tx_week % GPS_WEEK_ROLLOVER as u32) as u16)
             .with_iodc(iodc)
             .with_ca_or_p_l2_mask(l2_codes as u8)
             .with_health((health as u8).into())

@@ -130,7 +130,9 @@ version = "0.5"
 optional = true
 
 [dependencies.gnss-protos]
-version = "0.1.1"
+# version = "0.1.1"
+git = "https://github.com/nav-solutions/gnss-protos"
+rev = "9e3c3c26b670e046e66161b2a908e6800cdd9736"
 optional = true
 features = ["gps", "galileo"]
 

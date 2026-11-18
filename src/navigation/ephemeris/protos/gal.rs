@@ -17,8 +17,9 @@ use gnss_protos::galileo::{
 #[derive(Error, Debug)]
 pub enum Error {}
 
-/// Sequence of Galileo INAV data words that must be decoded then
-/// extracted from a bitstream and allows to form a valid [Ephemeris] frame.
+/// Sequence of Galileo INAV data words that must be decoded & extracted
+/// from a bit stream. It is possible to form a RINEX [Ephemeris] from any
+/// valid combination of these data words.
 #[derive(Debug, Copy, Clone, Default)]
 pub struct GalileoINavWords {
     /// Word1: Ephemeris
@@ -38,8 +39,7 @@ pub struct GalileoINavWords {
 }
 
 impl Ephemeris {
-    /// Builds an [Ephemeris] from collected [GalileoWords] that must have
-    /// been decoded and extracted from a message bitstream.
+    /// Builds an [Ephemeris] from collected [GalileoINavWords].
     pub fn from_galileo_inav_words(words: GalileoINavWords) -> Result<Self, Error> {
         let mut orbits = HashMap::<String, OrbitItem>::new();
 

@@ -6,7 +6,7 @@ use rinex::{
     prelude::{Constellation, Rinex},
 };
 
-use gnss_protos::{GpsQzssFrame, GpsQzssTelemetry};
+use gnss_protos::{GpsQzssFrame, GpsQzssTelemetry, Message};
 
 struct Buffer<'a, const N: usize> {
     /// destination
@@ -36,11 +36,10 @@ impl<'a, const N: usize> Buffer<'a, N> {
         self.encode_frame(burst.eph_3);
     }
 
-    /// Encodes one GPS frame 
+    /// Encodes one GPS frame
     pub fn encode_frame(&mut self, frame: GpsQzssFrame) {
-        let size = frame.encode_at(&mut self.buffer[self.ptr..], 0)
-            .unwrap();
-        self.ptr += size; 
+        let size = frame.encode(&mut self.buffer[self.ptr..]).unwrap();
+        self.ptr += size;
     }
 
     /// Dump buffer to static file
