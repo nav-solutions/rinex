@@ -529,7 +529,13 @@ impl Ephemeris {
     ///         // _any_ instant may apply here, as long as it lies within +/- 512 
     ///         // weeks from the transmission time. Here we have the ToC
     ///         // for each RINEX entry, which is very convenient and easy to use
-    ///         epoch: key.sv,
+    ///         epoch: key.epoch,
+    ///
+    ///         // Alert bit associated to each HOW data word of this burst
+    ///         alert: false,
+    ///
+    ///         // A/S bit associated to each HOW data word of this burst
+    ///         anti_spoofing: false,
     ///
     ///         // TLM to be associated to EPH-1
     ///         tlm_1: GpsQzssTelemetry {
