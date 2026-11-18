@@ -1,9 +1,10 @@
-mod formatting;
 pub mod orbits;
-mod parsing;
 
 /// Ephemeris NAV flags definitions & support
 pub mod flags;
+
+mod formatting;
+mod parsing;
 
 use orbits::OrbitItem;
 
@@ -11,7 +12,7 @@ use flags::{
     bds::{BdsHealth, BdsSatH1},
     gal::GalDataSource,
     glonass::{GlonassHealth, GlonassHealth2},
-    gps::GpsQzssl1cHealth,
+    gps::{GpsQzssl1cHealth, GpsQzssl1l2l5Health},
 };
 
 #[cfg(feature = "log")]
@@ -35,6 +36,10 @@ mod ublox;
 #[cfg(feature = "rtcm")]
 #[cfg_attr(docsrs, doc(cfg(feature = "rtcm")))]
 mod rtcm;
+
+#[cfg(feature = "protos")]
+#[cfg_attr(docsrs, doc(cfg(feature = "protos")))]
+pub(crate) mod protos;
 
 #[cfg(feature = "nav")]
 use anise::{

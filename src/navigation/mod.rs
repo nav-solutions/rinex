@@ -1,4 +1,5 @@
 //! Navigation module
+
 mod earth_orientation;
 mod ephemeris;
 mod frame;
@@ -26,6 +27,11 @@ pub use crate::navigation::{
     },
     message::{Nav402MessageSubtype, NavMessageType},
     time::TimeOffset,
+};
+
+#[cfg(feature = "protos")]
+pub use crate::navigation::ephemeris::protos::gps_qzss::{
+    Error, GpsQzssEphCompositionOpts, GpsQzssEphemerisItem, GpsQzssEphemerisMessage,
 };
 
 #[cfg(feature = "nav")]

@@ -121,6 +121,17 @@ RINEX formats & applications
 |  Ionosphere Maps  (IONEX)  | [Moved to dedicated parser](https://github.com/nav-solutions/ionex) |  :heavy_check_mark:     | Ionosphere Electron density | [Record Key](https://docs.rs/ionex/latest/ionex/key/struct.Key.html) | UTC |
 |  DORIS RINEX               | [Moved to dedicated parser](https://github.com/nav-solutions/doris) |  :heavy_check_mark:     | Temperature, Moisture, Pseudo Range and Phase observations | [Record Key](https://docs.rs/doris-rs/latest/doris_rs/record/struct.Key.html) | TAI / "DORIS" timescale |
 
+Examples (applications)
+=======================
+
+The library hosts a few example applications
+
+- `examples/nav_v3_isolated_bitstreams`:
+    * This extracts V3 GPS LNAV, Galileo INAV and QZSS LNAV ephemeris
+    and dumps them as raw binary streams for 3 different sallites,
+    using my `protos` feature.
+    * Run it with `cargo run --all-features --examples/nav_v3_isolated_bitstreams`
+
 Contributions
 =============
 
