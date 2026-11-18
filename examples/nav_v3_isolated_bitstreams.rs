@@ -85,9 +85,9 @@ pub fn main() {
     let mut j01_buf = Buffer::<8192>::new("data/GPS/esbcdnk_j01_eph123.bin");
     let mut j02_buf = Buffer::<8192>::new("data/GPS/esbcdnk_j02_eph123.bin");
     let mut j03_buf = Buffer::<8192>::new("data/GPS/esbcdnk_j03_eph123.bin");
-    let mut e07_buf = Buffer::<8192>::new("data/GPS/esbcdnk_e07_eph123.bin");
-    let mut e11_buf = Buffer::<8192>::new("data/GPS/esbcdnk_e11_eph123.bin");
-    let mut e15_buf = Buffer::<8192>::new("data/GPS/esbcdnk_e15_eph123.bin");
+    let mut e07_buf = Buffer::<8192>::new("data/GAL/esbcdnk_e07_eph123.bin");
+    let mut e11_buf = Buffer::<8192>::new("data/GAL/esbcdnk_e11_eph123.bin");
+    let mut e15_buf = Buffer::<8192>::new("data/GAL/esbcdnk_e15_eph123.bin");
 
     let rinex = Rinex::from_gzip_file(fullpath).unwrap();
 
@@ -223,7 +223,7 @@ pub fn main() {
     j01_buf.save_file();
     j02_buf.save_file();
     j03_buf.save_file();
-    e07_buf.save_file();
-    e11_buf.save_file();
-    e15_buf.save_file();
+    // e07_buf.save_file();
+    // e11_buf.save_file();
+    // e15_buf.save_file();
 }
