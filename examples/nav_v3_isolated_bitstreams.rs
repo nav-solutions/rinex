@@ -2,10 +2,7 @@ use std::fs::File;
 use std::io::Write;
 
 use rinex::{
-    navigation::{
-        GpsQzssEphemerisMessage, 
-        GpsQzssEphCompositionOpts,
-    },
+    navigation::{GpsQzssEphCompositionOpts, GpsQzssEphemerisMessage},
     prelude::{Constellation, Rinex},
 };
 
@@ -96,7 +93,6 @@ pub fn main() {
 
     // limited to ephemeris frames
     for (key, eph) in rinex.nav_ephemeris_frames_iter() {
-
         let opts = GpsQzssEphCompositionOpts {
             satellite: key.sv,
             epoch: key.epoch,
@@ -122,74 +118,62 @@ pub fn main() {
         match (key.sv.constellation, key.sv.prn) {
             (Constellation::GPS, 15) => {
                 // extract
-                let burst = eph
-                    .to_gps_qzss_eph_message(opts)
-                    .unwrap_or_else(|e| {
-                        panic!(
-                            "Failed to extract an Ephemeris burst for {} @ {} - {}",
-                            key.sv, key.epoch, e
-                        );
-                    });
+                let burst = eph.to_gps_qzss_eph_message(opts).unwrap_or_else(|e| {
+                    panic!(
+                        "Failed to extract an Ephemeris burst for {} @ {} - {}",
+                        key.sv, key.epoch, e
+                    );
+                });
                 g15_buf.encode_eph123_burst(burst);
             },
             (Constellation::GPS, 24) => {
                 // extract
-                let burst = eph
-                    .to_gps_qzss_eph_message(opts)
-                    .unwrap_or_else(|e| {
-                        panic!(
-                            "Failed to extract an Ephemeris burst for {} @ {} - {}",
-                            key.sv, key.epoch, e,
-                        );
-                    });
+                let burst = eph.to_gps_qzss_eph_message(opts).unwrap_or_else(|e| {
+                    panic!(
+                        "Failed to extract an Ephemeris burst for {} @ {} - {}",
+                        key.sv, key.epoch, e,
+                    );
+                });
                 g24_buf.encode_eph123_burst(burst);
             },
             (Constellation::GPS, 31) => {
                 // extract
-                let burst = eph
-                    .to_gps_qzss_eph_message(opts)
-                    .unwrap_or_else(|e| {
-                        panic!(
-                            "Failed to extract an Ephemeris burst for {} @ {} - {}",
-                            key.sv, key.epoch, e
-                        );
-                    });
+                let burst = eph.to_gps_qzss_eph_message(opts).unwrap_or_else(|e| {
+                    panic!(
+                        "Failed to extract an Ephemeris burst for {} @ {} - {}",
+                        key.sv, key.epoch, e
+                    );
+                });
                 g31_buf.encode_eph123_burst(burst);
             },
             (Constellation::QZSS, 1) => {
                 // extract
-                let burst = eph
-                    .to_gps_qzss_eph_message(opts)
-                    .unwrap_or_else(|e| {
-                        panic!(
-                            "Failed to extract an Ephemeris burst for {} @ {} - {}",
-                            key.sv, key.epoch, e
-                        );
-                    });
+                let burst = eph.to_gps_qzss_eph_message(opts).unwrap_or_else(|e| {
+                    panic!(
+                        "Failed to extract an Ephemeris burst for {} @ {} - {}",
+                        key.sv, key.epoch, e
+                    );
+                });
                 j01_buf.encode_eph123_burst(burst);
             },
             (Constellation::QZSS, 2) => {
                 // extract
-                let burst = eph
-                    .to_gps_qzss_eph_message(opts)
-                    .unwrap_or_else(|e| {
-                        panic!(
-                            "Failed to extract an Ephemeris burst for {} @ {} - {}",
-                            key.sv, key.epoch, e
-                        );
-                    });
+                let burst = eph.to_gps_qzss_eph_message(opts).unwrap_or_else(|e| {
+                    panic!(
+                        "Failed to extract an Ephemeris burst for {} @ {} - {}",
+                        key.sv, key.epoch, e
+                    );
+                });
                 j02_buf.encode_eph123_burst(burst);
             },
             (Constellation::QZSS, 3) => {
                 // extract
-                let burst = eph
-                    .to_gps_qzss_eph_message(opts)
-                    .unwrap_or_else(|e| {
-                        panic!(
-                            "Failed to extract an Ephemeris burst for {} @ {} - {}",
-                            key.sv, key.epoch, e
-                        );
-                    });
+                let burst = eph.to_gps_qzss_eph_message(opts).unwrap_or_else(|e| {
+                    panic!(
+                        "Failed to extract an Ephemeris burst for {} @ {} - {}",
+                        key.sv, key.epoch, e
+                    );
+                });
                 j03_buf.encode_eph123_burst(burst);
             },
             // (Constellation::Galileo, 7) => {

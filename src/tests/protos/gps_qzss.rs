@@ -1,8 +1,6 @@
 use crate::{
-    navigation::{Ephemeris, 
-        GpsQzssEphemerisMessage, 
-        GpsQzssEphCompositionOpts, 
-        GpsQzssEphemerisItem,
+    navigation::{
+        Ephemeris, GpsQzssEphCompositionOpts, GpsQzssEphemerisItem, GpsQzssEphemerisMessage,
         OrbitItem,
     },
     prelude::{Constellation, Epoch, Rinex, SV},
@@ -16,7 +14,6 @@ use gnss_protos::{GpsQzssFrame, GpsQzssTelemetry, Message, GPS_WORDS_PER_FRAME};
 /// RINEX -> bits (10 words per subframe, parity included) -> RINEX.
 /// Returns the transmitted words, the decoded ToC and the decoded [Ephemeris].
 fn bitstream_round_trip(eph: &Ephemeris, sv: SV, toc: Epoch) -> (Epoch, Ephemeris) {
-
     let opts = GpsQzssEphCompositionOpts {
         satellite: sv,
         epoch: toc,
@@ -216,7 +213,7 @@ fn test_lnav_v2() {
 fn test_lnav_v3() {
     let count = run_file("data/NAV/V3/MOJN00DNK_R_20201770000_01D_MN.rnx.gz");
     assert_eq!(count, 260);
-    
+
     let count = run_file("data/NAV/V3/ESBC00DNK_R_20201770000_01D_MN.rnx.gz");
     assert_eq!(count, 272);
 }
@@ -272,9 +269,7 @@ fn test_lnav_week_rollover() {
         },
     };
 
-    let message = eph
-        .to_gps_qzss_eph_message(opts)
-        .unwrap();
+    let message = eph.to_gps_qzss_eph_message(opts).unwrap();
 
     let subf1 = message.eph_1.subframe.as_eph1().unwrap();
 

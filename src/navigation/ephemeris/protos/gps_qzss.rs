@@ -503,7 +503,7 @@ impl Ephemeris {
     /// use rinex::prelude::{Constellation, Rinex};
     ///
     /// use rinex::navigation::{
-    ///     Ephemeris, 
+    ///     Ephemeris,
     ///     GpsQzssEphCompositionOpts,
     ///     GpsQzssEphemerisItem,
     /// };
@@ -526,7 +526,7 @@ impl Ephemeris {
     ///         // Also this is the "identity" of the signal source
     ///         satellite: key.sv,
     ///
-    ///         // _any_ instant may apply here, as long as it lies within +/- 512 
+    ///         // _any_ instant may apply here, as long as it lies within +/- 512
     ///         // weeks from the transmission time. Here we have the ToC
     ///         // for each RINEX entry, which is very convenient and easy to use
     ///         epoch: key.epoch,
@@ -539,21 +539,21 @@ impl Ephemeris {
     ///
     ///         // TLM to be associated to EPH-1
     ///         tlm_1: GpsQzssTelemetry {
-    ///             message: 1, 
+    ///             message: 1,
     ///             integrity: false, // whatever you want
     ///             reserved_bit: false, // whatever you want
     ///         },
     ///
     ///         // TLM to be associated to EPH-2
     ///         tlm_2: GpsQzssTelemetry {
-    ///             message: 2, 
+    ///             message: 2,
     ///             integrity: false, // whatever you want
     ///             reserved_bit: false, // whatever you want
     ///         },
     ///
     ///         // TLM to be associated to EPH-3
     ///         tlm_3: GpsQzssTelemetry {
-    ///             message: 3, 
+    ///             message: 3,
     ///             integrity: false, // whatever you want
     ///             reserved_bit: false, // whatever you want
     ///         },
