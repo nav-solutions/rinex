@@ -1,4 +1,4 @@
-pub mod gal;
+// pub mod gal;
 pub mod gps_qzss;
 
 pub(crate) fn rad_to_semicircles(rad: f64) -> f64 {

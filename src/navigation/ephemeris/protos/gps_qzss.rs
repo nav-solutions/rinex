@@ -21,6 +21,8 @@ use gnss_protos::{
     },
 };
 
+const GPS_HALF_WEEK_ROLLOVER :i64 = GPS_WEEK_ROLLOVER as i64 /2;
+
 /// RINEX describes an unknown transmission time with 0.9999E9.
 /// Any |t_tm| greater than this threshold cannot be a valid transmission time.
 const T_TM_UNKNOWN_THRESHOLD_S: f64 = 1.0E8;
@@ -36,6 +38,30 @@ const NOMINAL_URA_M: [f64; 16] = [
 /// Builds the GPST [Epoch] located at `seconds` within `week`.
 fn gpst_epoch(week: u32, seconds: u64) -> Epoch {
     Epoch::from_time_of_week(week, seconds * NANOSECONDS_PER_SECOND, TimeScale::GPST)
+}
+
+fn unwrapped_week_number(t_gpst: Epoch, wn: u16) -> u32 {
+    let reference_week = t_gpst.to_time_of_week().0 as i64;
+    let wn = (wn as i64) % GPS_WEEK_ROLLOVER as i64;
+
+    // candidate within the same 1024 week cycle as the reference
+    let mut week = reference_week - reference_week.rem_euclid(GPS_WEEK_ROLLOVER as i64) + wn;
+
+    // pick the closest candidate
+    let delta = week - reference_week;
+
+    if delta > GPS_HALF_WEEK_ROLLOVER {
+        week -= GPS_WEEK_ROLLOVER as i64;
+    } else if delta < -GPS_HALF_WEEK_ROLLOVER {
+        week += GPS_WEEK_ROLLOVER as i64;
+    }
+
+    // weeks prior GPST origin do not exist
+    if week < 0 {
+        week += GPS_WEEK_ROLLOVER as i64;
+    }
+
+    week as u32
 }
 
 /// ToC and ToE are only broadcast as seconds within the week.
@@ -56,7 +82,7 @@ fn closest_epoch(seconds: u32, t_tx: Epoch) -> Epoch {
 /// Returns true if both [Epoch]s are within half a week of each other,
 /// which is required to recover the week number of ToC and ToE when decoding.
 fn within_half_week(lhs: Epoch, rhs: Epoch) -> bool {
-    (lhs - rhs).abs() <= (SECONDS_PER_WEEK / 2) * Unit::Second
+    (lhs - rhs).abs() <= (SECONDS_PER_WEEK / 2) as f64 * Unit::Second
 }
 
 /// Converts a RINEX duration (in seconds) to an integer number of seconds,
@@ -303,7 +329,7 @@ impl Ephemeris {
 
         let t_sf1_s = (eph_1.how.tow - GPS_SUBFRAME_DURATION_S) as u64;
 
-        if t_sf1_s % GPS_FRAME_DURATION_S != 0 {
+        if t_sf1_s % GPS_FRAME_DURATION_S as u64 != 0 {
             return Err(Error::MisalignedFrame);
         }
 
@@ -528,7 +554,7 @@ impl Ephemeris {
 
         // align to the beginning of the frame (start of EPH-1)
         let tx_s = tx_nanos / NANOSECONDS_PER_SECOND;
-        let frame_start_s = tx_s - tx_s % GPS_FRAME_DURATION_S;
+        let frame_start_s = tx_s - tx_s % GPS_FRAME_DURATION_S as u64;
         let frame_start = gpst_epoch(tx_week, frame_start_s);
 
         // ToC/ToE must be recoverable from the transmission time

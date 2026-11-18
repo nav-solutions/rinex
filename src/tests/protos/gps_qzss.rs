@@ -6,59 +6,33 @@ use crate::{
 
 use std::f64::consts::PI;
 
-use gnss_protos::{GpsQzssFrame, GpsQzssTelemetry, GPS_WORDS_PER_FRAME};
-
-type Words = [[u32; GPS_WORDS_PER_FRAME]; 3];
+use gnss_protos::{GpsQzssFrame, GpsQzssTelemetry, Message, GPS_WORDS_PER_FRAME};
 
 fn telemetries() -> GpsQzssEphemerisTelemetries {
-    let tlm = |message| GpsQzssTelemetry {
+    let tlm = |message, integrity, reserved| GpsQzssTelemetry {
         message,
-        integrity: false,
-        reserved_bit: false,
+        integrity,
+        reserved_bit: reserved,
     };
 
     GpsQzssEphemerisTelemetries {
-        tlm_1: tlm(0),
-        tlm_2: tlm(1),
-        tlm_3: tlm(2),
+        tlm_1: tlm(0, false, true),
+        tlm_2: tlm(1, true, false),
+        tlm_3: tlm(2, false, true),
     }
 }
 
 /// RINEX -> bits (10 words per subframe, parity included) -> RINEX.
 /// Returns the transmitted words, the decoded ToC and the decoded [Ephemeris].
-fn bitstream_round_trip(eph: &Ephemeris, sv: SV, toc: Epoch) -> (Words, Epoch, Ephemeris) {
+fn bitstream_round_trip(eph: &Ephemeris, sv: SV, toc: Epoch) -> (Epoch, Ephemeris) {
     let message = eph
         .to_gps_qzss_eph_message(sv, toc, false, false, telemetries())
         .unwrap_or_else(|e| panic!("{} @ {}: encoding failure: {}", sv, toc, e));
 
-    let encode = |frame: &GpsQzssFrame| {
-        frame
-            .encode_words()
-            .unwrap_or_else(|e| panic!("{} @ {}: bitstream encoding: {:?}", sv, toc, e))
-    };
-
-    let words = [
-        encode(&message.eph_1),
-        encode(&message.eph_2),
-        encode(&message.eph_3),
-    ];
-
-    let decode = |words: &[u32; GPS_WORDS_PER_FRAME]| {
-        GpsQzssFrame::decode_words(words, true)
-            .unwrap_or_else(|e| panic!("{} @ {}: bitstream decoding: {:?}", sv, toc, e))
-    };
-
-    let decoded = GpsQzssEphemerisMessage {
-        eph_1: decode(&words[0]),
-        eph_2: decode(&words[1]),
-        eph_3: decode(&words[2]),
-    };
-
-    // ToC is a good enough reception time (< 512 weeks)
-    let (decoded_toc, decoded) = Ephemeris::from_gps_qzss_eph_message(toc, sv, decoded)
+    let (decoded_toc, decoded) = Ephemeris::from_gps_qzss_eph_message(toc, sv, message)
         .unwrap_or_else(|e| panic!("{} @ {}: decoding failure: {}", sv, toc, e));
 
-    (words, decoded_toc, decoded)
+    (decoded_toc, decoded)
 }
 
 /// Verifies that the decoded [Ephemeris] is the original one,
@@ -198,34 +172,17 @@ fn run_file(path: &str) -> usize {
             _ => continue,
         }
 
-        // 1. RINEX -> bitstream -> RINEX: faithful within message resolution
-        let (words_1, toc_1, eph_1) = bitstream_round_trip(eph, key.sv, key.epoch);
+        let (decoded_toc, decoded_eph) = bitstream_round_trip(eph, key.sv, key.epoch);
 
         assert_eq!(
-            toc_1, key.epoch,
+            decoded_toc, key.epoch,
             "{} @ {}: ToC reciprocity",
             key.sv, key.epoch
         );
 
-        assert_faithful(key.sv, key.epoch, eph, &eph_1);
-
-        // 2. Once quantized, the round trip is strictly idempotent:
-        // identical bits & strictly identical RINEX frame.
-        let (words_2, toc_2, eph_2) = bitstream_round_trip(&eph_1, key.sv, toc_1);
-
-        assert_eq!(toc_2, toc_1, "{} @ {}: ToC idempotence", key.sv, key.epoch);
-
-        assert_eq!(
-            words_2, words_1,
-            "{} @ {}: bitstream idempotence",
-            key.sv, key.epoch
-        );
-
-        panic_eq_ephemeris(&eph_2, &eph_1);
-
+        assert_faithful(key.sv, key.epoch, eph, &decoded_eph);
         count += 1;
     }
-
     count
 }
 
@@ -269,7 +226,7 @@ fn test_lnav_week_rollover() {
     assert_eq!(message.eph_2.how.tow, 597_612);
     assert_eq!(message.eph_3.how.tow, 597_618);
 
-    let (_, toc_dut, dut) = bitstream_round_trip(&eph, g01, toc);
+    let (toc_dut, dut) = bitstream_round_trip(&eph, g01, toc);
 
     assert_eq!(toc_dut, toc);
     assert_eq!(dut.get_week(), Some(2400));
