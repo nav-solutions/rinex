@@ -216,6 +216,22 @@ fn test_lnav_v2() {
 fn test_lnav_v3() {
     let count = run_file("data/NAV/V3/MOJN00DNK_R_20201770000_01D_MN.rnx.gz");
     assert_eq!(count, 260);
+    
+    let count = run_file("data/NAV/V3/ESBC00DNK_R_20201770000_01D_MN.rnx.gz");
+    assert_eq!(count, 272);
+}
+
+#[test]
+fn test_lnav_v4() {
+    let count = run_file("data/NAV/V4/KMS300DNK_R_20221591000_01H_MN.rnx.gz");
+    assert_eq!(count, 31);
+}
+
+#[test]
+#[ignore]
+fn test_lnav_cnav_v4() {
+    let count = run_file("data/NAV/V4/BRD400DLR_S_20241310000_01D_MN.rnx.gz");
+    assert_eq!(count, 260);
 }
 
 #[test]
