@@ -302,10 +302,13 @@ pub(crate) fn fmt_comment(content: &str) -> String {
 pub struct Rinex {
     /// [Header] gives general information and describes following content.
     pub header: Header,
+
     /// [Comments] stored as they appeared in file body
     pub comments: Comments,
+
     /// [Record] is the actual file content and is heavily [RinexType] dependent
     pub record: Record,
+
     /// [ProductionAttributes] filled
     pub production: ProductionAttributes,
 }

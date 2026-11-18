@@ -30,12 +30,8 @@ pub use crate::navigation::{
 };
 
 #[cfg(feature = "protos")]
-pub use crate::navigation::ephemeris::protos::{
-    // gal::GalileoInavWords,
-    gps_qzss::{
-        Error, GpsQzssEphemerisMessage, GpsQzssEphemerisTelemetries, GpsQzssMessage,
-        GpsQzssTelemetries,
-    },
+pub use crate::navigation::ephemeris::protos::gps_qzss::{
+    Error, GpsQzssEphCompositionOpts, GpsQzssEphemerisItem, GpsQzssEphemerisMessage,
 };
 
 #[cfg(feature = "nav")]
