@@ -2,7 +2,10 @@ use std::fs::File;
 use std::io::Write;
 
 use rinex::{
-    navigation::{GpsQzssEphemerisMessage, GpsQzssEphemerisTelemetries},
+    navigation::{
+        GpsQzssEphemerisMessage, 
+        GpsQzssEphCompositionOpts,
+    },
     prelude::{Constellation, Rinex},
 };
 
@@ -93,7 +96,12 @@ pub fn main() {
 
     // limited to ephemeris frames
     for (key, eph) in rinex.nav_ephemeris_frames_iter() {
-        let tlm = GpsQzssEphemerisTelemetries {
+
+        let opts = GpsQzssEphCompositionOpts {
+            satellite: key.sv,
+            epoch: key.epoch,
+            alert: false,
+            anti_spoofing: false,
             tlm_1: GpsQzssTelemetry {
                 message: 1,
                 integrity: false,
@@ -115,7 +123,7 @@ pub fn main() {
             (Constellation::GPS, 15) => {
                 // extract
                 let burst = eph
-                    .to_gps_qzss_eph_message(key.sv, key.epoch, false, false, tlm)
+                    .to_gps_qzss_eph_message(opts)
                     .unwrap_or_else(|e| {
                         panic!(
                             "Failed to extract an Ephemeris burst for {} @ {} - {}",
@@ -127,7 +135,7 @@ pub fn main() {
             (Constellation::GPS, 24) => {
                 // extract
                 let burst = eph
-                    .to_gps_qzss_eph_message(key.sv, key.epoch, false, false, tlm)
+                    .to_gps_qzss_eph_message(opts)
                     .unwrap_or_else(|e| {
                         panic!(
                             "Failed to extract an Ephemeris burst for {} @ {} - {}",
@@ -139,7 +147,7 @@ pub fn main() {
             (Constellation::GPS, 31) => {
                 // extract
                 let burst = eph
-                    .to_gps_qzss_eph_message(key.sv, key.epoch, false, false, tlm)
+                    .to_gps_qzss_eph_message(opts)
                     .unwrap_or_else(|e| {
                         panic!(
                             "Failed to extract an Ephemeris burst for {} @ {} - {}",
@@ -151,7 +159,7 @@ pub fn main() {
             (Constellation::QZSS, 1) => {
                 // extract
                 let burst = eph
-                    .to_gps_qzss_eph_message(key.sv, key.epoch, false, false, tlm)
+                    .to_gps_qzss_eph_message(opts)
                     .unwrap_or_else(|e| {
                         panic!(
                             "Failed to extract an Ephemeris burst for {} @ {} - {}",
@@ -163,7 +171,7 @@ pub fn main() {
             (Constellation::QZSS, 2) => {
                 // extract
                 let burst = eph
-                    .to_gps_qzss_eph_message(key.sv, key.epoch, false, false, tlm)
+                    .to_gps_qzss_eph_message(opts)
                     .unwrap_or_else(|e| {
                         panic!(
                             "Failed to extract an Ephemeris burst for {} @ {} - {}",
@@ -175,7 +183,7 @@ pub fn main() {
             (Constellation::QZSS, 3) => {
                 // extract
                 let burst = eph
-                    .to_gps_qzss_eph_message(key.sv, key.epoch, false, false, tlm)
+                    .to_gps_qzss_eph_message(opts)
                     .unwrap_or_else(|e| {
                         panic!(
                             "Failed to extract an Ephemeris burst for {} @ {} - {}",

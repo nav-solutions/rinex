@@ -1,5 +1,10 @@
 use crate::{
-    navigation::{Ephemeris, GpsQzssEphemerisMessage, GpsQzssEphemerisTelemetries, OrbitItem},
+    navigation::{Ephemeris, 
+        GpsQzssEphemerisMessage, 
+        GpsQzssEphCompositionOpts, 
+        GpsQzssEphemerisItem,
+        OrbitItem,
+    },
     prelude::{Constellation, Epoch, Rinex, SV},
     tests::toolkit::nav::panic_eq_ephemeris,
 };
@@ -8,28 +13,43 @@ use std::f64::consts::PI;
 
 use gnss_protos::{GpsQzssFrame, GpsQzssTelemetry, Message, GPS_WORDS_PER_FRAME};
 
-fn telemetries() -> GpsQzssEphemerisTelemetries {
-    let tlm = |message, integrity, reserved| GpsQzssTelemetry {
-        message,
-        integrity,
-        reserved_bit: reserved,
-    };
-
-    GpsQzssEphemerisTelemetries {
-        tlm_1: tlm(0, false, true),
-        tlm_2: tlm(1, true, false),
-        tlm_3: tlm(2, false, true),
-    }
-}
-
 /// RINEX -> bits (10 words per subframe, parity included) -> RINEX.
 /// Returns the transmitted words, the decoded ToC and the decoded [Ephemeris].
 fn bitstream_round_trip(eph: &Ephemeris, sv: SV, toc: Epoch) -> (Epoch, Ephemeris) {
-    let message = eph
-        .to_gps_qzss_eph_message(sv, toc, false, false, telemetries())
+
+    let opts = GpsQzssEphCompositionOpts {
+        satellite: sv,
+        epoch: toc,
+        alert: false,
+        anti_spoofing: false,
+        tlm_1: GpsQzssTelemetry {
+            message: 1,
+            integrity: true,
+            reserved_bit: false,
+        },
+        tlm_2: GpsQzssTelemetry {
+            message: 2,
+            integrity: false,
+            reserved_bit: true,
+        },
+        tlm_3: GpsQzssTelemetry {
+            message: 3,
+            integrity: true,
+            reserved_bit: false,
+        },
+    };
+
+    let eph123 = eph
+        .to_gps_qzss_eph_message(opts)
         .unwrap_or_else(|e| panic!("{} @ {}: encoding failure: {}", sv, toc, e));
 
-    let (decoded_toc, decoded) = Ephemeris::from_gps_qzss_eph_message(toc, sv, message)
+    let item = GpsQzssEphemerisItem {
+        satellite: sv,
+        epoch: toc,
+        eph123,
+    };
+
+    let (decoded_toc, decoded) = Ephemeris::from_gps_qzss_eph_message(item)
         .unwrap_or_else(|e| panic!("{} @ {}: decoding failure: {}", sv, toc, e));
 
     (decoded_toc, decoded)
@@ -214,8 +234,30 @@ fn test_lnav_week_rollover() {
 
     let g01 = SV::new(Constellation::GPS, 1);
 
+    let opts = GpsQzssEphCompositionOpts {
+        satellite: g01,
+        epoch: toc,
+        alert: true,
+        anti_spoofing: false,
+        tlm_1: GpsQzssTelemetry {
+            message: 1,
+            integrity: false,
+            reserved_bit: true,
+        },
+        tlm_2: GpsQzssTelemetry {
+            message: 2,
+            integrity: true,
+            reserved_bit: false,
+        },
+        tlm_3: GpsQzssTelemetry {
+            message: 3,
+            integrity: false,
+            reserved_bit: true,
+        },
+    };
+
     let message = eph
-        .to_gps_qzss_eph_message(g01, toc, false, false, telemetries())
+        .to_gps_qzss_eph_message(opts)
         .unwrap();
 
     let subf1 = message.eph_1.subframe.as_eph1().unwrap();

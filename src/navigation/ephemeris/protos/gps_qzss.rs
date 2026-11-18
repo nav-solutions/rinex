@@ -465,7 +465,7 @@ impl Ephemeris {
     }
 
     /// Dumps this [Ephemeris] frame as [GpsQzssEphemerisMessage] sequence,
-    /// that is, the first 3/5 subframes of the message rotation.
+    /// that is, the first 3/5 of the 30s message cycle.
     ///
     /// When composing, we define the ToW for each EPH-1, 2 and 3 correctly,
     /// as per the placement in time and GPS protocol specifications.
@@ -501,7 +501,13 @@ impl Ephemeris {
     ///
     /// ```
     /// use rinex::prelude::{Constellation, Rinex};
-    /// use rinex::navigation::{Ephemeris, GpsQzssEphemerisTelemetries};
+    ///
+    /// use rinex::navigation::{
+    ///     Ephemeris, 
+    ///     GpsQzssEphCompositionOpts,
+    ///     GpsQzssEphemerisItem,
+    /// };
+    ///
     /// use gnss_protos::GpsQzssTelemetry;
     ///
     /// let rinex = Rinex::from_gzip_file("data/NAV/V2/cbw10010.21n.gz")
@@ -514,20 +520,52 @@ impl Ephemeris {
     /// };
     ///
     /// for (key, ephemeris) in rinex.nav_ephemeris_frames_iter() {
-    ///     let telemetries = GpsQzssEphemerisTelemetries {
-    ///         tlm_1: tlm,
-    ///         tlm_2: tlm,
-    ///         tlm_3: tlm,
+    ///
+    ///     let opts = GpsQzssEphCompositionOpts {
+    ///         // this should will be required by your CDMA modulator.
+    ///         // Also this is the "identity" of the signal source
+    ///         satellite: key.sv,
+    ///
+    ///         // _any_ instant may apply here, as long as it lies within +/- 512 
+    ///         // weeks from the transmission time. Here we have the ToC
+    ///         // for each RINEX entry, which is very convenient and easy to use
+    ///         epoch: key.sv,
+    ///
+    ///         // TLM to be associated to EPH-1
+    ///         tlm_1: GpsQzssTelemetry {
+    ///             message: 1, 
+    ///             integrity: false, // whatever you want
+    ///             reserved_bit: false, // whatever you want
+    ///         },
+    ///
+    ///         // TLM to be associated to EPH-2
+    ///         tlm_2: GpsQzssTelemetry {
+    ///             message: 2, 
+    ///             integrity: false, // whatever you want
+    ///             reserved_bit: false, // whatever you want
+    ///         },
+    ///
+    ///         // TLM to be associated to EPH-3
+    ///         tlm_3: GpsQzssTelemetry {
+    ///             message: 3, 
+    ///             integrity: false, // whatever you want
+    ///             reserved_bit: false, // whatever you want
+    ///         },
     ///     };
     ///
-    ///     let message = ephemeris
-    ///         .to_gps_qzss_eph_message(key.sv, key.epoch, false, false, telemetries)
+    ///     let eph123 = ephemeris
+    ///         .to_gps_qzss_eph_message(opts)
     ///         .unwrap();
     ///
+    ///     let item = GpsQzssEphemerisItem {
+    ///         eph123,
+    ///         satellite: key.sv,
+    ///         epoch: key.epoch,
+    ///     };
+    ///
     ///     // reciprocal (RINEX [Ephemeris] frame, and its ToC)
-    ///     let (toc, decoded) = Ephemeris::from_gps_qzss_eph_message(key.sv, key.epoch, false,
-    ///         false, message)
-    ///     .unwrap();
+    ///     let (toc, decoded) = Ephemeris::from_gps_qzss_eph_message(item)
+    ///         .unwrap();
     ///
     ///     assert_eq!(toc, key.epoch);
     /// }
