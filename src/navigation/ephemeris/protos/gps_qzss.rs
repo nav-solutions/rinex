@@ -21,7 +21,7 @@ use gnss_protos::{
     },
 };
 
-const GPS_HALF_WEEK_ROLLOVER :i64 = GPS_WEEK_ROLLOVER as i64 /2;
+const GPS_HALF_WEEK_ROLLOVER: i64 = GPS_WEEK_ROLLOVER as i64 / 2;
 
 /// RINEX describes an unknown transmission time with 0.9999E9.
 /// Any |t_tm| greater than this threshold cannot be a valid transmission time.
