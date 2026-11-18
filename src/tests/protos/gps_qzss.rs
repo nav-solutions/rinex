@@ -7,9 +7,12 @@ use crate::{
     tests::toolkit::nav::panic_eq_ephemeris,
 };
 
-use std::f64::consts::PI;
+use std::{f64::consts::PI, fs::File, io::Read};
 
-use gnss_protos::{GpsQzssFrame, GpsQzssTelemetry, Message, GPS_WORDS_PER_FRAME};
+use gnss_protos::{
+    GpsQzssDecoder, GpsQzssFrame, GpsQzssFrameId, GpsQzssTelemetry, Message, GPS_FRAME_BYTES,
+    GPS_WORDS_PER_FRAME,
+};
 
 /// RINEX -> bits (10 words per subframe, parity included) -> RINEX.
 /// Returns the transmitted words, the decoded ToC and the decoded [Ephemeris].
@@ -285,4 +288,307 @@ fn test_lnav_week_rollover() {
     assert_eq!(dut.get_week(), Some(2400));
     assert_eq!(dut.get_orbit_f64("t_tm"), Some(-7200.0));
     assert_eq!(dut.get_orbit_f64("toe"), Some(0.0));
+}
+
+/// Decoder that grabs EPH-1.2.3 at once specifically
+struct GpsEph123BurstDecoder {
+    size: usize,
+    bit_offset: usize,
+    buffer: [u8; 8192],
+    decoder: GpsQzssDecoder,
+}
+
+impl GpsEph123BurstDecoder {
+    pub fn new(path: &str) -> Self {
+        let mut buffer = [0u8; 8192];
+        let mut file = File::open(path).unwrap();
+        let size = file.read(&mut buffer).unwrap();
+        Self {
+            buffer,
+            size,
+            bit_offset: 0,
+            decoder: GpsQzssDecoder::default(),
+        }
+    }
+
+    /// Pulls 1 EPH-1.2.3 burst from given isolated buffer,
+    /// reconstructs object to run comparison directly.
+    /// Internally verifies EPH-1, 2, 3 correct identity.
+    pub fn pull_burst(&mut self, satellite: SV, epoch: Epoch) -> Option<GpsQzssEphemerisItem> {
+        if self.size < 3 * GPS_FRAME_BYTES {
+            None
+        } else {
+            let mut eph123 = GpsQzssEphemerisMessage::default();
+
+            // pull EPH-1
+            let (consumed, frame) = self.decoder.decode(&mut self.buffer, self.bit_offset);
+
+            let frame = frame.unwrap_or_else(|| {
+                panic!("Failed to pull EPH-1 for {}@{}", satellite, epoch);
+            });
+
+            assert_eq!(
+                frame.how.frame_id,
+                GpsQzssFrameId::Ephemeris1,
+                "invalid frame: expecting EPH-1"
+            );
+
+            let eph_1 = frame.clone();
+            self.bit_offset += consumed;
+
+            // pull EPH-2
+            let (consumed, frame) = self.decoder.decode(&mut self.buffer, self.bit_offset);
+            let frame = frame.unwrap_or_else(|| {
+                panic!("Failed to pull EPH-2 for {}@{}", satellite, epoch);
+            });
+
+            assert_eq!(
+                frame.how.frame_id,
+                GpsQzssFrameId::Ephemeris2,
+                "invalid frame: expecting EPH-2"
+            );
+
+            let eph_2 = frame.clone();
+            self.bit_offset += consumed;
+
+            // pull EPH-2
+            let (consumed, frame) = self.decoder.decode(&mut self.buffer, self.bit_offset);
+            let frame = frame.unwrap_or_else(|| {
+                panic!("Failed to pull EPH-2 for {}@{}", satellite, epoch);
+            });
+
+            assert_eq!(
+                frame.how.frame_id,
+                GpsQzssFrameId::Ephemeris3,
+                "invalid frame: expecting EPH-3"
+            );
+
+            let eph_3 = frame.clone();
+            self.bit_offset += consumed;
+
+            self.size -= 3 * GPS_FRAME_BYTES;
+
+            Some(GpsQzssEphemerisItem {
+                satellite,
+                epoch,
+                eph123: GpsQzssEphemerisMessage {
+                    eph_1,
+                    eph_2,
+                    eph_3,
+                },
+            })
+        }
+    }
+}
+
+/// Parses G15, G24, G31, J01, J02, J03 EPH-1.2.3 (3/5 30s) excerpt from NAV/V3/ESBCDNK.gzip
+/// reconstruct a NAV RINEX from all collected bursts,
+/// run bit true comparison between each Ephemeris contrusctured from each burst, and original
+/// Ephemeris
+#[test]
+fn test_gps_qzss_lnav_eph123_bittrue() {
+    // parse original file
+    let esbcdnk =
+        Rinex::from_gzip_file("data/NAV/V3/ESBC00DNK_R_20201770000_01D_MN.rnx.gz").unwrap();
+
+    let mut g15_dec = GpsEph123BurstDecoder::new("data/GPS/esbcdnk_g15_eph123.bin");
+    let mut g24_dec = GpsEph123BurstDecoder::new("data/GPS/esbcdnk_g24_eph123.bin");
+    let mut g31_dec = GpsEph123BurstDecoder::new("data/GPS/esbcdnk_g31_eph123.bin");
+    let mut j01_dec = GpsEph123BurstDecoder::new("data/GPS/esbcdnk_j01_eph123.bin");
+    let mut j02_dec = GpsEph123BurstDecoder::new("data/GPS/esbcdnk_j02_eph123.bin");
+    let mut j03_dec = GpsEph123BurstDecoder::new("data/GPS/esbcdnk_j03_eph123.bin");
+
+    let mut g15_count = 0;
+    let mut g24_count = 0;
+    let mut g31_count = 0;
+    let mut j01_count = 0;
+    let mut j02_count = 0;
+    let mut j03_count = 0;
+
+    // run bit true comparison for each burst, that _must_ exist
+    // we take advantage for natural timeline sorting to easily grab each burst one after the other
+    // when needed, to run the comparison
+    for (key, eph) in esbcdnk.nav_ephemeris_frames_iter() {
+        match key.sv.constellation {
+            Constellation::GPS => {
+                match key.sv.prn {
+                    15 => {
+                        // pull a burst in chronological order
+                        let eph123 = g15_dec.pull_burst(key.sv, key.epoch).unwrap_or_else(|| {
+                            panic!(
+                                "Failed to pull a new EPH-123 burst for {} @ {}",
+                                key.sv, key.epoch
+                            );
+                        });
+
+                        // reconstruct a RINEX
+                        let (reconstructed_toc, reconstructed_eph) = Ephemeris::from_gps_qzss_eph_message(eph123)
+                                .unwrap_or_else(|e| {
+                                    panic!("failed to reconstruct ToC and Eph from {} EPH-1.2.3 burst at {}: {}", key.sv, key.epoch, e);
+                                });
+
+                        // run ToC bit true test
+                        assert_eq!(
+                            reconstructed_toc, key.epoch,
+                            "invalid ToC reconstructed for {}",
+                            key.sv
+                        );
+
+                        // run EPH bit true test
+                        assert_faithful(key.sv, key.epoch, eph, &reconstructed_eph);
+
+                        g15_count += 1;
+                    },
+                    24 => {
+                        // pull a burst in chronological order
+                        let eph123 = g24_dec.pull_burst(key.sv, key.epoch).unwrap_or_else(|| {
+                            panic!(
+                                "Failed to pull a new EPH-123 burst for {} @ {}",
+                                key.sv, key.epoch
+                            );
+                        });
+
+                        // reconstruct a RINEX
+                        let (reconstructed_toc, reconstructed_eph) = Ephemeris::from_gps_qzss_eph_message(eph123)
+                                .unwrap_or_else(|e| {
+                                    panic!("failed to reconstruct ToC and Eph from {} EPH-1.2.3 burst at {}: {}", key.sv, key.epoch, e);
+                                });
+
+                        // run ToC bit true test
+                        assert_eq!(
+                            reconstructed_toc, key.epoch,
+                            "invalid ToC reconstructed for {}",
+                            key.sv
+                        );
+
+                        // run EPH bit true test
+                        assert_faithful(key.sv, key.epoch, eph, &reconstructed_eph);
+
+                        g24_count += 1;
+                    },
+                    31 => {
+                        // pull a burst in chronological order
+                        let eph123 = g31_dec.pull_burst(key.sv, key.epoch).unwrap_or_else(|| {
+                            panic!(
+                                "Failed to pull a new EPH-123 burst for {} @ {}",
+                                key.sv, key.epoch
+                            );
+                        });
+
+                        // reconstruct a RINEX
+                        let (reconstructed_toc, reconstructed_eph) = Ephemeris::from_gps_qzss_eph_message(eph123)
+                                .unwrap_or_else(|e| {
+                                    panic!("failed to reconstruct ToC and Eph from {} EPH-1.2.3 burst at {}: {}", key.sv, key.epoch, e);
+                                });
+
+                        // run ToC bit true test
+                        assert_eq!(
+                            reconstructed_toc, key.epoch,
+                            "invalid ToC reconstructed for {}",
+                            key.sv
+                        );
+
+                        // run EPH bit true test
+                        assert_faithful(key.sv, key.epoch, eph, &reconstructed_eph);
+
+                        g31_count += 1;
+                    },
+                    _ => {}, // ignored
+                }
+            },
+            Constellation::QZSS => {
+                match key.sv.prn {
+                    1 => {
+                        // pull a burst in chronological order
+                        let eph123 = j01_dec.pull_burst(key.sv, key.epoch).unwrap_or_else(|| {
+                            panic!(
+                                "Failed to pull a new EPH-123 burst for {} @ {}",
+                                key.sv, key.epoch
+                            );
+                        });
+
+                        // reconstruct a RINEX
+                        let (reconstructed_toc, reconstructed_eph) = Ephemeris::from_gps_qzss_eph_message(eph123)
+                                .unwrap_or_else(|e| {
+                                    panic!("failed to reconstruct ToC and Eph from {} EPH-1.2.3 burst at {}: {}", key.sv, key.epoch, e);
+                                });
+
+                        // run ToC bit true test
+                        assert_eq!(
+                            reconstructed_toc, key.epoch,
+                            "invalid ToC reconstructed for {}",
+                            key.sv
+                        );
+
+                        // run EPH bit true test
+                        assert_faithful(key.sv, key.epoch, eph, &reconstructed_eph);
+
+                        j01_count += 1;
+                    },
+                    2 => {
+                        // pull a burst in chronological order
+                        let eph123 = j02_dec.pull_burst(key.sv, key.epoch).unwrap_or_else(|| {
+                            panic!(
+                                "Failed to pull a new EPH-123 burst for {} @ {}",
+                                key.sv, key.epoch
+                            );
+                        });
+
+                        // reconstruct a RINEX
+                        let (reconstructed_toc, reconstructed_eph) = Ephemeris::from_gps_qzss_eph_message(eph123)
+                                .unwrap_or_else(|e| {
+                                    panic!("failed to reconstruct ToC and Eph from {} EPH-1.2.3 burst at {}: {}", key.sv, key.epoch, e);
+                                });
+
+                        // run ToC bit true test
+                        assert_eq!(
+                            reconstructed_toc, key.epoch,
+                            "invalid ToC reconstructed for {}",
+                            key.sv
+                        );
+
+                        // run EPH bit true test
+                        assert_faithful(key.sv, key.epoch, eph, &reconstructed_eph);
+
+                        j02_count += 1;
+                    },
+                    3 => {
+                        // pull a burst in chronological order
+                        let eph123 = j03_dec.pull_burst(key.sv, key.epoch).unwrap_or_else(|| {
+                            panic!(
+                                "Failed to pull a new EPH-123 burst for {} @ {}",
+                                key.sv, key.epoch
+                            );
+                        });
+
+                        // reconstruct a RINEX
+                        let (reconstructed_toc, reconstructed_eph) = Ephemeris::from_gps_qzss_eph_message(eph123)
+                                .unwrap_or_else(|e| {
+                                    panic!("failed to reconstruct ToC and Eph from {} EPH-1.2.3 burst at {}: {}", key.sv, key.epoch, e);
+                                });
+
+                        // run ToC bit true test
+                        assert_eq!(
+                            reconstructed_toc, key.epoch,
+                            "invalid ToC reconstructed for {}",
+                            key.sv
+                        );
+
+                        // run EPH bit true test
+                        assert_faithful(key.sv, key.epoch, eph, &reconstructed_eph);
+
+                        j03_count += 1;
+                    },
+                    _ => {}, // ignored
+                }
+            },
+            _ => {},
+        }
+    }
+    assert_eq!(g15_count, 24 / 3);
+    assert_eq!(g24_count, 21 / 3);
+    assert_eq!(g31_count, 27 / 3);
+    assert_eq!(j01_count, 12 / 3);
+    assert_eq!(j02_count, 18 / 3);
+    assert_eq!(j03_count, 15 / 3);
 }
