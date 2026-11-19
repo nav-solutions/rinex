@@ -1,3 +1,4 @@
+//! GPS/QZSS bitstream and Ephemeris serdes operations
 use hifitime::{prelude::Unit, NANOSECONDS_PER_SECOND};
 
 use thiserror::Error;
@@ -19,11 +20,15 @@ use std::collections::HashMap;
 use gnss_protos::{
     constants::SECONDS_PER_WEEK,
     gps::{
-        GpsQzssFrame, GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3, GpsQzssFrameId, GpsQzssHow,
-        GpsQzssMessage, GpsQzssSubframe, GpsQzssTelemetry, GPS_FRAME_DURATION_S,
-        GPS_SUBFRAME_DURATION_S, GPS_TOC_TOE_LSB_S, GPS_WEEK_ROLLOVER,
+        GpsQzssFrame, GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3, GpsQzssFrame4, GpsQzssFrame5,
+        GpsQzssFrameId, GpsQzssHow, GpsQzssMessage, GpsQzssSubframe, GpsQzssTelemetry,
+        GPS_FRAME_DURATION_S, GPS_QZSS_ROTATION_ITEMS, GPS_SUBFRAME_DURATION_S, GPS_TOC_TOE_LSB_S,
+        GPS_WEEK_ROLLOVER,
     },
 };
+
+#[cfg(doc)]
+use gnss_protos::gps::{GpsQzssAlmanach, GpsQzssAlmanachHealth, GpsQzssIonosphereUtc};
 
 #[cfg(feature = "log")]
 use log::error;
@@ -201,6 +206,58 @@ pub enum Error {
     InvalidToE,
 }
 
+/// 30s GPS/QZSS burst formed by [GPS_QZSS_ROTATION_ITEMS] consecutive
+/// [GpsQzssFrame]s, following the correct frame progression
+/// according to the GPS/QZSS protocol. These are often times referred
+/// to as "pages" in the overall message. We have 25 bursts (or pages)
+/// in the complete message describing the entire constellation,
+/// which takes 12'30".
+/// We propose this wrapper to simplify the returned types that may
+/// be returned from RINEX files.
+#[derive(Debug, Copy, Clone, Default)]
+pub struct GpsQzss30sMessage([GpsQzssFrame; GPS_QZSS_ROTATION_ITEMS]);
+
+impl GpsQzss30sMessage {
+    /// Access the underlying EPH-1 1/5 part of the 30s burst.
+    pub fn eph_1(&self) -> GpsQzssFrame {
+        self.0[0]
+    }
+
+    /// Access the underlying EPH-2 2/5 part of the 30s burst.
+    pub fn eph_2(&self) -> GpsQzssFrame {
+        self.0[1]
+    }
+
+    /// Access the underlying EPH-3 3/5 part of the 30s burst.
+    pub fn eph_3(&self) -> GpsQzssFrame {
+        self.0[2]
+    }
+
+    /// Access the underlying ALM-4 4/5 part of the 30s burst.
+    pub fn alm_4(&self) -> GpsQzssFrame {
+        self.0[3]
+    }
+
+    /// Access the underlying ALM-5 5/5 conclusion of the 30s burst.
+    pub fn alm_5(&self) -> GpsQzssFrame {
+        self.0[4]
+    }
+
+    /// Convenient method to extract the first 3/5 part of the 30s cycle,
+    /// which can always be serdes from a RINEX [Ephemeris].
+    pub fn to_ephemeris_message_item(&self, satellite: SV, epoch: Epoch) -> GpsQzssEphemerisItem {
+        GpsQzssEphemerisItem {
+            satellite,
+            epoch,
+            eph123: GpsQzssEphemerisMessage {
+                eph_1: self.eph_1(),
+                eph_2: self.eph_2(),
+                eph_3: self.eph_3(),
+            },
+        }
+    }
+}
+
 /// This structure is used when serilizing or deserializing part of a
 /// GPS/QZSS bitstream. More precisely, the first 3/5 of the 30s
 /// message rotation of any GPS or QZSS satellite.
@@ -267,6 +324,106 @@ pub struct GpsQzssEphCompositionOpts {
     pub tlm_3: GpsQzssTelemetry,
 }
 
+/// Similarly to [GpsQzssEphCompositionOpts] (refer to related docs),
+/// except that you also control the Telemetry fields to apply to
+/// ALM-4 and ALM-5 at the conclusion of the 30s burst.
+#[derive(Debug, Copy, Clone, Default)]
+pub struct GpsQzssCompositionOpts {
+    /// Satellite signal source to be emulated or synthesized.
+    /// Only GPS or QZSS satellites will be accepted here.
+    pub satellite: SV,
+
+    /// HOW alert flag that will apply to the entire 30s cycle.
+    pub alert: bool,
+
+    /// HOW A/S flag, that will apply to the entire 30s cycle.
+    /// for this 30s cycle.
+    pub anti_spoofing: bool,
+
+    /// Reference epoch, usually the "Time of Clock" (ToC) attached to each
+    /// entry in the RINEX record. Any instant which lies with +/- 512 week
+    /// from the transmission instant you intend to use will work correctly here.
+    /// Any timescale may apply here because we internally convert to GPST properly.
+    pub epoch: Epoch,
+
+    /// [GpsQzssTelemetry] to be attached to the EPH-1 frame (1/5).
+    /// Accurate control over each telemetry is most interesting for advanced
+    /// users who can take advantage of that to encode the private bits of the bitstream.
+    pub tlm_1: GpsQzssTelemetry,
+
+    /// [GpsQzssTelemetry] to be attached to the EPH-2 frame (2/5).
+    /// Accurate control over each telemetry is most interesting for advanced
+    /// users who can take advantage of that to encode the private bits of the bitstream.
+    pub tlm_2: GpsQzssTelemetry,
+
+    /// [GpsQzssTelemetry] to be attached to the EPH-3 frame (3/5).
+    /// Accurate control over each telemetry is most interesting for advanced
+    /// users who can take advantage of that to encode the private bits of the bitstream.
+    pub tlm_3: GpsQzssTelemetry,
+
+    /// [GpsQzssTelemetry] to be attached to the ALM-3 frame (4/5).
+    /// Accurate control over each telemetry is most interesting for advanced
+    /// users who can take advantage of that to encode the private bits of the bitstream.
+    pub tlm_4: GpsQzssTelemetry,
+
+    /// [GpsQzssTelemetry] to be attached to the ALM-5 frame (5/5).
+    /// Accurate control over each telemetry is most interesting for advanced
+    /// users who can take advantage of that to encode the private bits of the bitstream.
+    pub tlm_5: GpsQzssTelemetry,
+}
+
+/// [GpsQzssAlm4CompositionOpts] allows you to compose
+/// ALM-4 accurately (4/5 in the 30s cycle)
+#[derive(Debug, Copy, Clone)]
+pub enum GpsQzssAlm4CompositionOpts {
+    /// Pass [GpsQzssFrame4] directly.
+    /// We will use this data word to follow EPH-3 and preceeding ALM-5
+    /// in the 30s cycle we are about to forge.
+    /// This is convenient if you are capable of forging specific & exact
+    /// part of the bitstream.
+    AsIs(GpsQzssFrame4),
+
+    /// This option will force our burst synthesizer
+    /// to compute the most accurate Almanach parameters
+    /// we can, for the attached satellite.
+    /// Basically, the solver will fit [GpsQzssAlmanach] for this satellite.
+    SatelliteAlmanach,
+
+    /// Use this option to force our burst synthesizer
+    /// to grab the Ionospheric model parameters
+    /// and GPST/UTC current state, from closest RINEX data point
+    /// when working with RINEX v4, or from file header when
+    /// working with RINEX v2/v3.
+    /// Basically, this will forge the most realistic [GpsQzssIonosphereUtc] we can.
+    /// You can still provide the 14 reserved bits concluding Word10.
+    /// This is automated ALM4 Page 18 termination.
+    IonosphereUtc(Option<u16>),
+}
+
+/// [GpsQzssAlm4CompositionOpts] allows you to compose
+/// ALM-5 accurately (5/5 in the 30s cycle)
+#[derive(Debug, Copy, Clone)]
+pub enum GpsQzssAlm5CompositionOpts {
+    /// Pass [GpsQzssFrame5] directly.
+    /// We will use this data word to follow ALM-4 and conclude the 30s
+    /// cycle we are about to forge.
+    /// This is convenient if you are capable of forging specific & exact
+    /// part of the bitstream.
+    AsIs(GpsQzssFrame5),
+
+    /// This option will force our burst synthesizer
+    /// to compute the most accurate Almanach parameters
+    /// we can, for the attached satellite.
+    /// Basically, the solver will fit [GpsQzssAlmanach] for this satellite.
+    SatelliteAlmanach,
+
+    /// This option forces our burst synthesize to grab the latest
+    /// health flags for SV1-24, compute the WNa and ToA.
+    /// You can still provide the 22 reserved bits concluding Word10.
+    /// This is ALM5 page 25 automated termination.
+    AlmanacHealth(Option<u32>),
+}
+
 /// [GpsQzssEphemerisMessage] represents the first 3/5 of the 30s message
 /// rotation of any given satellite. The first 3/5 of the 30s rotation can always
 /// be created from or converted into a valid RINEX [Ephemeris], this API works both ways.
@@ -303,6 +460,7 @@ impl Ephemeris {
     /// - the RINEX `week` is the week of ToE (not the broadcast week number).
     ///
     /// ## Input
+    ///
     /// - t_rx: usually [Epoch] of message reception.
     /// In practice, any [Epoch] that is less than 512 weeks from
     /// the actual transmission time of the following message will work fine here.
@@ -310,7 +468,8 @@ impl Ephemeris {
     ///
     /// - satellite: GPS or QZSS [SV]
     ///
-    /// ## Returns
+    /// ## Output
+    ///
     /// - (ToC) Time of Clock, expressed in [TimeScale::GPST], and [Ephemeris] frame
     pub fn from_gps_qzss_eph_message(item: GpsQzssEphemerisItem) -> Result<(Epoch, Self), Error> {
         match item.satellite.constellation {
@@ -732,84 +891,240 @@ impl Ephemeris {
             },
         })
     }
+
+    /// Any GPS/QZSS RINEX [Ephemeris] frame can be streamed to a complete 30s GPS/QZSS bitstream,
+    /// as long as you can provide the ALM4 and ALM5 concluding the 30s cycle.
+    /// Refer to [Self::to_gps_qzss_eph_message] for more information.
+    ///
+    /// ## Input
+    ///
+    /// - eph123_opts: [GpsQzssCompositionOpts] options that apply to the first 3/5 part
+    /// of the burst: EPH-1, EPH-2 and EPH-3.
+    ///
+    /// - alm4: externally defined [GpsQzssFrame] which must be
+    /// a valid ALM-4 subframe to follow EPH-3 correctly.
+    /// This method will reject other subframes for this type.
+    /// If you don't know how to provide ALM4, simply pass None.
+    /// When passing None, a "zero" ALM4 is described, with correct HOW.ToW.
+    ///
+    /// - alm5: externally defined [GpsQzssFrame] which must be
+    /// a valid ALM-5 subframe to follow ALM-4 correctly.
+    /// This method will reject other subframes for this type.
+    /// If you don't know how to provide ALM5, simply pass None.
+    /// When passing None, a "zero" ALM5 is described, with correct HOW.ToW.
+    /// ```
+    /// use rinex::{
+    ///     prelude::{
+    ///         Rinex, Constellation,
+    ///     },
+    ///     navigation::{
+    ///         Ephemeris,
+    ///         GpsQzssEphCompositionOpts,
+    ///     },
+    /// };
+    ///
+    /// use gnss_protos::gps::GPS_SUBFRAME_DURATION_S;
+    ///
+    /// let rinex =
+    ///     Rinex::from_gzip_file("data/NAV/V3/ESBC00DNK_R_20201770000_01D_MN.rnx.gz").unwrap();
+    ///
+    /// // Any GPS/QZSS RINEX Ephemeris can be converted to a complete 30s
+    /// // radio burst, as long as you can provide ALM4 and ALM5.
+    /// // In this example, we pretend to be a general public user who
+    /// // is not capable to do so, we take advantage of the Default constructor
+    /// // to create dummy ALM4 and ALM5 subframes lazily. For this operation
+    /// // to work, we still have to create ALM4 and ALM5 subframes correctly,
+    /// // which _are not_ the default subframes!
+    /// for (key, eph) in rinex.nav_ephemeris_frames_iter() {
+    ///     match key.sv.constellation {
+    ///         Constellation::GPS | Constellation::QZSS => {
+    ///             // applies similarly to GPS and QZSS (same protocol)
+    ///
+    ///             // lazy and general public use case:
+    ///             // unable to describe most ALM4 or ALM5 pages.
+    ///             // The end of the 30s burst will be zero padded.
+    ///             let (alm4, alm5) = (None, None);
+    ///
+    ///             // it is important to define the correct satellite.
+    ///             // This information should be shared with your signal modulator anyway.
+    ///             // It is important to provide a reference Epoch here which lies
+    ///             // within +/- 512 weeks from physical transmission time.
+    ///             // Simply and lazily pass the RINEX ToC here.
+    ///             let opts = GpsQzssEphCompositionOpts {
+    ///                 satellite: key.sv,
+    ///                 epoch: key.epoch,
+    ///                 alert: false, // example
+    ///                 anti_spoofing: true, // example
+    ///                 tlm_1: Default::default(), // example
+    ///                 tlm_2: Default::default(), // example
+    ///                 tlm_3: Default::default(), // example
+    ///             };
+    ///
+    ///             let radio_burst = eph.to_gps_qzss_message(opts, alm4, alm5)
+    ///                 .unwrap();
+    ///
+    ///             // simple verification:
+    ///             // even when stream is lazily zero padded,
+    ///             // this API is smart enough to forge correct ToW progression.
+    ///             // Which is physicall correct.
+    ///             assert_eq!(
+    ///                 radio_burst.eph_2().how.tow - radio_burst.eph_1().how.tow,
+    ///                 GPS_SUBFRAME_DURATION_S,
+    ///             );
+    ///             assert_eq!(
+    ///                 radio_burst.eph_3().how.tow - radio_burst.eph_2().how.tow,
+    ///                 GPS_SUBFRAME_DURATION_S,
+    ///             );
+    ///             assert_eq!(
+    ///                 radio_burst.alm_4().how.tow - radio_burst.eph_3().how.tow,
+    ///                 GPS_SUBFRAME_DURATION_S,
+    ///             );
+    ///             assert_eq!(
+    ///                 radio_burst.alm_5().how.tow - radio_burst.alm_4().how.tow,
+    ///                 GPS_SUBFRAME_DURATION_S,
+    ///             );
+    ///             
+    ///             // At this point you are ready to modulate & transmit over the air.
+    ///             // In this example, we verify our reciprocity.
+    ///             // Only the first 3/5 part of the burst applies here,
+    ///             // almanach is dropped.
+    ///             let eph123 = radio_burst.to_ephemeris_message_item(key.sv, key.epoch);
+    ///
+    ///             let (reconstructed_toc, reconstructed_eph) =
+    ///                 Ephemeris::from_gps_qzss_eph_message(eph123)
+    ///                 .unwrap();
+    ///
+    ///             // bit true reciprocity
+    ///             assert_eq!(reconstructed_toc, key.epoch, "ToC reciprocal failed");
+    ///             
+    ///             // reconstructed ephemeris is "bit true" at the GPS/QZSS
+    ///             // binary precision level, which is lower than f64 assert_eq.
+    ///             // Our test toolkit verifies just that, but this macro
+    ///             // is not avaible here. assert_eq! would "fail" at 1e-7 range.
+    ///         },
+    ///         _ => {}, // not applicable
+    ///     }
+    /// }
+    /// ```
+    pub fn to_gps_qzss_message(
+        &self,
+        eph123_opts: GpsQzssEphCompositionOpts,
+        alm_4: Option<GpsQzssFrame>,
+        alm_5: Option<GpsQzssFrame>,
+    ) -> Result<GpsQzss30sMessage, Error> {
+        match eph123_opts.satellite.constellation {
+            Constellation::GPS | Constellation::QZSS => {},
+            _ => return Err(Error::InvalidSatellite),
+        }
+
+        let eph123 = self.to_gps_qzss_eph_message(eph123_opts)?;
+
+        let alm_4 = match alm_4 {
+            Some(alm) => alm,
+            None => {
+                // for 100% correct ToW, even in this case
+                let start_time_s = eph123.eph_1.frame_start_time_s();
+
+                GpsQzssFrame {
+                    telemetry: Default::default(),
+                    how: GpsQzssHow {
+                        frame_id: GpsQzssFrameId::Almanach4,
+                        tow: start_time_s as u32 + 4 * GPS_SUBFRAME_DURATION_S,
+                        alert: eph123_opts.alert,
+                        anti_spoofing: eph123_opts.anti_spoofing,
+                    },
+                    subframe: GpsQzssSubframe::Almanach4(Default::default()),
+                }
+            },
+        };
+
+        let alm_5 = match alm_5 {
+            Some(alm) => alm,
+            None => {
+                // for 100% correct ToW, even in this case
+                let start_time_s = eph123.eph_1.frame_start_time_s();
+
+                GpsQzssFrame {
+                    telemetry: Default::default(),
+                    how: GpsQzssHow {
+                        frame_id: GpsQzssFrameId::Almanach5,
+                        tow: start_time_s as u32 + 5 * GPS_SUBFRAME_DURATION_S,
+                        alert: eph123_opts.alert,
+                        anti_spoofing: eph123_opts.anti_spoofing,
+                    },
+                    subframe: GpsQzssSubframe::Almanach5(Default::default()),
+                }
+            },
+        };
+
+        Ok(GpsQzss30sMessage([
+            eph123.eph_1,
+            eph123.eph_2,
+            eph123.eph_3,
+            alm_4,
+            alm_5,
+        ]))
+    }
 }
 
 impl Rinex {
-    // /// Dumps all satellite Ephemeris described in this RINEX file
-    // /// to GPS bit stream ready to encode. This stream is composed
-    // /// of a sequence of EPH-1, -2 and -3 frames which represents 3/5
-    // /// of the 30s message rotation.
+    /// This method is very similar to [Ephemeris::to_gps_qzss_eph_message],
+    /// excepts that it applies at the [Rinex] level, and takes advantage
+    /// of the entire record set and file Header, to form an entire 30s GPS/QZSS burst.
+    ///
+    /// When using [Ephemeris::to_gps_qzss_eph_message], you are limited
+    /// to synthesis of EPH-1, 2 and 3 which from the first 3/5 of the 30s burst.
+    /// The ALM-4 and ALM-5 subframes concluding the 30s burst are missing
+    /// inevitably. You can take advantage of this method to compose
+    /// a realistic and complete 30s message burst, either by deducing
+    /// some information from the File Header or Record itself,
+    /// or by manually defining them using the composition options.
+    ///
+    /// Thanks to these composition options, this method allows you to synthesize
+    /// a 30s burst that will fit correctly in any part of the 12'30" message rotation.
+    ///
+    /// Read [Alm4CompositionOpts] and [Alm5CompositionOpts] options carefully
+    /// to understand how to conclude the burst correctly. In particular,
+    /// some of the information transported by ALM4 and ALM5 cannot be deduced
+    /// from a RINEX file. Depending on which part of the 12'30" you intend
+    /// to synthesize, you should feed the information directly yourself,
+    /// otherwise this method can only pad the bitstream with zeros.
+    ///
+    /// Like similar methods, it gives you full control to compose the radio burst
+    /// very precisely, in particular Telemetry fields for advanced users.
+    ///
+    /// ## Input
+    ///
+    /// - Navigation [Rinex]. Returns an Error on other format (invalid operation).
+    ///
+    /// - composition opts, as [GpsQzssCompoitionOpts], to fine tune each bit
+    /// of the data burst to be synthesized. This is most useful to advanced users.
+    ///
+    /// - alm4: ALM4 accurate design.
+    /// This is directly related to the placement in time you intend for the 30s burst
+    /// we are about to synthesize.
+    ///
+    /// - alm5: ALM5 accurate design.
+    /// This is directly related to the placement in time you intend for the 30s burst
+    /// we are about to synthesize.
+    pub fn to_gps_qzss_messages(
+        &self,
+        opts: GpsQzssCompositionOpts,
+        alm4: GpsQzssAlm4CompositionOpts,
+        alm5: GpsQzssAlm5CompositionOpts,
+    ) -> Result<GpsQzss30sMessage, Error> {
+        match opts.satellite.constellation {
+            Constellation::GPS | Constellation::QZSS => {},
+            _ => {
+                return Err(Error::InvalidSatellite);
+            },
+        }
 
-    // /// This method reconstructs all [GpsQzssMessage] 25-page rotations for the entire
-    // /// GPS constellation, described in this entire Navigation RINEX record.
-    // /// Each [GpsQzssMessage] is then ready to encode as stream of bits and possibly
-    // /// sent over the air.
-    // ///
-    // /// This method aims at reconstructing the binary bit stream very accurately,
-    // /// but that is not 100% feasible, because some of the bit stream information was lost
-    // /// at the time the RINEX record was encoded.
-    //
-    // /// This method is very convenient for people working at the Almanach level.
-    // /// Yet (general public) RINEX files are not the proper mean to save and share
-    // /// Almanachs. For one reason, the usual 2h "sampling" rate is enough to describe
-    // /// the evolution of the Constellation precisely, but is also very far from the
-    // /// actualy bit stream over the air (12'30" period that one [GpsQzssMessage] covers).
-    // /// If you "happen" to have a "fast" RINEX nav record (for example, sampler that saved
-    // /// every single rotation), this method will be able to reconstruct every single indivual
-    // /// frame. Otherwise, this is not feasible. We will grab each information for each SV (starting
-    // /// at G01) and we will reconstruct every possible [GpsQzssMessage] for each G01 entry.
-    // /// You will inevitably get gaps in the successive [GpsQzssMessage] serie.
-    // ///
-    // /// Information that we reconstruct exactly:
-    // /// - Ionosphere model parameters. This is either described in the file header,
-    // /// or regularly updated in modern RINEX records. In RINEX V2 we will copy
-    // /// the model parameters in _every single_ GPS page. In RINEX V4 the
-    // /// model parameters are regularly updated and this method reconstructs the binary
-    // /// stream more precisely.
-    // ///
-    // /// Information that cannot be fully reconstructed:
-    // /// - SV Almanach: (PRN dependent) almanach reconstruction is not 100% bit true.
-    // /// SV almanach parameters are keplerian parameters for each SV, without
-    // /// harmonic terms with lower precision compared to SV ephemeris.
-    // /// - This method is not an orbit fitter & designer. It is a quick & easy to use tool
-    // /// to recreate a somewhat realistic [GpsQzssMessage] bitstream. Therefore, the quality
-    // /// of the reconstructed Almanach should be good enough, but not ideal.
-    // ///
-    // /// Information that is inevitably lost at RINEX encoding:
-    // /// - RESERVED and military bits.
-    // /// - Special Message (SF4 p17 22 ASCII bytes) are not encoded in RINEX records (military?).
-    // /// - RESERVED SF4 pages 1, 6, 11, 12, 14, 15, 16, 19-24 are not encoded in RINEX records.
-    // /// - This method will insert zeros for all these bits in the bit stream.
-    // ///
-    // /// ## Input
-    // ///
-    // /// - Navigation RINEX record. Other formats will return an empty Iterator.
-    // ///
-    // /// ## Output
-    // ///
-    // /// - [GpsQzssMessage] Iterator, ideally starting at Eph-1 G01.
-    // /// Since our structure is automatically sorted, the output strem reflects just that,
-    // /// and is possible "truncated" with missing part of the 25-pages, if the record
-    // /// does not start with G01. Note that this is totally sane and will happen,
-    // /// because the RINEX record is formatted at some location in space and time,
-    // /// from direct sky observations.
-    // pub fn to_gps_message_rotations(&self) -> Box<dyn Iterator<Item = GpsQzssMessage> + '_> {
-    //     Self::to_gps_qzss_message_rotations(self, Constellation::GPS)
-    // }
-    //
-    // /// Refer to [Rinex::to_gps_message_rotation] for more information.
-    // /// Same behavior, applied to QZSS (Jap) satellites.
-    // pub fn to_qzss_message_rotations(&self) -> Box<dyn Iterator<Item = GpsQzssMessage> + '_> {
-    //     Self::to_gps_qzss_message_rotations(self, Constellation::QZSS)
-    // }
-
-    // /// See [Rinex::to_gps_message_rotation] for more information.
-    // fn to_gps_qzss_message_rotations(&self, filter: Constellation) -> Box<dyn Iterator<Item = GpsQzssMessage> + '_> {
-
-    // }
+        Ok(Default::default())
+    }
 
     /// Serializes this Navigation RINEX into a serie of GPS/QZSS EPH-1, EPH-2 and EPH-3
-    /// frames, which compose the first 3/5 of the 30s message rotation of each satellite.
+    /// frames, which compose the first 3/5 of the 30s message sent by every satellite.
     ///
     /// It is possible to extract the first 3/5 of the burst for every single [Ephemeris]
     /// entry. When composing the burst, we let you customize the [GpsQzssTelemetry] fields
@@ -825,7 +1140,68 @@ impl Rinex {
     ///
     /// The rotation being incomplete, if you intend to synthesize a realistic signal
     /// you will have to insert the ALM-4 and ALM-5 after each EPH-3 frame, or you can insert
-    /// zeros.
+    /// zeros. Basically, this method forges 18s of the 30s cycle.
+    /// ```
+    /// use rinex::{
+    ///     prelude::Rinex,
+    ///     navigation::{
+    ///         GpsQzssEphCompositionOpts,
+    ///     },
+    /// };
+    ///
+    /// use gnss_protos::gps::GPS_SUBFRAME_DURATION_S;
+    ///  
+    /// let rinex = Rinex::from_gzip_file("data/NAV/V2/cbw10010.21n.gz").unwrap();
+    ///
+    /// // simple example
+    /// let (mut alert, mut anti_spoofing) = (false, false);
+    ///
+    /// // Dump this RINEX to GPS bitstream.
+    /// // QZSS will not exist because this is a GPS V2 Only file.
+    /// // If you intend to forge a physically correct bitstream, you should
+    /// // insert ALM4 and ALM5 subframes after each EPH-3.
+    /// // This method will basically forge 18s of message, it still lacks 12s to complete the 30s
+    /// // cycle.
+    /// for msg in rinex.to_gps_qzss_eph_messages(|(satellite, toc)| {
+    ///     // Define your composition method to customize each EPH-1,2,3 message.
+    ///     // Every single RINEX Ephemeris data point is about to be
+    ///     // converted to EPH-1,2,3 burst. You can fine tune each bit
+    ///     // in each frame. For that, we pass the satellite and ToC,
+    ///     // and we expect you to fulfill the remaining bits.
+    ///     // In this example, we toggle the Alert and A/S bits
+    ///     // every other epoch, and we fill the telemetry with zeros.
+    ///     let opts = GpsQzssEphCompositionOpts {
+    ///         satellite, // simple pass through
+    ///         epoch: toc, // simple pass through
+    ///         anti_spoofing,
+    ///         alert,
+    ///         tlm_1: Default::default(), // zeros
+    ///         tlm_2: Default::default(), // zeros
+    ///         tlm_3: Default::default(), // zeros
+    ///     };
+    ///
+    ///     alert = !alert; // toggle every other burst, regardless of SV
+    ///     anti_spoofing = !anti_spoofing; // toggles every other burst, regardless of SV
+    ///     
+    ///     // return composition choice for this very burst
+    ///     opts
+    /// }) {
+    ///
+    ///     // your signal modulator will most likely need this information
+    ///     let (sat, epoch_toc) = (msg.satellite, msg.epoch);
+    ///
+    ///     // verify GPS/QZSS ToW correctness.
+    ///     // Remember, this method only forges 18s of the 30s cycle.
+    ///     assert_eq!(
+    ///         msg.eph123.eph_2.how.tow - msg.eph123.eph_1.how.tow,
+    ///         GPS_SUBFRAME_DURATION_S,
+    ///     );
+    ///     assert_eq!(
+    ///         msg.eph123.eph_3.how.tow - msg.eph123.eph_2.how.tow,
+    ///         GPS_SUBFRAME_DURATION_S,
+    ///     );
+    /// }
+    /// ```
     pub fn to_gps_qzss_eph_messages<'a, C>(
         &'a self,
         mut composer: C,

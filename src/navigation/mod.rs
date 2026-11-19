@@ -9,6 +9,9 @@ mod message;
 mod parsing;
 mod time;
 
+#[cfg(feature = "protos")]
+mod protos;
+
 pub mod rinex;
 
 pub(crate) mod formatting;
