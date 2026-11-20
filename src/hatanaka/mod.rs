@@ -81,4 +81,13 @@ pub enum Error {
     /// corrupt data, or inconsistent kernel state
     #[error("numerical (de)compression overflow")]
     NumericOverflow,
+
+    #[error("invalid compressed observation field")]
+    ObservationField,
+
+    #[error("invalid compressed clock field")]
+    ClockField,
+
+    #[error("compressed value has no initialised numeric kernel")]
+    UninitializedKernel,
 }

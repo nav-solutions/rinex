@@ -82,30 +82,64 @@ impl Leap {
 impl std::str::FromStr for Leap {
     type Err = ParsingError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Fields: leap, ΔtLS, week, day, then an optional time system that may
-        // touch the day field ("7GPS"). Read them as tokens, so that short or
-        // misaligned lines return an error instead of panicking.
+        // RINEX 3/4 uses four I6 fields and a time-system identifier.
+        // Optional blank fields stay unknown; byte positions must not be trimmed.
+        if !s.is_ascii() {
+            return Err(ParsingError::LeapParsing);
+        }
+        if s.len() >= 24 {
+            let parse = |field: &str| -> Result<Option<u32>, ParsingError> {
+                let field = field.trim();
+                if field.is_empty() {
+                    Ok(None)
+                } else {
+                    field
+                        .parse()
+                        .map(Some)
+                        .map_err(|_| ParsingError::LeapParsing)
+                }
+            };
+            let system = s[24..].trim();
+            return Ok(Leap {
+                leap: parse(&s[..6])?.ok_or(ParsingError::LeapParsing)?,
+                delta_tls: parse(&s[6..12])?,
+                week: parse(&s[12..18])?,
+                day: parse(&s[18..24])?,
+                timescale: if system.is_empty() {
+                    None
+                } else if system == "BDS" {
+                    Some(TimeScale::BDT)
+                } else {
+                    Some(TimeScale::from_str(system)?)
+                },
+            });
+        }
+
+        // Keep upstream's compact inputs, including a system touching the last
+        // number ("7GPS"). Without I6 columns, incomplete future fields cannot be
+        // assigned reliably, so retain only the current leap count.
         let s = s.trim();
         let numbers = s.trim_end_matches(|c: char| c.is_ascii_alphabetic());
         let system = s[numbers.len()..].trim();
-        let items = numbers.split_ascii_whitespace().collect::<Vec<_>>();
-        let parse = |item: &str| item.parse::<u32>().or(Err(ParsingError::LeapParsing));
-
-        let mut ls = Leap::default();
-        ls.leap = parse(items.first().ok_or(ParsingError::LeapParsing)?)?;
-
-        // Only the complete format carries ΔtLS, week and day. With fewer fields
-        // it is unclear which one is missing, so keep the current count only.
-        if items.len() >= 4 {
-            ls.delta_tls = Some(parse(items[1])?);
-            ls.week = Some(parse(items[2])?);
-            ls.day = Some(parse(items[3])?);
+        let items = numbers
+            .split_ascii_whitespace()
+            .map(|item| item.parse::<u32>().map_err(|_| ParsingError::LeapParsing))
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut ls = Leap {
+            leap: *items.first().ok_or(ParsingError::LeapParsing)?,
+            ..Leap::default()
+        };
+        if items.len() > 4 {
+            return Err(ParsingError::LeapParsing);
         }
-
+        if items.len() == 4 {
+            ls.delta_tls = Some(items[1]);
+            ls.week = Some(items[2]);
+            ls.day = Some(items[3]);
+        }
         if !system.is_empty() {
             ls.timescale = Some(TimeScale::from_str(system)?);
         }
-
         Ok(ls)
     }
 }
@@ -114,11 +148,65 @@ impl std::str::FromStr for Leap {
 mod test {
 
     use crate::{
-        prelude::{Leap, TimeScale},
+        prelude::{Header, Leap, TimeScale},
         tests::formatting::Utf8Buffer,
     };
 
-    use std::{io::BufWriter, str::FromStr};
+    use std::{
+        io::{BufReader, BufWriter},
+        str::FromStr,
+    };
+
+    #[test]
+    fn fixed_width_partial_fields_keep_raw_values_and_unknown_day() {
+        // GRN0 2024-05-10 real header content (first40 bytes). Physical meaning
+        // of its unusual future fields is not certified by syntax parsing.
+        let leap = Leap::from_str("    18  2313     5                       ").unwrap();
+        assert_eq!(leap.leap, 18);
+        assert_eq!(leap.delta_tls, Some(2313));
+        assert_eq!(leap.week, Some(5));
+        assert_eq!(leap.day, None);
+        assert_eq!(leap.timescale, None);
+    }
+
+    #[test]
+    fn fixed_width_blanks_and_explicit_time_system_are_not_shifted() {
+        let leap = Leap::from_str("    18                  GPS             ").unwrap();
+        assert_eq!(leap.leap, 18);
+        assert_eq!(leap.delta_tls, None);
+        assert_eq!(leap.week, None);
+        assert_eq!(leap.day, None);
+        assert_eq!(leap.timescale, Some(TimeScale::GPST));
+        for (system, timescale) in [
+            ("", None),
+            ("GPS", Some(TimeScale::GPST)),
+            ("BDS", Some(TimeScale::BDT)),
+        ] {
+            let complete =
+                Leap::from_str(&format!("{:6}{:6}{:6}{:6}{system}", 18, 18, 2185, 7)).unwrap();
+            assert_eq!(complete.delta_tls, Some(18));
+            assert_eq!(complete.day, Some(7));
+            assert_eq!(complete.week, Some(2185));
+            assert_eq!(complete.timescale, timescale);
+        }
+    }
+
+    #[test]
+    fn malformed_or_empty_fields_return_error_without_panicking() {
+        for input in [
+            "",
+            " ",
+            "18 x",
+            "18 18 2185 7 99",
+            "                        ",
+            "    18    xx                            ",
+            "    18                  é",
+            "é",
+            "    xx                                  ",
+        ] {
+            assert!(Leap::from_str(input).is_err(), "{input:?}");
+        }
+    }
 
     #[test]
     fn leap_second_basic() {
@@ -208,6 +296,52 @@ mod test {
     fn leap_second_malformed_is_an_error() {
         for s in ["", "   ", "GPS", "18 x 2185 7", "18    18  2185     7XYZ"] {
             assert!(Leap::from_str(s).is_err(), "{:?}", s);
+        }
+    }
+
+    #[test]
+    fn fixed_width_missing_delta_keeps_later_fields() {
+        // Synthetic I6 boundary: a blank delta must not shift week or day.
+        let input = format!("{:6}{:6}{:6}{:6}GPS", 18, "", 2185, 7);
+        let leap = Leap::from_str(&input).unwrap();
+        assert_eq!(leap.leap, 18);
+        assert_eq!(leap.delta_tls, None);
+        assert_eq!(leap.week, Some(2185));
+        assert_eq!(leap.day, Some(7));
+        assert_eq!(leap.timescale, Some(TimeScale::GPST));
+    }
+
+    #[test]
+    fn header_parser_preserves_leap_columns() {
+        // Real GRN0 2024-05-10 leap content in a minimal synthetic OBS header.
+        // Also check the time-system position with all future fields blank.
+        for (content, expected) in [
+            (
+                "    18  2313     5                       ",
+                Leap {
+                    leap: 18,
+                    delta_tls: Some(2313),
+                    week: Some(5),
+                    ..Leap::default()
+                },
+            ),
+            (
+                "    18                  GPS             ",
+                Leap {
+                    leap: 18,
+                    timescale: Some(TimeScale::GPST),
+                    ..Leap::default()
+                },
+            ),
+        ] {
+            let text = format!(
+                "     3.04           OBSERVATION DATA    G                   RINEX VERSION / TYPE\n\
+                 {content:<60}LEAP SECONDS\n\
+                 {:60}END OF HEADER\n",
+                ""
+            );
+            let header = Header::parse(&mut BufReader::new(text.as_bytes())).unwrap();
+            assert_eq!(header.leap, Some(expected), "{content:?}");
         }
     }
 

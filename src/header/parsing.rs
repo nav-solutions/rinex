@@ -6,7 +6,7 @@ use crate::{
     hatanaka::CRINEX,
     header::{DcbCompensation, Header, PcvCompensation},
     leap::Leap,
-    marker::{GeodeticMarker, MarkerType},
+    marker::MarkerType,
     meteo::{HeaderFields as MeteoHeader, Sensor as MeteoSensor},
     navigation::{HeaderFields as NavigationHeader, IonosphereModel, KbModel, TimeOffset},
     observable::Observable,
@@ -19,47 +19,69 @@ use crate::{
 };
 
 use std::{
-    collections::HashMap,
+    collections::BTreeSet,
     io::{BufRead, BufReader, Read},
     str::FromStr,
 };
 
 impl Header {
     /// Parse [Header] by consuming [BufReader] until end of this section
+    /// OBS declarations require GNSS code shapes for their format version,
+    /// supported, unique codes and matching declared counts, so unsupported
+    /// columns cannot shift subsequent values. This is not a per-constellation
+    /// signal catalogue check.
     pub fn parse<R: Read>(reader: &mut BufReader<R>) -> Result<Self, ParsingError> {
-        let mut rinex_type = Type::default();
-        let mut version = Version::default();
-        let mut constellation: Option<Constellation> = None;
+        Self::parse_with_base(reader, None)
+    }
 
-        let mut program = Option::<String>::None;
-        let mut run_by = Option::<String>::None;
-        let mut date = Option::<String>::None;
-        let mut observer = Option::<String>::None;
-        let mut agency = Option::<String>::None;
-        let mut license = Option::<String>::None;
-        let mut doi = Option::<String>::None;
-        let mut station_url = Option::<String>::None;
-        let mut geodetic_marker = Option::<GeodeticMarker>::None;
-        let mut cospar = Option::<COSPAR>::None;
-        let mut glo_channels: HashMap<SV, i8> = HashMap::new();
-        let mut rcvr: Option<Receiver> = None;
-        let mut rcvr_antenna: Option<Antenna> = None;
-        let mut sv_antenna: Option<SvAntenna> = None;
-        let mut leap: Option<Leap> = None;
-        let mut sampling_interval: Option<Duration> = None;
+    pub(crate) fn parse_observation_update(&self, records: &str) -> Result<Self, ParsingError> {
+        Self::parse_with_base(&mut BufReader::new(records.as_bytes()), Some(self))
+    }
 
-        let mut rx_position: Option<_> = Option::<(f64, f64, f64)>::None;
+    fn parse_with_base<R: Read>(
+        reader: &mut BufReader<R>,
+        base: Option<&Self>,
+    ) -> Result<Self, ParsingError> {
+        let mut rinex_type = base.map(|h| h.rinex_type).unwrap_or_default();
+        let mut version = base.map(|h| h.version).unwrap_or_default();
+        let mut constellation = base.map(|h| h.constellation).unwrap_or_default();
 
-        let mut dcb_compensations: Vec<DcbCompensation> = Vec::new();
-        let mut ionod_corrections = HashMap::<Constellation, IonosphereModel>::with_capacity(4);
-        let mut pcv_compensations: Vec<PcvCompensation> = Vec::new();
+        let mut program = base.map(|h| h.program.clone()).unwrap_or_default();
+        let mut run_by = base.map(|h| h.run_by.clone()).unwrap_or_default();
+        let mut date = base.map(|h| h.date.clone()).unwrap_or_default();
+        let mut observer = base.map(|h| h.observer.clone()).unwrap_or_default();
+        let mut agency = base.map(|h| h.agency.clone()).unwrap_or_default();
+        let mut license = base.map(|h| h.license.clone()).unwrap_or_default();
+        let mut doi = base.map(|h| h.doi.clone()).unwrap_or_default();
+        let mut station_url = base.map(|h| h.station_url.clone()).unwrap_or_default();
+        let mut geodetic_marker = base.map(|h| h.geodetic_marker.clone()).unwrap_or_default();
+        let mut cospar = base.map(|h| h.cospar.clone()).unwrap_or_default();
+        let mut glo_channels = base.map(|h| h.glo_channels.clone()).unwrap_or_default();
+        let mut rcvr = base.map(|h| h.rcvr.clone()).unwrap_or_default();
+        let mut rcvr_antenna = base.map(|h| h.rcvr_antenna.clone()).unwrap_or_default();
+        let mut sv_antenna = base.map(|h| h.sv_antenna.clone()).unwrap_or_default();
+        let mut leap = base.map(|h| h.leap).unwrap_or_default();
+        let mut sampling_interval = base.map(|h| h.sampling_interval).unwrap_or_default();
+
+        let mut rx_position = base.map(|h| h.rx_position).unwrap_or_default();
+
+        let mut dcb_compensations = base
+            .map(|h| h.dcb_compensations.clone())
+            .unwrap_or_default();
+        let mut ionod_corrections = base
+            .map(|h| h.ionod_corrections.clone())
+            .unwrap_or_default();
+        let mut pcv_compensations = base
+            .map(|h| h.pcv_compensations.clone())
+            .unwrap_or_default();
 
         let mut comments = Vec::<String>::with_capacity(8);
 
         // RINEX specific fields
         let mut current_constell: Option<Constellation> = None;
+        let mut observation_declarations = Vec::new();
 
-        let mut observation = ObservationHeader::default();
+        let mut observation = base.and_then(|h| h.obs.clone()).unwrap_or_default();
         let mut nav = NavigationHeader::default();
         let mut meteo = MeteoHeader::default();
         let mut clock = ClockHeader::default();
@@ -259,19 +281,17 @@ impl Header {
                     date = Some(date_str.to_string());
                 }
             } else if marker.contains("MARKER NAME") {
-                let name = content.split_at(20).0.trim();
-                geodetic_marker = Some(GeodeticMarker::default().with_name(name));
+                let name = content.trim();
+                geodetic_marker = Some(geodetic_marker.unwrap_or_default().with_name(name));
             } else if marker.contains("MARKER NUMBER") {
                 let number = content.split_at(20).0.trim();
-                if let Some(ref mut marker) = geodetic_marker {
-                    *marker = marker.with_number(number);
-                }
+                geodetic_marker = Some(geodetic_marker.unwrap_or_default().with_number(number));
             } else if marker.contains("MARKER TYPE") {
                 let code = content.split_at(20).0.trim();
                 if let Ok(mtype) = MarkerType::from_str(code) {
-                    if let Some(ref mut marker) = geodetic_marker {
-                        marker.marker_type = Some(mtype);
-                    }
+                    let mut marker = geodetic_marker.unwrap_or_default();
+                    marker.marker_type = Some(mtype);
+                    geodetic_marker = Some(marker);
                 }
             } else if marker.contains("OBSERVER / AGENCY") {
                 let (obs, ag) = content.split_at(20);
@@ -317,6 +337,9 @@ impl Header {
                     },
                 };
 
+                if base.is_some() {
+                    pcv_compensations.retain(|entry| entry.constellation != gnss);
+                }
                 pcv_compensations.push(pcv);
             } else if marker.contains("SYS / DCBS APPLIED") {
                 let (gnss, rem) = content.split_at(2);
@@ -346,6 +369,9 @@ impl Header {
                     },
                 };
 
+                if base.is_some() {
+                    dcb_compensations.retain(|entry| entry.constellation != gnss);
+                }
                 dcb_compensations.push(dcb);
             } else if marker.contains("SYS / SCALE FACTOR") {
                 // TODO:
@@ -406,7 +432,7 @@ impl Header {
                     }
                 }
             } else if marker.contains("LEAP SECOND") {
-                let leap_str = content.split_at(40).0.trim();
+                let leap_str = content.split_at(40).0;
                 let parsed = Leap::from_str(leap_str)?;
                 leap = Some(parsed.clone());
             } else if marker.contains("DOI") {
@@ -430,51 +456,34 @@ impl Header {
             } else if marker.contains("WAVELENGTH FACT L1/2") {
                 //TODO
             } else if marker.contains("APPROX POSITION XYZ") {
-                let mut num_items = 0;
-                let (mut x_ecef_m, mut y_ecef_m, mut z_ecef_m) = (0.0_f64, 0.0_f64, 0.0_f64);
-
-                for (nth, item) in content.split_ascii_whitespace().enumerate() {
-                    if let Ok(ecef_m) = parse_f64(item.trim()) {
-                        match nth {
-                            0 => {
-                                x_ecef_m = ecef_m;
-                            },
-                            1 => {
-                                y_ecef_m = ecef_m;
-                            },
-                            2 => {
-                                num_items = 3;
-                                z_ecef_m = ecef_m;
-                            },
-                            _ => {},
-                        }
-                    }
-                }
-
-                if num_items == 3 {
-                    rx_position = Some((x_ecef_m, y_ecef_m, z_ecef_m));
+                let (x, rem) = content.split_at(14);
+                let (y, rem) = rem.split_at(14);
+                let (z, _) = rem.split_at(14);
+                if let (Ok(x), Ok(y), Ok(z)) = (
+                    parse_f64(x.trim()),
+                    parse_f64(y.trim()),
+                    parse_f64(z.trim()),
+                ) {
+                    rx_position = Some((x, y, z));
                 }
             } else if marker.contains("ANT # / TYPE") {
                 let (sn, rem) = content.split_at(20);
                 let (model, _) = rem.split_at(20);
 
                 rcvr_antenna = Some(
-                    Antenna::default()
+                    rcvr_antenna
+                        .unwrap_or_default()
                         .with_model(model.trim())
                         .with_serial_number(sn.trim()),
                 );
             } else if marker.contains("ANTENNA: DELTA X/Y/Z") {
                 // Antenna Base/Reference Coordinates
-                let items: Vec<&str> = content.split_ascii_whitespace().collect();
-
-                let x = items[0].trim();
-                let x = f64::from_str(x).or(Err(ParsingError::AntennaCoordinates))?;
-
-                let y = items[1].trim();
-                let y = f64::from_str(y).or(Err(ParsingError::AntennaCoordinates))?;
-
-                let z = items[2].trim();
-                let z = f64::from_str(z).or(Err(ParsingError::AntennaCoordinates))?;
+                let (x, rem) = content.split_at(14);
+                let (y, rem) = rem.split_at(14);
+                let (z, _) = rem.split_at(14);
+                let x = parse_f64(x.trim()).or(Err(ParsingError::AntennaCoordinates))?;
+                let y = parse_f64(y.trim()).or(Err(ParsingError::AntennaCoordinates))?;
+                let z = parse_f64(z.trim()).or(Err(ParsingError::AntennaCoordinates))?;
 
                 if let Some(ant) = &mut rcvr_antenna {
                     *ant = ant.with_base_coordinates((x, y, z));
@@ -483,12 +492,12 @@ impl Header {
                 }
             } else if marker.contains("ANTENNA: DELTA H/E/N") {
                 // Antenna H/E/N eccentricity components
-                let (h, rem) = content.split_at(15);
-                let (e, rem) = rem.split_at(15);
-                let (n, _) = rem.split_at(15);
-                if let Ok(h) = f64::from_str(h.trim()) {
-                    if let Ok(e) = f64::from_str(e.trim()) {
-                        if let Ok(n) = f64::from_str(n.trim()) {
+                let (h, rem) = content.split_at(14);
+                let (e, rem) = rem.split_at(14);
+                let (n, _) = rem.split_at(14);
+                if let Ok(h) = parse_f64(h.trim()) {
+                    if let Ok(e) = parse_f64(e.trim()) {
+                        if let Ok(n) = parse_f64(n.trim()) {
                             if let Some(a) = &mut rcvr_antenna {
                                 *a = a
                                     .with_height(h)
@@ -534,8 +543,30 @@ impl Header {
                 observation = observation.with_time_of_last_obs(time_of_last_obs);
             } else if marker.contains("TYPES OF OBS") {
                 // these observations can serve both Observation & Meteo RINEX
+                if rinex_type == Type::ObservationData {
+                    Self::validate_observation_declaration(
+                        content,
+                        false,
+                        version,
+                        &mut observation_declarations,
+                    )?;
+                }
+                if !content[..6].trim().is_empty() {
+                    observation.codes.clear();
+                }
                 Self::parse_v2_observables(content, constellation, &mut meteo, &mut observation);
             } else if marker.contains("SYS / # / OBS TYPES") {
+                if rinex_type == Type::ObservationData {
+                    Self::validate_observation_declaration(
+                        content,
+                        true,
+                        version,
+                        &mut observation_declarations,
+                    )?;
+                }
+                if let Ok(system) = Constellation::from_str(&content[..1]) {
+                    observation.codes.remove(&system);
+                }
                 Self::parse_v3_observables(content, &mut current_constell, &mut observation);
             } else if marker.contains("ANALYSIS CENTER") {
                 let (code, agency) = content.split_at(3);
@@ -570,10 +601,11 @@ impl Header {
             } else if marker.contains("INTERVAL") {
                 let intv_str = content.split_at(20).0.trim();
                 if let Ok(interval) = f64::from_str(intv_str) {
-                    if interval > 0.0 {
+                    if interval.is_finite() && interval >= 0.0 {
                         // INTERVAL = '0' may exist, in case
                         // of Varying TEC map intervals
-                        sampling_interval = Some(Duration::from_seconds(interval));
+                        sampling_interval =
+                            (interval > 0.0).then(|| Duration::from_seconds(interval));
                     }
                 }
             } else if marker.contains("COSPAR NUMBER") {
@@ -744,6 +776,13 @@ impl Header {
             }
         }
 
+        for (expected, codes) in observation_declarations {
+            if codes.len() != expected || codes.iter().collect::<BTreeSet<_>>().len() != codes.len()
+            {
+                return Err(ParsingError::BadObservable);
+            }
+        }
+
         Ok(Header {
             version,
             rinex_type,
@@ -766,7 +805,7 @@ impl Header {
             ionod_corrections,
             dcb_compensations,
             pcv_compensations,
-            wavelengths: None,
+            wavelengths: base.and_then(|h| h.wavelengths),
             sampling_interval,
             rcvr_antenna,
             sv_antenna,
@@ -821,16 +860,17 @@ impl Header {
         let (fraction, rem) = rem.split_at(8);
 
         // println!("Y \"{}\" M \"{}\" D \"{}\" HH \"{}\" MM \"{}\" SS \"{}\" NS \"{}\"", y, m, d, hh, mm, ss, ns); // DEBUG
-        let mut y = y
-            .trim()
+        let year = y.trim();
+        let mut y = year
             .parse::<u32>()
             .map_err(|_| ParsingError::DatetimeParsing)?;
 
         // handle OLD RINEX problem
-        if y >= 79 && y <= 99 {
-            y += 1900;
-        } else if y < 79 {
-            y += 2000;
+        if year.len() <= 2 && year.bytes().all(|b| b.is_ascii_digit()) {
+            y += if y >= 80 { 1900 } else { 2000 };
+        }
+        if y == 0 {
+            return Err(ParsingError::DatetimeParsing);
         }
 
         let m = m
@@ -889,6 +929,59 @@ impl Header {
             y, m, d, hh, mm, ss, ns, ts
         ))
         .map_err(|_| ParsingError::DatetimeParsing)
+    }
+
+    // Validate OBS declarations in the common header decoder before unknown
+    // tokens can be discarded and shift the observation column assignments.
+    fn validate_observation_declaration(
+        content: &str,
+        modern: bool,
+        version: Version,
+        declared: &mut Vec<(usize, Vec<Observable>)>,
+    ) -> Result<(), ParsingError> {
+        if modern != (version.major >= 3) {
+            return Err(ParsingError::BadObservable);
+        }
+        let count = if modern {
+            if !content[..1].trim().is_empty() {
+                Constellation::from_str(&content[..1]).map_err(|_| ParsingError::BadObservable)?;
+                Some(content[3..6].trim())
+            } else {
+                None
+            }
+        } else if !content[..6].trim().is_empty() {
+            Some(content[..6].trim())
+        } else {
+            None
+        };
+        if let Some(count) = count {
+            let count = count
+                .parse::<usize>()
+                .map_err(|_| ParsingError::BadObservable)?;
+            if count == 0 {
+                return Err(ParsingError::BadObservable);
+            }
+            declared.push((count, Vec::new()));
+        }
+        let (_, codes) = declared.last_mut().ok_or(ParsingError::BadObservable)?;
+        for name in content[6..].split_ascii_whitespace() {
+            // Observable also parses METEO/DORIS tokens and intentionally does
+            // not validate GNSS code syntax. Check the OBS context first.
+            let code = name.as_bytes();
+            let valid_shape = if modern {
+                matches!(code, [b'C' | b'L' | b'D' | b'S', b'1'..=b'9', b'A'..=b'Z'])
+                    // Unknown attributes were allowed before RINEX 3.02.
+                    || (version < Version::new(3, 2)
+                        && matches!(code, [b'C' | b'L' | b'D' | b'S', b'1'..=b'9']))
+            } else {
+                matches!(code, [b'C' | b'P' | b'L' | b'D' | b'S', b'1'..=b'9'])
+            };
+            if !valid_shape {
+                return Err(ParsingError::BadObservable);
+            }
+            codes.push(Observable::from_str(name).map_err(|_| ParsingError::BadObservable)?);
+        }
+        Ok(())
     }
 
     /// Parse list of [Observable]s which applies to both METEO and OBS RINEX
@@ -966,7 +1059,7 @@ impl Header {
 
 #[cfg(test)]
 mod test {
-    use crate::prelude::{Epoch, Header};
+    use crate::prelude::{Epoch, Header, TimeScale};
     use std::str::FromStr;
 
     #[test]
@@ -994,6 +1087,21 @@ mod test {
         assert_eq!(
             parsed,
             Epoch::from_str("2024-09-20T08:17:50.0000001 GPST").unwrap()
+        );
+
+        for (year, expected) in [("79", 2079), ("80", 1980), ("0079", 79)] {
+            let content = format!("{year:>6}     1     1     0     0    0.0000000     GPS");
+            assert_eq!(
+                Header::parse_time_of_obs(&content)
+                    .unwrap()
+                    .to_gregorian(TimeScale::GPST)
+                    .0,
+                expected
+            );
+        }
+        assert!(
+            Header::parse_time_of_obs("  0000     1     1     0     0    0.0000000     GPS")
+                .is_err()
         );
     }
 }

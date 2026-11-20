@@ -7,7 +7,6 @@ use crate::{
         record::{is_new_epoch as is_new_clock_epoch, parse_epoch as parse_clock_epoch},
         ClockKey, ClockProfile, Record as ClockRecord,
     },
-    hatanaka::DecompressorExpert,
     is_rinex_comment,
     meteo::{
         is_new_epoch as is_new_meteo_epoch, parse_epoch as parse_meteo_epoch, Record as MeteoRecord,
@@ -15,9 +14,8 @@ use crate::{
     navigation::{
         is_new_epoch as is_new_nav_epoch, parse_epoch as parse_nav_epoch, Record as NavRecord,
     },
-    observation::Observations,
     observation::{
-        is_new_epoch as is_new_observation_epoch, parse_epoch as parse_observation_epoch,
+        ObsEvent, ObsOutcome, ObservationReader, ObservationReaderOptions,
         Record as ObservationRecord,
     },
     prelude::{Epoch, Header, ParsingError, TimeScale},
@@ -29,7 +27,6 @@ use crate::{
 use std::{
     collections::BTreeMap,
     io::{BufRead, BufReader, Read},
-    str::from_utf8,
 };
 
 #[cfg(feature = "log")]
@@ -49,6 +46,8 @@ impl Record {
     /// keys. NAV and OBS duplicates retain the last successfully decoded record.
     /// Non-ASCII OBS/NAV blocks are omitted in full. Non-ASCII comments or
     /// compressed input, I/O failures and unrepresentable precision are fatal.
+    /// Valid OBS events are retained in diagnostics; header changes and unknown
+    /// OBS framing are fatal. Use [ObservationReader] to retain header revisions.
     pub fn parse_with_diagnostics<R: Read>(
         header: &mut Header,
         reader: &mut BufReader<R>,
@@ -63,11 +62,13 @@ impl Record {
         reader: &mut BufReader<R>,
         mut diagnostics: Option<&mut Vec<ParsingDiagnostic>>,
     ) -> Result<(Self, Comments), ParsingError> {
+        if header.rinex_type == Type::ObservationData {
+            return Self::parse_observation_record(header, reader, diagnostics);
+        }
         let mut input_line = 0;
         let mut record_line = 1;
         // eos reached: process pending buffer & exit
         let mut eos = false;
-        let mut crinex_error = false;
 
         // current line storage
         let mut line_buf = String::with_capacity(128);
@@ -87,55 +88,11 @@ impl Record {
         let mut nav_rec = NavRecord::new();
         let mut nav_previous_lines = diagnostics.as_ref().map(|_| BTreeMap::new());
 
-        // OBS
-        let mut obs_rec = ObservationRecord::new();
-        let mut observations = Observations::default();
-
-        // CRINEX case
-        const CRINEX_BUF_SIZE: usize = 1024;
-        let mut buf = [0; CRINEX_BUF_SIZE];
-
-        let mut is_crinex = false;
-        let mut crinex_v3 = false;
-        let mut gnss_observables = Default::default();
-
-        if let Some(obs) = &header.obs {
-            if let Some(crinex) = &obs.crinex {
-                is_crinex = true;
-                crinex_v3 = crinex.version.major > 2;
-            }
-            gnss_observables = obs.codes.clone();
-        }
-
-        // Build a decompressor, that we deployed if needed.
-        // These parameters are compatible with historical RNX2CRX tool.
-        let mut decompressor = DecompressorExpert::<5>::new(
-            crinex_v3,
-            header.constellation.unwrap_or_default(),
-            gnss_observables,
-        );
-
         // MET
         let mut met_rec = MeteoRecord::new();
 
         // CLK
         let mut clk_rec = ClockRecord::new();
-
-        // OBSERVATION case: timescale is either defined by
-        // [+] TIME OF FIRST header field
-        // [+] TIME OF LAST header field (flexibility, actually invalid according to specs)
-        let mut obs_ts = TimeScale::default();
-
-        if let Some(obs) = &header.obs {
-            if let Some(t) = obs.timeof_first_obs {
-                obs_ts = t.time_scale;
-            } else {
-                let t = obs
-                    .timeof_last_obs
-                    .ok_or(ParsingError::BadObsBadTimescaleDefinition)?;
-                obs_ts = t.time_scale;
-            }
-        }
 
         // Clock RINEX TimeScale definition.
         // Modern revisions define it in header directly.
@@ -169,23 +126,12 @@ impl Record {
                 eos |= true;
             }
 
-            // The special records of a CRINEX event epoch are published as they
-            // were, they may look like comments but must reach the decompressor.
-            let in_event = is_crinex && decompressor.in_event();
-
-            // Validate compressed text before the stateful decompressor sees it.
-            // Other record types have no recoverable encoding diagnostics.
-            if is_crinex
-                || !matches!(
-                    header.rinex_type,
-                    Type::ObservationData | Type::NavigationData
-                )
-            {
+            if header.rinex_type != Type::NavigationData {
                 validate_ascii(&line_buf, input_line)?;
             }
 
             // (special case) COMMENTS: store as is
-            if !in_event && is_rinex_comment(&line_buf) {
+            if is_rinex_comment(&line_buf) {
                 validate_ascii(&line_buf, input_line)?;
                 let comment = line_buf.split_at(60).0.trim_end();
                 comment_content.push(comment.to_string());
@@ -196,56 +142,12 @@ impl Record {
             }
 
             // (special case) COMMENTS: store as is
-            if let Some(content) = line_buf
-                .get(..60)
-                .filter(|_| !in_event && line_buf.contains("COMMENT"))
-            {
+            if let Some(content) = line_buf.get(..60).filter(|_| line_buf.contains("COMMENT")) {
                 let content = content.trim();
                 if let Some(comments) = comments.get_mut(&comment_ts) {
                     comments.push(content.to_string());
                 } else {
                     comments.insert(comment_ts, vec![content.to_string()]);
-                }
-            }
-
-            // CRINEX special case:
-            // - apply decompression algorithm prior moving forward
-            // - decompress new pending line, which may recover several lines (in old V1 format)
-            if is_crinex {
-                let line_len = line_buf.len();
-
-                // catch errors nicely, simply log them
-                // it is normal to abort on final line for example
-                match decompressor.decompress(&line_buf, line_len, &mut buf, CRINEX_BUF_SIZE) {
-                    Ok(size) => {
-                        if size > 0 {
-                            // clear and overwrite pending content with recovered content
-                            // we should have valid ASCII UTF-8 at all times, at this point
-                            let recovered =
-                                from_utf8(&buf[..size]).map_err(|_| ParsingError::BadUtf8Crinex)?;
-
-                            line_buf.clear();
-                            line_buf = recovered.to_string();
-                            line_buf.push('\n');
-                        } else if !eos {
-                            // line consumed by the decompressor (epoch or clock
-                            // description) without anything to publish yet:
-                            // the compressed text must not reach the parser.
-                            line_buf.clear();
-                            continue;
-                        }
-                    },
-                    Err(_) => {
-                        // We wind up here on the final line which is empty
-                        // and the decompressor reports that the next epoch is too short,
-                        // which is normal. But will not help create a resynchronizable decompressor.
-                        //
-                        // Hatanaka decompression cannot recover from corrupt content
-                        // in either revisions. It would be possible to recover if we
-                        // modified the Epoch synchronization __but__ develop a very
-                        // smart epoch detector, which does not seem easy to do.
-                        crinex_error = true;
-                    },
                 }
             }
 
@@ -284,6 +186,7 @@ impl Record {
                                     ) {
                                         diagnostics.push(ParsingDiagnostic {
                                             record_line,
+                                            observation_context: None,
                                             kind: ParsingDiagnosticKind::DuplicateNavigation {
                                                 key,
                                                 conflicting,
@@ -298,51 +201,13 @@ impl Record {
                                 if let Some(diagnostics) = diagnostics.as_deref_mut() {
                                     diagnostics.push(ParsingDiagnostic {
                                         record_line,
+                                        observation_context: None,
                                         kind: ParsingDiagnosticKind::NavigationFailure(error),
                                     });
                                 }
                             },
                         },
-                        Type::ObservationData => {
-                            match parse_observation_epoch(
-                                header,
-                                &epoch_buf,
-                                obs_ts,
-                                &mut observations,
-                            ) {
-                                Ok(key) => {
-                                    //println!("key={:?}", key);
-                                    let previous = obs_rec.insert(key, observations.clone());
-                                    if let (Some(diagnostics), Some(previous)) =
-                                        (diagnostics.as_deref_mut(), previous)
-                                    {
-                                        diagnostics.push(ParsingDiagnostic {
-                                            record_line,
-                                            kind: ParsingDiagnosticKind::DuplicateObservation {
-                                                key,
-                                                conflicting: previous != observations,
-                                            },
-                                        });
-                                    }
-                                    comment_ts = key.epoch; // for comments storage
-                                },
-                                Err(error @ ParsingError::EpochPrecision) => return Err(error),
-                                Err(error) => {
-                                    #[cfg(feature = "log")]
-                                    error!("parsing: {}", error);
-                                    if let Some(diagnostics) = diagnostics.as_deref_mut() {
-                                        diagnostics.push(ParsingDiagnostic {
-                                            record_line,
-                                            kind: ParsingDiagnosticKind::ObservationFailure(error),
-                                        });
-                                    }
-                                },
-                            }
-
-                            // reset for next parsing (single alloc)
-                            observations.clock = None;
-                            observations.signals.clear();
-                        },
+                        Type::ObservationData => unreachable!("OBS uses ObservationReader"),
 
                         Type::MeteoData => {
                             if let Ok(items) = parse_meteo_epoch(header, &epoch_buf) {
@@ -389,7 +254,7 @@ impl Record {
             }
             epoch_buf.push_str(&line_buf);
 
-            if eos || crinex_error {
+            if eos {
                 break;
             }
 
@@ -402,9 +267,84 @@ impl Record {
             Type::ClockData => Record::ClockRecord(clk_rec),
             Type::MeteoData => Record::MeteoRecord(met_rec),
             Type::NavigationData => Record::NavRecord(nav_rec),
-            Type::ObservationData => Record::ObsRecord(obs_rec),
+            Type::ObservationData => unreachable!("OBS uses ObservationReader"),
         };
         Ok((record, comments))
+    }
+
+    fn parse_observation_record<R: Read>(
+        header: &mut Header,
+        reader: &mut BufReader<R>,
+        mut diagnostics: Option<&mut Vec<ParsingDiagnostic>>,
+    ) -> Result<(Self, Comments), ParsingError> {
+        let mut stream = ObservationReader::from_header(
+            reader,
+            header.clone(),
+            ObservationReaderOptions::default(),
+        )
+        .map_err(|e| e.cause)?;
+        let mut record = ObservationRecord::new();
+        let mut comments = Comments::new();
+        let mut comment_epoch = Epoch::default();
+        for next in &mut stream {
+            let item = next.map_err(|e| e.cause)?;
+            let record_line = item.source.body_lines.start;
+            match item.outcome {
+                ObsOutcome::Observation { key, data, .. } => {
+                    let conflicting = diagnostics
+                        .as_ref()
+                        .and_then(|_| record.get(&key).map(|previous| previous != &data));
+                    record.insert(key, data);
+                    if let (Some(out), Some(conflicting)) =
+                        (diagnostics.as_deref_mut(), conflicting)
+                    {
+                        out.push(ParsingDiagnostic {
+                            record_line,
+                            observation_context: None,
+                            kind: ParsingDiagnosticKind::DuplicateObservation { key, conflicting },
+                        });
+                    }
+                    comment_epoch = key.epoch;
+                },
+                ObsOutcome::Rejected { error, context } => {
+                    if matches!(error, ParsingError::EpochPrecision) {
+                        return Err(error);
+                    }
+                    if let Some(out) = diagnostics.as_deref_mut() {
+                        out.push(ParsingDiagnostic {
+                            record_line,
+                            observation_context: Some(context),
+                            kind: ParsingDiagnosticKind::ObservationFailure(error),
+                        });
+                    }
+                },
+                ObsOutcome::Event(event) => {
+                    if matches!(
+                        &event,
+                        ObsEvent::Special {
+                            header_update: Some(_),
+                            ..
+                        }
+                    ) {
+                        return Err(ParsingError::ObsHeaderUpdate("Rinex has one header; use ObservationReader::collect_records to retain header revisions".into()));
+                    }
+                    if let Some(out) = diagnostics.as_deref_mut() {
+                        out.push(ParsingDiagnostic {
+                            record_line,
+                            observation_context: None,
+                            kind: ParsingDiagnosticKind::ObservationEvent(event),
+                        });
+                    }
+                },
+                ObsOutcome::Comment(line) => {
+                    comments
+                        .entry(comment_epoch)
+                        .or_default()
+                        .push(line[..60].trim_end().to_owned());
+                },
+            }
+        }
+        Ok((Record::ObsRecord(record), comments))
     }
 
     fn is_new_epoch(line: &str, header: &Header) -> bool {
@@ -415,7 +355,7 @@ impl Record {
             Type::AntennaData => is_new_antex_epoch(line),
             Type::ClockData => is_new_clock_epoch(line),
             Type::NavigationData => is_new_nav_epoch(line, header.version),
-            Type::ObservationData => is_new_observation_epoch(line, header.version),
+            Type::ObservationData => unreachable!("OBS uses ObservationReader"),
             Type::MeteoData => is_new_meteo_epoch(line, header.version),
         }
     }

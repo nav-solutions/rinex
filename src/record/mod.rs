@@ -11,8 +11,9 @@ use serde::Serialize;
 mod formatting;
 mod parsing;
 
-/// A recoverable OBS/NAV record problem reported by `parse_with_diagnostics`.
-/// No source text is retained. This does not assess navigation usability.
+/// An OBS/NAV record problem or valid OBS event from `parse_with_diagnostics`.
+/// Failures retain positions, not raw source text. Valid OBS events carry their
+/// payloads. This does not assess navigation usability.
 #[derive(Debug)]
 pub struct ParsingDiagnostic {
     /// One-based input line within the body where the buffered block starts.
@@ -23,9 +24,13 @@ pub struct ParsingDiagnostic {
     pub record_line: usize,
     /// Decoding or duplicate-key outcome for this block.
     pub kind: ParsingDiagnosticKind,
+    /// OBS failure context from the same native decoder invocation. Not supplied
+    /// for NAV, duplicates or valid events (which carry their own payload).
+    /// A missing flag must never be guessed by callers.
+    pub observation_context: Option<crate::observation::ObsContext>,
 }
 
-/// Recoverable parser outcomes, independent of scientific eligibility.
+/// Record diagnostics, independent of scientific eligibility.
 #[derive(Debug)]
 pub enum ParsingDiagnosticKind {
     /// The NAV block could not be decoded and was omitted from the record.
@@ -34,6 +39,9 @@ pub enum ParsingDiagnosticKind {
     NavigationFailure(crate::ParsingError),
     /// The OBS block could not be decoded and was omitted from the record.
     ObservationFailure(crate::ParsingError),
+    /// A successfully decoded OBS event, retained outside the observation map.
+    /// Cycle-slip values are event data, not measurement samples.
+    ObservationEvent(crate::observation::ObsEvent),
     /// The last successfully decoded NAV record replaces its predecessor.
     DuplicateNavigation {
         key: crate::navigation::NavKey,

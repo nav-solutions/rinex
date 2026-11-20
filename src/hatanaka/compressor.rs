@@ -225,6 +225,9 @@ impl<const M: usize> CompressorExpert<M> {
                     } else {
                         // BLANK is a single ' '
                         write!(w, "{}", ' ')?;
+                        // A blank ends this numeric series; publish a kernel
+                        // reset when this observable is present again.
+                        self.sv_kernels.remove(&(*sv, observable.clone()));
                         self.flags_buf.push_str("  ");
                     }
                 }

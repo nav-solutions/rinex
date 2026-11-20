@@ -3,10 +3,7 @@ use super::{
     epoch, gps_first_block, navigation_rinex, parse_diagnostics, source_observations,
     synthetic_obs, GLO_BLOCK, GPS_BLOCK, SBAS_BLOCK,
 };
-use crate::{
-    observation::{EpochFlag, ObsKey},
-    prelude::*,
-};
+use crate::{observation::EpochFlag, prelude::*};
 use std::io::BufReader;
 
 #[test]
@@ -399,38 +396,57 @@ fn synthetic_crinex_event(special_record: &str) -> String {
 }
 
 #[test]
-fn synthetic_crinex_event_comments_reach_decompressor_in_both_parse_modes() {
+fn synthetic_crinex_events_reach_decoder_and_update_header_state() {
+    use crate::observation::{ObsDuplicatePolicy, ObsEvent, ObsOutcome, ObservationReader};
     for special_record in [
         format!("{:<60}COMMENT", "EVENT RECORD"),
         format!("{:<60}MARKER NAME", "COMMENT IN EVENT RECORD"),
     ] {
         let text = synthetic_crinex_event(&special_record);
-        let plain = super::parse(&text).unwrap();
-        let (reported, diagnostics) = parse_diagnostics(&text);
-        assert_eq!(plain.header, reported.header);
-        assert_eq!(plain.record, reported.record);
-        assert_eq!(plain.comments, reported.comments);
-        assert!(reported.comments.is_empty());
-        let observations = reported.record.as_obs().unwrap();
-        assert_eq!(observations.len(), 2);
-        for (second, value) in [(0, 20_000_000.123), (30, 20_000_100.456)] {
-            let key = ObsKey {
-                epoch: Epoch::from_gregorian(2024, 5, 10, 0, 0, second, 0, TimeScale::GPST),
-                flag: EpochFlag::Ok,
+        let all = ObservationReader::new(BufReader::new(text.as_bytes()))
+            .unwrap()
+            .collect_records(ObsDuplicatePolicy::Preserve)
+            .unwrap();
+        assert_eq!(all.items.len(), 3);
+        for (index, second, value) in [(0, 0, 20_000_000.123), (2, 30, 20_000_100.456)] {
+            let ObsOutcome::Observation { key, data, .. } = &all.items[index].outcome else {
+                panic!()
             };
-            let signals = &observations.get(&key).unwrap().signals;
-            assert_eq!(signals.len(), 1);
-            assert_eq!(signals[0].value, value);
+            assert_eq!(
+                key.epoch,
+                Epoch::from_gregorian(2024, 5, 10, 0, 0, second, 0, TimeScale::GPST)
+            );
+            assert_eq!(data.signals.len(), 1);
+            assert_eq!(data.signals[0].value, value);
         }
-        // The existing parser reports unsupported hardware events separately.
-        assert_eq!(diagnostics.len(), 1);
-        assert_eq!(diagnostics[0].record_line, 4);
-        assert!(matches!(
-            diagnostics[0].kind,
-            crate::record::ParsingDiagnosticKind::ObservationFailure(
-                ParsingError::ObsHardwareEvent
-            )
-        ));
+        assert_eq!(all.items[1].source.body_lines.start, 4);
+        let ObsOutcome::Event(ObsEvent::Special {
+            records,
+            header_update,
+            ..
+        }) = &all.items[1].outcome
+        else {
+            panic!()
+        };
+        assert_eq!(records, &[special_record.clone()]);
+        if special_record.ends_with("MARKER NAME") {
+            assert!(header_update.is_some());
+            assert!(matches!(
+                super::parse(&text),
+                Err(ParsingError::ObsHeaderUpdate(_))
+            ));
+        } else {
+            assert!(header_update.is_none());
+            let plain = super::parse(&text).unwrap();
+            let (reported, diagnostics) = parse_diagnostics(&text);
+            assert_eq!(plain.record, reported.record);
+            assert!(reported.comments.is_empty());
+            assert_eq!(diagnostics.len(), 1);
+            assert!(matches!(
+                diagnostics[0].kind,
+                crate::record::ParsingDiagnosticKind::ObservationEvent(_)
+            ));
+        }
     }
 }
 
@@ -477,4 +493,46 @@ fn navigation_last_successful_record_and_previous_line_follow_each_replacement()
             assert_eq!(super::parse(text).unwrap().record, rinex.record);
         }
     }
+}
+
+fn parse_diagnostics_error(text: &str) -> bool {
+    Rinex::parse_with_diagnostics(&mut BufReader::new(text.as_bytes())).is_err()
+}
+
+#[test]
+fn native_obs_failure_context_only_contains_actually_decoded_fields() {
+    use crate::record::ParsingDiagnosticKind::ObservationFailure;
+    for (flag, expected) in [
+        ("0", EpochFlag::Ok),
+        ("1", EpochFlag::PowerFailure),
+        ("6", EpochFlag::CycleSlip),
+    ] {
+        let body = epoch("1.0000000", Some("INVALID"), None).replacen(
+            "  0  1",
+            &format!("  {flag}  1"),
+            1,
+        );
+        let (_, diagnostics) = parse_diagnostics(&synthetic_obs("4.02", &body));
+        assert_eq!(diagnostics.len(), 1);
+        assert!(matches!(
+            diagnostics[0].kind,
+            ObservationFailure(ParsingError::ObsClockParsing)
+        ));
+        let context = diagnostics[0].observation_context.unwrap();
+        assert_eq!(context.flag, Some(expected));
+        assert_eq!(
+            context.epoch.unwrap().to_string(),
+            "2024-05-10T00:00:01 GPST"
+        );
+    }
+    let body = epoch("1.0000000", None, None).replacen("  0  1", "  0 XX", 1);
+    let (_, diagnostics) = parse_diagnostics(&synthetic_obs("4.02", &body));
+    let context = diagnostics[0].observation_context.unwrap();
+    assert_eq!(context.flag, Some(EpochFlag::Ok));
+    assert_eq!(context.epoch, None);
+    // Unknown framing/header state now terminates the stream explicitly.
+    assert!(parse_diagnostics_error(&synthetic_obs(
+        "4.02",
+        "> broken epoch\n"
+    )));
 }
