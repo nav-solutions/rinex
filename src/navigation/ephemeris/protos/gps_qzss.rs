@@ -825,12 +825,10 @@ impl Ephemeris {
         };
 
         let alm_4 = match opts.alm_4 {
-            Some(subf4) => {
-                GpsQzssFrame {
-                    how: how(4, GpsQzssFrameId::Almanach4),
-                    telemetry: opts.tlm_4,
-                    subframe: GpsQzssSubframe::Almanach4(subf4),
-                }
+            Some(subf4) => GpsQzssFrame {
+                how: how(4, GpsQzssFrameId::Almanach4),
+                telemetry: opts.tlm_4,
+                subframe: GpsQzssSubframe::Almanach4(subf4),
             },
             None => {
                 // not provided by user: insert zeros
@@ -843,12 +841,10 @@ impl Ephemeris {
         };
 
         let alm_5 = match opts.alm_5 {
-            Some(subf5) => {
-                GpsQzssFrame {
-                    how: how(5, GpsQzssFrameId::Almanach5),
-                    telemetry: opts.tlm_5,
-                    subframe: GpsQzssSubframe::Almanach5(subf5),
-               }
+            Some(subf5) => GpsQzssFrame {
+                how: how(5, GpsQzssFrameId::Almanach5),
+                telemetry: opts.tlm_5,
+                subframe: GpsQzssSubframe::Almanach5(subf5),
             },
             None => {
                 // not provided by user: insert zeros
@@ -856,8 +852,8 @@ impl Ephemeris {
                     how: how(5, GpsQzssFrameId::Almanach5),
                     telemetry: opts.tlm_5,
                     subframe: GpsQzssSubframe::Almanach5(Default::default()),
-               }
-            }
+                }
+            },
         };
 
         Ok(GpsQzss30sMessage {

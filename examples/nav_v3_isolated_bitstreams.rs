@@ -1,7 +1,4 @@
-use std::{
-    fs::File,
-    io::Write,
-};
+use std::{fs::File, io::Write};
 
 use rinex::{
     navigation::{GpsQzss30sMessage, GpsQzssCompositionOpts},
@@ -12,26 +9,22 @@ use env_logger::init;
 
 use log::info;
 
-use hifitime::prelude::{Unit, TimeSeries, TimeScale};
+use hifitime::prelude::{TimeScale, TimeSeries, Unit};
 
 use gnss_protos::{GpsQzssFrame, GpsQzssTelemetry, Message};
 
-struct FileBuffer {
-    // File pointer
+struct FileBuffer<const N: usize> {
     fd: File,
-
-    // Enough for 30s burst to fit in
-    buffer: [u8; 1024],
+    buffer: [u8; N],
 }
 
-impl FileBuffer {
+impl<const N: usize> FileBuffer<N> {
     pub fn new(path: &str) -> Self {
         Self {
-            buffer: [0u8; 1024],
-            fd: File::create(path)
-                .unwrap_or_else(|e| {
-                    panic!("failed to create file {}", path);
-                }),
+            buffer: [0u8; N],
+            fd: File::create(path).unwrap_or_else(|e| {
+                panic!("failed to create file {}: {}", path, e);
+            }),
         }
     }
 
@@ -50,39 +43,64 @@ impl FileBuffer {
 
     /// Writes [GpsQzssFrame] to file
     pub fn write_frame(&mut self, frame: GpsQzssFrame) {
-        let size = frame.encode(&mut self.buffer)
-            .unwrap_or_else(|e| {
-                panic!("failed to encode GPS frame: {}", e);
-            });
+        let size = frame.encode(&mut self.buffer).unwrap_or_else(|e| {
+            panic!("failed to encode GPS frame: {}", e);
+        });
 
-        self.fd.write_all(&self.buffer[..size])
-            .unwrap_or_else(|e| {
-                panic!("failed to write GPS frame into file: {}", e);
-            });
+        self.fd.write_all(&self.buffer[..size]).unwrap_or_else(|e| {
+            panic!("failed to write GPS frame into file: {}", e);
+        });
     }
 }
 
-/// Reconstructs 120s of 
-/// - GPS 30" burst for G15, G24 and G31
-/// - QZSS 30" burst for J01, J02 and J03 
+/// Reconstructs 6 hours of
+/// - GPS bursts for G15, G24 and G31
+/// - isolates EPH-1, EPH-2, EPH-3, ALM-4 and ALM-5 as well
+/// - QZSS bursts for J02 and J03
+/// - isolates EPH-1, EPH-2, EPH-3, ALM-4 and ALM-5 as well
 /// using ESBC00DNK_R_20201770000_01D_MN.rnx.gz (profesionnal file)
 /// and dumps them to individual binary files.
 pub fn main() {
-    env_logger::Builder::from_env(
-       env_logger::Env::default().default_filter_or("debug") 
-    ).init();
-
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug")).init();
 
     // full RINEX path
     let fullpath = "data/NAV/V3/ESBC00DNK_R_20201770000_01D_MN.rnx.gz";
 
     // isolated buffers
-    let mut g15_buf = FileBuffer::new("data/GPS/esbcdnk_g15.bin");
-    let mut g24_buf = FileBuffer::new("data/GPS/esbcdnk_g24.bin");
-    let mut g31_buf = FileBuffer::new("data/GPS/esbcdnk_g31.bin");
-    let mut j01_buf = FileBuffer::new("data/GPS/esbcdnk_j01.bin");
-    let mut j02_buf = FileBuffer::new("data/GPS/esbcdnk_j02.bin");
-    let mut j03_buf = FileBuffer::new("data/GPS/esbcdnk_j03.bin");
+    let mut g15_buf = FileBuffer::<1024>::new("data/GPS/esbcdnk_g15.bin");
+    let mut g15_eph1_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g15_eph1.bin");
+    let mut g15_eph2_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g15_eph2.bin");
+    let mut g15_eph3_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g15_eph3.bin");
+    let mut g15_alm4_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g15_alm4.bin");
+    let mut g15_alm5_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g15_alm5.bin");
+
+    let mut g24_buf = FileBuffer::<1024>::new("data/GPS/esbcdnk_g24.bin");
+    let mut g24_eph1_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g24_eph1.bin");
+    let mut g24_eph2_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g24_eph2.bin");
+    let mut g24_eph3_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g24_eph3.bin");
+    let mut g24_alm4_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g24_alm4.bin");
+    let mut g24_alm5_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g24_alm5.bin");
+
+    let mut g31_buf = FileBuffer::<1024>::new("data/GPS/esbcdnk_g31.bin");
+    let mut g31_eph1_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g31_eph1.bin");
+    let mut g31_eph2_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g31_eph2.bin");
+    let mut g31_eph3_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g31_eph3.bin");
+    let mut g31_alm4_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g31_alm4.bin");
+    let mut g31_alm5_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g31_alm5.bin");
+
+    let mut j02_buf = FileBuffer::<1024>::new("data/QZSS/esbcdnk_j02.bin");
+    let mut j02_eph1_buf = FileBuffer::<128>::new("data/QZSS/esbcdnk_j02_eph1.bin");
+    let mut j02_eph2_buf = FileBuffer::<128>::new("data/QZSS/esbcdnk_j02_eph2.bin");
+    let mut j02_eph3_buf = FileBuffer::<128>::new("data/QZSS/esbcdnk_j02_eph3.bin");
+    let mut j02_alm4_buf = FileBuffer::<128>::new("data/QZSS/esbcdnk_j02_alm4.bin");
+    let mut j02_alm5_buf = FileBuffer::<128>::new("data/QZSS/esbcdnk_j02_alm5.bin");
+
+    let mut j03_buf = FileBuffer::<1024>::new("data/QZSS/esbcdnk_j03.bin");
+    let mut j03_eph1_buf = FileBuffer::<128>::new("data/QZSS/esbcdnk_j03_eph1.bin");
+    let mut j03_eph2_buf = FileBuffer::<128>::new("data/QZSS/esbcdnk_j03_eph2.bin");
+    let mut j03_eph3_buf = FileBuffer::<128>::new("data/QZSS/esbcdnk_j03_eph3.bin");
+    let mut j03_alm4_buf = FileBuffer::<128>::new("data/QZSS/esbcdnk_j03_alm4.bin");
+    let mut j03_alm5_buf = FileBuffer::<128>::new("data/QZSS/esbcdnk_j03_alm5.bin");
 
     // let mut e07_buf = FileBuffer::new("data/GAL/esbcdnk_e07.bin");
     // let mut e11_buf = FileBuffer::new("data/GAL/esbcdnk_e11.bin");
@@ -91,66 +109,88 @@ pub fn main() {
     let rinex = Rinex::from_gzip_file(fullpath).unwrap();
 
     // design temporal arc
-    let t0 = rinex.first_epoch()
-        .unwrap()
-        .to_time_scale(TimeScale::GPST)
-        + 3600.0 * Unit::Second; // random, not aligned to GPS
-    
-    let arc = TimeSeries::inclusive(
-        t0,
-        t0 + 120.0 * Unit::Second,
-        6.0 * Unit::Second,
-    );
+    let t0 = rinex.first_epoch().unwrap().to_time_scale(TimeScale::GPST) + 1.0 * Unit::Hour; // random, not aligned to GPS
 
-    for message in rinex.to_gps_qzss_messages(
-        arc,
-        |(satellite, t_tx)| {
-            GpsQzssCompositionOpts {
-                satellite,
-                epoch: t_tx,
-                alert: false,
-                anti_spoofing: false,
-                tlm_1: GpsQzssTelemetry {
-                    message: 1,
-                    integrity: false,
-                    reserved_bit: false,
-                },
-                tlm_2: GpsQzssTelemetry {
-                    message: 2,
-                    integrity: false,
-                    reserved_bit: false,
-                },
-                tlm_3: GpsQzssTelemetry {
-                    message: 3,
-                    integrity: false,
-                    reserved_bit: false,
-                },
-                tlm_4: GpsQzssTelemetry {
-                    message: 4,
-                    integrity: false,
-                    reserved_bit: false,
-                },
-                tlm_5: GpsQzssTelemetry {
-                    message: 5,
-                    integrity: false,
-                    reserved_bit: false,
-                },
-                alm_4: None,
-                alm_5: None,
-            }
-        }
-    ) {
+    let arc = TimeSeries::inclusive(t0, t0 + 6.0 * Unit::Hour, 6.0 * Unit::Second);
+
+    for message in rinex.to_gps_qzss_messages(arc, |(satellite, t_tx)| GpsQzssCompositionOpts {
+        satellite,
+        epoch: t_tx,
+        alert: false,
+        anti_spoofing: false,
+        tlm_1: GpsQzssTelemetry {
+            message: 1,
+            integrity: false,
+            reserved_bit: false,
+        },
+        tlm_2: GpsQzssTelemetry {
+            message: 2,
+            integrity: false,
+            reserved_bit: false,
+        },
+        tlm_3: GpsQzssTelemetry {
+            message: 3,
+            integrity: false,
+            reserved_bit: false,
+        },
+        tlm_4: GpsQzssTelemetry {
+            message: 4,
+            integrity: false,
+            reserved_bit: false,
+        },
+        tlm_5: GpsQzssTelemetry {
+            message: 5,
+            integrity: false,
+            reserved_bit: false,
+        },
+        alm_4: None,
+        alm_5: None,
+    }) {
         match message {
             Some(message) => {
                 info!("encoded {:?}", message);
 
                 match (message.satellite.constellation, message.satellite.prn) {
-                    (Constellation::GPS, 15) => g15_buf.write_message(message),
-                    (Constellation::GPS, 24) => g24_buf.write_message(message),
-                    (Constellation::GPS, 31) => g24_buf.write_message(message),
-                    (Constellation::QZSS, 1) => j01_buf.write_message(message),
-                    (Constellation::QZSS, 2) => j02_buf.write_message(message),
-                    (Constellation::QZSS, 3) => j03_buf.write_message(message),
+                    (Constellation::GPS, 15) => {
+                        g15_buf.write_message(message);
+                        g15_eph1_buf.write_frame(message.eph_1());
+                        g15_eph2_buf.write_frame(message.eph_2());
+                        g15_eph3_buf.write_frame(message.eph_3());
+                        g15_alm4_buf.write_frame(message.alm_4());
+                        g15_alm5_buf.write_frame(message.alm_5());
+                    },
+                    (Constellation::GPS, 24) => {
+                        g24_buf.write_message(message);
+                        g24_eph1_buf.write_frame(message.eph_1());
+                        g24_eph2_buf.write_frame(message.eph_2());
+                        g24_eph3_buf.write_frame(message.eph_3());
+                        g24_alm4_buf.write_frame(message.alm_4());
+                        g24_alm5_buf.write_frame(message.alm_5());
+                    },
+                    (Constellation::GPS, 31) => {
+                        g31_buf.write_message(message);
+                        g31_eph1_buf.write_frame(message.eph_1());
+                        g31_eph2_buf.write_frame(message.eph_2());
+                        g31_eph3_buf.write_frame(message.eph_3());
+                        g31_alm4_buf.write_frame(message.alm_4());
+                        g31_alm5_buf.write_frame(message.alm_5());
+                    },
+                    (Constellation::QZSS, 2) => {
+                        j02_buf.write_message(message);
+                        j02_eph1_buf.write_frame(message.eph_1());
+                        j02_eph2_buf.write_frame(message.eph_2());
+                        j02_eph3_buf.write_frame(message.eph_3());
+                        j02_alm4_buf.write_frame(message.alm_4());
+                        j02_alm5_buf.write_frame(message.alm_5());
+                    },
+                    (Constellation::QZSS, 3) => {
+                        j03_buf.write_message(message);
+                        j03_eph1_buf.write_frame(message.eph_1());
+                        j03_eph2_buf.write_frame(message.eph_2());
+                        j03_eph3_buf.write_frame(message.eph_3());
+                        j03_alm4_buf.write_frame(message.alm_4());
+                        j03_alm5_buf.write_frame(message.alm_5());
+                    },
                     _ => {},
                 }
             },
@@ -165,7 +205,6 @@ pub fn main() {
     g15_buf.flush();
     g24_buf.flush();
     g31_buf.flush();
-    j01_buf.flush();
     j02_buf.flush();
     j03_buf.flush();
 }

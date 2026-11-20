@@ -40,7 +40,7 @@ impl Rinex {
     ///
     /// If you intend to forge a realistic signal, you should define a temporal
     /// arc which is aligned with GPS periods.
-    /// 
+    ///
     /// If you intend to simulate a GPS/QZSS signal you still have to CDMA modulate
     /// the output burst.
     ///
@@ -85,7 +85,7 @@ impl Rinex {
     /// // Arc duration: 2 minuts, we get one subframe every 6s,
     /// // avoids generating too many points.
     /// let t0 = rinex.first_epoch() - 2.0 * Duration::seconds(60);
-    /// 
+    ///
     /// // This arc is therefore not aligned with GPS period,
     /// // synthesized signal is not 100% realistic.
     /// // It still uses the correct +6s interval between each subframes,
@@ -111,14 +111,14 @@ impl Rinex {
     ///                 if satellite == g15 {
     ///                     g15_alert // simple pattern
     ///                 } else {
-    ///                     others_alert // simple pattern 
+    ///                     others_alert // simple pattern
     ///                 }
     ///             },
     ///             anti_spoofing: {
     ///                 if satellite == g15 {
     ///                     g15_as // simple pattern
     ///                 } else {
-    ///                     others_as // simple pattern 
+    ///                     others_as // simple pattern
     ///                 }
     ///             },
     ///
@@ -130,7 +130,7 @@ impl Rinex {
     ///
     ///             // TLM-3 attached to EPH-3
     ///             tlm_3: Default::default(),
-    /// 
+    ///
     ///             // TLM-4 attached to ALM-4
     ///             tlm_4: Default::default(),
     ///
@@ -218,8 +218,12 @@ impl Rinex {
                     match eph.to_gps_qzss_message(opts) {
                         Ok(msg) => Some(msg),
                         Err(_e) => {
-                            #[cfg(feature = "log")] {
-                                error!("failed to reconstruct GPS/QZSS burst: {} ({}@{})", _e, sv, t);
+                            #[cfg(feature = "log")]
+                            {
+                                error!(
+                                    "failed to reconstruct GPS/QZSS burst: {} ({}@{})",
+                                    _e, sv, t
+                                );
                             }
                             None
                         },

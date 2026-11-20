@@ -34,8 +34,7 @@ pub use crate::navigation::{
 
 #[cfg(feature = "protos")]
 pub use crate::navigation::ephemeris::protos::gps_qzss::{
-    Error, GpsQzss30sMessage,
-    GpsQzssCompositionOpts,
+    Error, GpsQzss30sMessage, GpsQzssCompositionOpts,
 };
 
 #[cfg(feature = "nav")]

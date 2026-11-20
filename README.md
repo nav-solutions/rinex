@@ -127,9 +127,13 @@ Examples (applications)
 The library hosts a few example applications
 
 - `examples/nav_v3_isolated_bitstreams`:
-    * This extracts V3 GPS LNAV, Galileo INAV and QZSS LNAV ephemeris
-    and dumps them as raw binary streams for 3 different sallites,
-    using my `protos` feature.
+    * Uses the RINEX and `gnss-protos` bridge to reconstructs about 6 hours radio messages for
+        - G15 LNAV
+        - G24 LNAV 
+        - G31 LNAV
+        - J01 LNAV
+        - J02 LNAV 
+        - J03 LNAV
     * Run it with `cargo run --all-features --examples/nav_v3_isolated_bitstreams`
 
 Contributions
