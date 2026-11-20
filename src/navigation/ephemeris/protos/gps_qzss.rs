@@ -305,86 +305,20 @@ pub struct GpsQzssCompositionOpts {
     /// users who can take advantage of that to encode the private bits of the bitstream.
     pub tlm_4: GpsQzssTelemetry,
 
-    /// Design / reconstruction choice for ALM-4 which may be deduced from
-    /// RINEX data, but not 100% of the time, depending where we are in the GPS period,
-    /// or simply user defined to work 100% of the time for advanced users.
-    pub alm_4: GpsQzssAlm4CompositionOpts,
+    /// Possibly define ALM-4 yourself, otherwise,
+    /// let the burst synthesizer try to reconstruct this information.
+    /// Depending where we are in the GPS epoch, that may not be feasible.
+    pub alm_4: Option<GpsQzssFrame4>,
 
     /// [GpsQzssTelemetry] to be attached to the ALM-5 frame (5/5).
     /// Accurate control over each telemetry is most interesting for advanced
     /// users who can take advantage of that to encode the private bits of the bitstream.
     pub tlm_5: GpsQzssTelemetry,
 
-    /// Design / reconstruction choice for ALM-5 which may be deduced from
-    /// RINEX data, but not 100% of the time, depending where we are in the GPS period,
-    /// or simply user defined to work 100% of the time for advanced users.
-    pub alm_5: GpsQzssAlm5CompositionOpts,
-}
-
-/// [GpsQzssAlm4CompositionOpts] allows you to compose
-/// ALM-4 accurately (4/5 in the 30s cycle)
-#[derive(Debug, Copy, Clone)]
-pub enum GpsQzssAlm4CompositionOpts {
-    /// Pass [GpsQzssFrame4] directly.
-    /// We will use this data word to follow EPH-3 and preceeding ALM-5
-    /// in the 30s cycle we are about to forge.
-    /// This is convenient if you are capable of forging specific & exact
-    /// part of the bitstream.
-    AsIs(GpsQzssFrame4),
-
-    /// This option will force our burst synthesizer
-    /// to compute the most accurate Almanach parameters
-    /// we can, for the attached satellite.
-    /// Basically, the solver will fit [GpsQzssAlmanach] for this satellite.
-    SatelliteAlmanach,
-
-    /// Use this option to force our burst synthesizer
-    /// to grab the Ionospheric model parameters
-    /// and GPST/UTC current state, from closest RINEX data point
-    /// when working with RINEX v4, or from file header when
-    /// working with RINEX v2/v3.
-    /// Basically, this will forge the most realistic [GpsQzssIonosphereUtc] we can.
-    /// You can still provide the 14 reserved bits concluding Word10.
-    /// This is automated ALM4 Page 18 termination.
-    IonosphereUtc(Option<u16>),
-}
-
-impl Default for GpsQzssAlm4CompositionOpts {
-    /// Creates a [Default] zero filled [GpsQzssFrame4]
-    fn default() -> Self {
-        Self::AsIs(Default::default())
-    }
-}
-
-/// [GpsQzssAlm4CompositionOpts] allows you to compose
-/// ALM-5 accurately (5/5 in the 30s cycle)
-#[derive(Debug, Copy, Clone)]
-pub enum GpsQzssAlm5CompositionOpts {
-    /// Pass [GpsQzssFrame5] directly.
-    /// We will use this data word to follow ALM-4 and conclude the 30s
-    /// cycle we are about to forge.
-    /// This is convenient if you are capable of forging specific & exact
-    /// part of the bitstream.
-    AsIs(GpsQzssFrame5),
-
-    /// This option will force our burst synthesizer
-    /// to compute the most accurate Almanach parameters
-    /// we can, for the attached satellite.
-    /// Basically, the solver will fit [GpsQzssAlmanach] for this satellite.
-    SatelliteAlmanach,
-
-    /// This option forces our burst synthesize to grab the latest
-    /// health flags for SV1-24, compute the WNa and ToA.
-    /// You can still provide the 22 reserved bits concluding Word10.
-    /// This is ALM5 page 25 automated termination.
-    AlmanachHealth(Option<u32>),
-}
-
-impl Default for GpsQzssAlm5CompositionOpts {
-    /// Creates a [Default] zero filled [GpsQzssFrame5]
-    fn default() -> Self {
-        Self::AsIs(Default::default())
-    }
+    /// Possibly define ALM-4 yourself, otherwise,
+    /// let the burst synthesizer try to reconstruct this information.
+    /// Depending where we are in the GPS epoch, that may not be feasible.
+    pub alm_5: Option<GpsQzssFrame5>,
 }
 
 impl Ephemeris {
@@ -575,23 +509,21 @@ impl Ephemeris {
         ))
     }
 
-    /// Dumps this [Ephemeris] frame as [GpsQzss30sMessage] burst,
+    /// Converts this [Ephemeris] frame to [GpsQzss30sMessage] burst,
     /// ready to encode.
     ///
     /// NB: it is impossible to reconstruct ALM-4 and ALM-5 from this object,
-    /// only the first 18s composed of EPH-1, 2, 3 frames can be reconstructed.
+    /// only the first 18s composed of EPH-1, 2, 3 subframes can be fully reconstructed.
     /// Therefore, you should compose ALM4 and ALM5 yourself, using the provided
-    /// composition options. if you don't know how to do that, simply use
-    /// [GpsQzssAlm4CompositionOpts::AsIs] and [GpsQzssAlm5CompositionOpts] with
-    /// both zero values.
+    /// options. if you don't know how to do that, simply use the default constructor
+    /// like in the following example.
     ///
     /// When composing, we define the ToW correctly to respect the GPS
     /// protocol. If you intend to define ALM-4 and ALM-5 externally yourself,
     /// we will disregard the provided ToW and encode it ourselves to garantee 100%
     /// correctness.
     ///
-    /// You can then stream the resulting bit stream over the air or wire,
-    /// it will still haved to be CDMA modulated.
+    /// If you are able to CDMA modulate this burst, you can then transmit over the air.
     ///
     /// ## Time management
     ///
@@ -609,18 +541,18 @@ impl Ephemeris {
     ///
     /// ## Input
     ///
-    /// - opts: [GpsQzssEphCompositionOpts]
-    /// that allow to compose 3/5 of the 30s cycle very precisely.
+    /// - opts: [GpsQzssCompositionOpts]
     ///
     /// ## Output
+    ///
+    /// - EPH 1.2.3 ALM-4 and ALM-5 burst as [GpsQzss30sMessage]
     ///
     /// ```
     /// use rinex::prelude::{Constellation, Rinex};
     ///
     /// use rinex::navigation::{
     ///     Ephemeris,
-    ///     GpsQzssEphCompositionOpts,
-    ///     GpsQzssEphemerisItem,
+    ///     GpsQzssCompositionOpts,
     /// };
     ///
     /// use gnss_protos::gps::{
@@ -640,7 +572,7 @@ impl Ephemeris {
     ///
     /// for (key, ephemeris) in rinex.nav_ephemeris_frames_iter() {
     ///
-    ///     let opts = GpsQzssEphCompositionOpts {
+    ///     let opts = GpsQzssCompositionOpts {
     ///         // this should will be required by your CDMA modulator.
     ///         // Also this is the "identity" of the signal source
     ///         satellite: key.sv,
@@ -687,7 +619,7 @@ impl Ephemeris {
     ///         // ALM-4 cannot be deduced from RINEX Ephemeris,
     ///         // you are expected to provide it externally.
     ///         // If you don't know how to do this, simply insert zeros like this
-    ///         alm_4: GpsQzssAlm4CompositionOpts::defualt(),
+    ///         alm_4: Default::default(),
     ///         
     ///         // TLM to be associated to ALM-5
     ///         tlm_5: GpsQzssTelemetry {
@@ -699,7 +631,7 @@ impl Ephemeris {
     ///         // ALM-5 cannot be deduced from RINEX Ephemeris,
     ///         // you are expected to provide it externally.
     ///         // If you don't know how to do this, simply insert zeros like this
-    ///         alm_5: GpsQzssAlm5CompositionOpts::defualt(),
+    ///         alm_5: Default::default(),
     ///
     ///     };
     ///
@@ -709,19 +641,19 @@ impl Ephemeris {
     ///
     ///     // Verifies correctness in ToW progression (always true).
     ///     assert_eq!(
-    ///         msg.eph_2.how.tow - msg.eph_1.how.tow,
+    ///         msg.eph_2().how.tow - msg.eph_1().how.tow,
     ///         GPS_SUBFRAME_DURATION_S,
     ///     );
     ///     assert_eq!(
-    ///         msg.eph_3.how.tow - msg.eph_2.how.tow,
+    ///         msg.eph_3().how.tow - msg.eph_2().how.tow,
     ///         GPS_SUBFRAME_DURATION_S,
     ///     );
     ///     assert_eq!(
-    ///         msg.alm_4.how.tow - msg.eph_3.how.tow,
+    ///         msg.alm_4().how.tow - msg.eph_3().how.tow,
     ///         GPS_SUBFRAME_DURATION_S,
     ///     );
     ///     assert_eq!(
-    ///         msg.alm_5.how.tow - msg.alm_4.how.tow,
+    ///         msg.alm_5().how.tow - msg.alm_4().how.tow,
     ///         GPS_SUBFRAME_DURATION_S,
     ///     );
     ///
@@ -893,29 +825,39 @@ impl Ephemeris {
         };
 
         let alm_4 = match opts.alm_4 {
-            GpsQzssAlm4CompositionOpts::AsIs(subf4) => GpsQzssFrame {
-                how: how(4, GpsQzssFrameId::Almanach4),
-                telemetry: opts.tlm_4,
-                subframe: GpsQzssSubframe::Almanach4(subf4),
+            Some(subf4) => {
+                GpsQzssFrame {
+                    how: how(4, GpsQzssFrameId::Almanach4),
+                    telemetry: opts.tlm_4,
+                    subframe: GpsQzssSubframe::Almanach4(subf4),
+                }
             },
-            _ => GpsQzssFrame {
-                how: how(4, GpsQzssFrameId::Almanach4),
-                telemetry: opts.tlm_4,
-                subframe: GpsQzssSubframe::Almanach4(Default::default()), // zero filled
+            None => {
+                // not provided by user: insert zeros
+                GpsQzssFrame {
+                    how: how(4, GpsQzssFrameId::Almanach4),
+                    telemetry: opts.tlm_4,
+                    subframe: GpsQzssSubframe::Almanach4(Default::default()),
+                }
             },
         };
 
         let alm_5 = match opts.alm_5 {
-            GpsQzssAlm5CompositionOpts::AsIs(subf5) => GpsQzssFrame {
-                how: how(5, GpsQzssFrameId::Almanach5),
-                telemetry: opts.tlm_5,
-                subframe: GpsQzssSubframe::Almanach5(subf5),
+            Some(subf5) => {
+                GpsQzssFrame {
+                    how: how(5, GpsQzssFrameId::Almanach5),
+                    telemetry: opts.tlm_5,
+                    subframe: GpsQzssSubframe::Almanach5(subf5),
+               }
             },
-            _ => GpsQzssFrame {
-                how: how(5, GpsQzssFrameId::Almanach5),
-                telemetry: opts.tlm_5,
-                subframe: GpsQzssSubframe::Almanach5(Default::default()), // zero filled
-            },
+            None => {
+                // not provided by user: insert zeros
+                GpsQzssFrame {
+                    how: how(5, GpsQzssFrameId::Almanach5),
+                    telemetry: opts.tlm_5,
+                    subframe: GpsQzssSubframe::Almanach5(Default::default()),
+               }
+            }
         };
 
         Ok(GpsQzss30sMessage {

@@ -16,96 +16,43 @@ use hifitime::prelude::{Epoch, TimeSeries};
 use gnss_protos::gps::GpsQzssFrame;
 
 #[cfg(feature = "log")]
-use log::debug;
+use log::{debug, error};
 
 impl Rinex {
-    /// Collects a NAV [Rinex] file from multiple continuous [GpsQzssFrameItem] streamers.
-    /// This allows you to collect a NAV RINEX from several [GpsQzssFrame] decoders, working in
-    /// parallel, one per satellite and bitstream being received.
+    /// Reconstructs a [GpsQzss30Message] burst at desired point in time
+    /// of the provided temporal arc.
     ///
-    /// The main difference with [Rinex::from_gps_qzss_eph_messages] is that this one processes
-    /// the entire continuous [GpsQzssFrame] stream, as naturally streamed over the air by
-    /// any sallite, while the latter was focused on the EPH-1,2,3 part of the stream for each
-    /// satellite. Using this method, the analysis of the entire message cycle takes ALM4 and ALM5
-    /// into account, concluding the entire 30s message cycle. By grabing specific pages of the
-    /// ALM4 and ALM5 rotations, we can deduce more information and create a more precise RINEX
-    /// file.
+    /// When reconstructing the burst, the first 18s composed of EPH-1, 2 and 3
+    /// can be fully reconstructed. ALM-4 and ALM-5 depends where we are in the
+    /// 12'30" GPS alamanch period, and depending on the information that needs
+    /// to be reconstructed, it is not 100% feasible and this method will zero pad.
     ///
-    /// In particular:
+    /// For each burst we are about to synthesize, we give the user options to
+    /// customize and compose the burst accurately. For example, you can
+    /// provide ALM-4 and 5 yourself and they will be used.
+    /// We are also able to deduce Satellite Almanach from the Ephemeris frame,
+    /// so several pages will not be fully zero.
+    /// Page 18 describes the GPST offset to UTC timescale, which is also
+    /// available in RINEX and can be fully reconstructed.
     ///
-    /// - description of the timescale against UTC timescales. When working with RINEX V4
-    /// this is regularly updated during the course of the day. When working with older revisions,
-    /// it is only described in the [Header]. In this case, we will use the first description
-    /// encountered in the binary stream, this information will be described in the [Header]
-    /// and is supposed to apply for 24 hours. This creates biases when post-processing that file.
+    /// For each [GpsQzssFrame] being reconstructed, you have access to every single
+    /// bit, which allows advanced users to compose very precise bursts.
     ///
-    /// - when working with NAV RINEX V4 revision, we can dump STO frames for each ALM4-5 burst,
-    /// which allows to describe the evolution of the timescale with other timescales more
-    /// precisely.
-    ///
-    /// - The satellite Almanach is not saved in RINEX, which remains an incomplete file format to
-    /// describe Almanachs. Therefore, this information (all those pages) are dropped and
-    /// disregarded by this method. One reason being, real-time navigation solely relies on
-    /// satellite Ephemeris, and they are also more accurate than satellite Almanach.
+    /// If you intend to forge a realistic signal, you should define a temporal
+    /// arc which is aligned with GPS periods.
+    /// 
+    /// If you intend to simulate a GPS/QZSS signal you still have to CDMA modulate
+    /// the output burst.
     ///
     /// ## Input
     ///
-    /// - mutable [Header], which allows you to compose an accurate RINEX, for example
-    /// describing the name of the operator and hardware being used for that recording.
-    /// Simple use [Header::default] when unsure to create a basic file. The most important
-    /// field being the [Version] number, which will define the following behavior and resulting
-    /// file quality.
+    /// - Any valid NAV [Rinex] file
     ///
-    /// - possible [ProductionAttributes] which allow you to name your text file
-    /// and customise your text file more accurately, which is particularly useful to professional
-    /// agencies. Pass [None] here, and we will use our smart guesser, which will provide most of
-    /// the information based on actual data content.
-    ///
-    /// - iterator: sequence of [GpsQzssFrameItem], where you must describe the decoding instant
-    /// of the attached frame, and the [SV] satellite signal source on which the correlator
-    /// is working on. That means, at some point in your workflow, you have to merge each
-    /// individual demodulator into a single stream provided to this method. Which seems doable
-    /// and acceptable. This method does not care about the rotation of the message.
-    /// It is possible to stream physically incorect data streams.
-    /// All this method cares about, is gathering and dump the correct information
-    /// everytime it encounters a given part of the radio stream.
+    /// - temporal arc, as [TimeSeries] which should be aligned with GPS period
+    /// for realistic synthesis
     ///
     /// ## Output
     ///
-    /// - This method is infaillible. It may create an empty file if the input stream is empty (no
-    /// data source) and if you fail to provide at least one EPH-1,2,3 ALM-4,5 rotation.
-    /// The Almanach temporal state will be missing if your streamer does not provide enough data.
-    /// It takes 12'30s of recording to record the entire constellation Almanach.
-    /// Reconstructs a 30s GPS radio bursts at every point
-    /// in time of the requested temporal arc, using the best suited
-    /// Ephemeris frame for each GPS satellite. This burst represents 30s of bit stream
-    /// intended to be modulated at the GPS bit rate.
-    ///
-    /// To select the best suited ephemeris frame, proper ephemeris frame is elected.
-    ///
-    /// The temporal arc should describe each instants you intended to transmit a burst.
-    /// It should follow the GPS period if you intend to forge a realistic signal.
-    /// This method does not verify that, the ephemeris election applies at other points
-    /// in time, so it is possible to forge "physically" "incorrect" bit streams using this method.
-    ///
-    /// Any time a correct ephemeris frame has been elected, we can forge 18s of radio signal.
-    /// For each burst, we let the user compose each bits of each part of the burst.
-    /// Which allows advanced users to precisely control the bit stream being synthesized.
-    /// If you tolerate zeros in your bitstream, you can compose using the [Default] trait.
-    ///
-    /// by concluding each burst with ALM-4 and ALM-5, either user defined, or reconstructed
-    /// from the actual RINEX data the best we can.
-    ///
-    /// For every point in the temporal arc, this method searches for the best suited
-    /// Ephemeris frame for each available satellites applying the correct ephemeris
-    /// election method. From that ephemeris frame:
-    ///
-    /// - the first 18s of the burst, made of EPH-1, 2 and 3 will always be correct.
-    /// - the last 12s, ALM-4 and ALM-5 either have to be provided or can be partially
-    /// reconstructed from the record, depending where we are in the GPS period.
-    ///
-    /// For each burst we are about to forge, we allow the user to compose all reserved
-    /// bits and telemetry fields, which allows to produce very accurate bitstreams.
     /// ```
     /// use rinex::{
     ///     prelude::Rinex,
@@ -114,29 +61,97 @@ impl Rinex {
     ///     },
     /// };
     ///
+    /// use hifitime::prelude::{
+    ///     TimeSeries,
+    ///     Unit,
+    /// };
+    ///
     /// use gnss_protos::gps::GPS_SUBFRAME_DURATION_S;
     ///  
     /// // load GPS (only, v2)
     /// let rinex = Rinex::from_gzip_file("data/NAV/V2/cbw10010.21n.gz")
     ///     .unwrap();
     ///
-    /// // simple example
-    /// let (mut alert, mut anti_spoofing) = (false, false);
+    /// // in this simple example, we will focus on G15 and G24
+    /// // and compose slightly different bits for each of them
+    /// let (mut g15_alert, g15_as) = (false, true);
+    /// let (mut others_alert, others_as) = (true, false);
     ///
-    /// // Dump this RINEX to GPS bitstream.
-    /// // QZSS will not exist because this is a GPS V2 Only file.
-    /// // If you intend to forge a physically correct bitstream, you should
-    /// // insert ALM4 and ALM5 subframes after each EPH-3.
-    /// // This method will basically forge 18s of message, it still lacks 12s to complete the 30s
-    /// // cycle.
-    /// for msg in rinex.to_gps_qzss_eph_messages(|(satellite, toc)| {
-    ///     // Define your composition method to customize each EPH-1,2,3 message.
-    ///     // Every single RINEX Ephemeris data point is about to be
-    ///     // converted to EPH-1,2,3 burst. You can fine tune each bit
-    ///     // in each frame. For that, we pass the satellite and ToC,
-    ///     // and we expect you to fulfill the remaining bits.
-    ///     // In this example, we toggle the Alert and A/S bits
-    ///     // every other epoch, and we fill the telemetry with zeros.
+    /// // First point does not have to be aligned with the file,
+    /// // we can compose a burst for every instant where a valid ephemeris
+    /// // can be selected
+    /// let t0 = rinex.first_epoch() - 2.0 * Duration::seconds(60);
+    ///
+    /// // Arc duration: 2 minuts, we get one subframe every 6s,
+    /// // avoids generating too many points.
+    /// let t0 = rinex.first_epoch() - 2.0 * Duration::seconds(60);
+    /// 
+    /// // This arc is therefore not aligned with GPS period,
+    /// // synthesized signal is not 100% realistic.
+    /// // It still uses the correct +6s interval between each subframes,
+    /// // which is correct.
+    /// let temporal_arc = TimeSeries::inclusive(
+    ///     t0,
+    ///     t0 + 120.0 * Unit::Second,
+    ///     6.0 * Unit::Second,
+    ///
+    /// );
+    ///
+    /// // Attempt to reconstruct a 30s burst at every instant of this arc
+    /// for message_30s in rinex.to_gps_qzss_messages(
+    ///     temporal_arc,
+    ///     |(satellite, t_tx)| {
+    ///         // for any burst we are about to synthesize,
+    ///         // you can compose and customize every single bits,
+    ///         // which is particularly useful for reserved bits.
+    ///         let opts = GpsQzssCompositionOpts {
+    ///             satellite,
+    ///             epoch: t_tx,
+    ///             alert: {
+    ///                 if satellite == g15 {
+    ///                     g15_alert // simple pattern
+    ///                 } else {
+    ///                     others_alert // simple pattern 
+    ///                 }
+    ///             },
+    ///             anti_spoofing: {
+    ///                 if satellite == g15 {
+    ///                     g15_as // simple pattern
+    ///                 } else {
+    ///                     others_as // simple pattern 
+    ///                 }
+    ///             },
+    ///
+    ///             // TLM-1 attached to EPH-1
+    ///             tlm_1: Default::default(),
+    ///
+    ///             // TLM-2 attached to EPH-2
+    ///             tlm_2: Default::default(),
+    ///
+    ///             // TLM-3 attached to EPH-3
+    ///             tlm_3: Default::default(),
+    /// 
+    ///             // TLM-4 attached to ALM-4
+    ///             tlm_4: Default::default(),
+    ///
+    ///             // ALM-4 composition options.
+    ///             // You can provide it yourself by doing this.
+    ///             // In this simple example, we will insert zeros
+    ///             // at ALM-4.
+    ///             alm_4: GpsQzssAlm4CompositionOpts::AsIs(Default::default()),
+    ///
+    ///             // TLM-5 attached to ALM-5
+    ///             tlm_5: Default::default(),
+    ///
+    ///             // ALM-5 composition options.
+    ///             // You can have our synthesizer try to reconstruct
+    ///             // ALM-5 pages correctly. It will work for some of the
+    ///             // bits but not 100% and that depends where
+    ///             // we are right now in the GPS period.
+    ///             alm_5: None,
+    ///         };
+    ///     },
+    /// ) {
     ///     let opts = GpsQzssEphCompositionOpts {
     ///         satellite, // simple pass through
     ///         epoch: toc, // simple pass through
@@ -171,7 +186,7 @@ impl Rinex {
     /// ```
     #[cfg(feature = "nav")]
     #[cfg_attr(docsrs, doc(cfg(feature = "nav")))]
-    pub fn to_gps_messages<'a, C>(
+    pub fn to_gps_qzss_messages<'a, C>(
         &'a self,
         temporal_arc: TimeSeries,
         mut composer: C,
@@ -181,7 +196,9 @@ impl Rinex {
     {
         let gps_satellites = self
             .sv_iter()
-            .filter(|sv| sv.constellation == Constellation::GPS)
+            .filter(|sv| {
+                sv.constellation == Constellation::GPS || sv.constellation == Constellation::QZSS
+            })
             .collect::<Vec<_>>();
 
         Box::new(
@@ -201,9 +218,9 @@ impl Rinex {
                     match eph.to_gps_qzss_message(opts) {
                         Ok(msg) => Some(msg),
                         Err(_e) => {
-                            //                     #[cfg(feature = "log")] {
-                            //                         error!("failed to convert to GPS/QZSS EPH1-2-3 message: {} ({}@{})", _e, key.sv, key.epoch);
-                            //                     }
+                            #[cfg(feature = "log")] {
+                                error!("failed to reconstruct GPS/QZSS burst: {} ({}@{})", _e, sv, t);
+                            }
                             None
                         },
                     }

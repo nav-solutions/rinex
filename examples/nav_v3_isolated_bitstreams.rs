@@ -1,229 +1,171 @@
-use std::fs::File;
-use std::io::Write;
+use std::{
+    fs::File,
+    io::Write,
+};
 
 use rinex::{
-    navigation::{GpsQzssEphCompositionOpts, GpsQzssEphemerisMessage},
+    navigation::{GpsQzss30sMessage, GpsQzssCompositionOpts},
     prelude::{Constellation, Rinex},
 };
 
+use env_logger::init;
+
+use log::info;
+
+use hifitime::prelude::{Unit, TimeSeries, TimeScale};
+
 use gnss_protos::{GpsQzssFrame, GpsQzssTelemetry, Message};
 
-struct Buffer<'a, const N: usize> {
-    /// destination
-    pub path: &'a str,
+struct FileBuffer {
+    // File pointer
+    fd: File,
 
-    /// internal buffer
-    pub buffer: [u8; N],
-
-    /// current pointer in buffer
-    pub ptr: usize,
+    // Enough for 30s burst to fit in
+    buffer: [u8; 1024],
 }
 
-impl<'a, const N: usize> Buffer<'a, N> {
-    /// Buffer allocation + init
-    pub fn new(path: &'a str) -> Self {
+impl FileBuffer {
+    pub fn new(path: &str) -> Self {
         Self {
-            path,
-            ptr: 0,
-            buffer: [0; N],
+            buffer: [0u8; 1024],
+            fd: File::create(path)
+                .unwrap_or_else(|e| {
+                    panic!("failed to create file {}", path);
+                }),
         }
     }
 
-    /// Encodes EPH-1,2,3 burst
-    pub fn encode_eph123_burst(&mut self, burst: GpsQzssEphemerisMessage) {
-        self.encode_frame(burst.eph_1);
-        self.encode_frame(burst.eph_2);
-        self.encode_frame(burst.eph_3);
+    pub fn flush(&mut self) {
+        self.fd.flush().unwrap();
     }
 
-    /// Encodes one GPS frame
-    pub fn encode_frame(&mut self, frame: GpsQzssFrame) {
-        let size = frame.encode(&mut self.buffer[self.ptr..]).unwrap();
-        self.ptr += size;
+    /// Writes [GpsQzss30sMessage] to file
+    pub fn write_message(&mut self, msg: GpsQzss30sMessage) {
+        self.write_frame(msg.eph_1());
+        self.write_frame(msg.eph_2());
+        self.write_frame(msg.eph_3());
+        self.write_frame(msg.alm_4());
+        self.write_frame(msg.alm_5());
     }
 
-    /// Dump buffer to static file
-    pub fn save_file(&self) {
-        let mut fd = File::create(self.path).unwrap_or_else(|e| {
-            panic!("Failed to open (WR) file: {} - {}", self.path, e);
-        });
+    /// Writes [GpsQzssFrame] to file
+    pub fn write_frame(&mut self, frame: GpsQzssFrame) {
+        let size = frame.encode(&mut self.buffer)
+            .unwrap_or_else(|e| {
+                panic!("failed to encode GPS frame: {}", e);
+            });
 
-        fd.write_all(&self.buffer[..self.ptr]).unwrap_or_else(|e| {
-            panic!("Failed to dump buffer to file: {} - {}", self.path, e);
-        });
-    }
-}
-
-impl<'a, const N: usize> Write for Buffer<'a, N> {
-    fn write(&mut self, src: &[u8]) -> Result<usize, std::io::Error> {
-        let size = src.len();
-        self.buffer[self.ptr..].copy_from_slice(&src);
-        self.ptr += size;
-        Ok(size)
-    }
-
-    fn flush(&mut self) -> Result<(), std::io::Error> {
-        self.ptr = 0;
-        Ok(())
+        self.fd.write_all(&self.buffer[..size])
+            .unwrap_or_else(|e| {
+                panic!("failed to write GPS frame into file: {}", e);
+            });
     }
 }
 
-/// Extracts (approx 10 messages, slow RINEX rate)
-/// from G15, G24, G31, J01, J02, J03, E07, E11 and E15
-/// from ESBC00DNK_R_20201770000_01D_MN.rnx.gz (profesionnal file)
-/// and dumps them to their respective bit stream protocol, into individual files
-/// (isolated bit streams). Each resulting files serves as further testing purposes
-/// and demos.
+/// Reconstructs 120s of 
+/// - GPS 30" burst for G15, G24 and G31
+/// - QZSS 30" burst for J01, J02 and J03 
+/// using ESBC00DNK_R_20201770000_01D_MN.rnx.gz (profesionnal file)
+/// and dumps them to individual binary files.
 pub fn main() {
+    env_logger::Builder::from_env(
+       env_logger::Env::default().default_filter_or("debug") 
+    ).init();
+
+
     // full RINEX path
     let fullpath = "data/NAV/V3/ESBC00DNK_R_20201770000_01D_MN.rnx.gz";
 
-    // Dumps
-    let mut g15_buf = Buffer::<8192>::new("data/GPS/esbcdnk_g15_eph123.bin");
-    let mut g24_buf = Buffer::<8192>::new("data/GPS/esbcdnk_g24_eph123.bin");
-    let mut g31_buf = Buffer::<8192>::new("data/GPS/esbcdnk_g31_eph123.bin");
-    let mut j01_buf = Buffer::<8192>::new("data/GPS/esbcdnk_j01_eph123.bin");
-    let mut j02_buf = Buffer::<8192>::new("data/GPS/esbcdnk_j02_eph123.bin");
-    let mut j03_buf = Buffer::<8192>::new("data/GPS/esbcdnk_j03_eph123.bin");
-    let mut e07_buf = Buffer::<8192>::new("data/GAL/esbcdnk_e07_eph123.bin");
-    let mut e11_buf = Buffer::<8192>::new("data/GAL/esbcdnk_e11_eph123.bin");
-    let mut e15_buf = Buffer::<8192>::new("data/GAL/esbcdnk_e15_eph123.bin");
+    // isolated buffers
+    let mut g15_buf = FileBuffer::new("data/GPS/esbcdnk_g15.bin");
+    let mut g24_buf = FileBuffer::new("data/GPS/esbcdnk_g24.bin");
+    let mut g31_buf = FileBuffer::new("data/GPS/esbcdnk_g31.bin");
+    let mut j01_buf = FileBuffer::new("data/GPS/esbcdnk_j01.bin");
+    let mut j02_buf = FileBuffer::new("data/GPS/esbcdnk_j02.bin");
+    let mut j03_buf = FileBuffer::new("data/GPS/esbcdnk_j03.bin");
+
+    // let mut e07_buf = FileBuffer::new("data/GAL/esbcdnk_e07.bin");
+    // let mut e11_buf = FileBuffer::new("data/GAL/esbcdnk_e11.bin");
+    // let mut e15_buf = FileBuffer::new("data/GAL/esbcdnk_e15.bin");
 
     let rinex = Rinex::from_gzip_file(fullpath).unwrap();
 
-    // limited to ephemeris frames
-    for (key, eph) in rinex.nav_ephemeris_frames_iter() {
-        let opts = GpsQzssEphCompositionOpts {
-            satellite: key.sv,
-            epoch: key.epoch,
-            alert: false,
-            anti_spoofing: false,
-            tlm_1: GpsQzssTelemetry {
-                message: 1,
-                integrity: false,
-                reserved_bit: false,
-            },
-            tlm_2: GpsQzssTelemetry {
-                message: 2,
-                integrity: false,
-                reserved_bit: false,
-            },
-            tlm_3: GpsQzssTelemetry {
-                message: 3,
-                integrity: false,
-                reserved_bit: false,
-            },
-        };
+    // design temporal arc
+    let t0 = rinex.first_epoch()
+        .unwrap()
+        .to_time_scale(TimeScale::GPST)
+        + 3600.0 * Unit::Second; // random, not aligned to GPS
+    
+    let arc = TimeSeries::inclusive(
+        t0,
+        t0 + 120.0 * Unit::Second,
+        6.0 * Unit::Second,
+    );
 
-        match (key.sv.constellation, key.sv.prn) {
-            (Constellation::GPS, 15) => {
-                // extract
-                let burst = eph.to_gps_qzss_eph_message(opts).unwrap_or_else(|e| {
-                    panic!(
-                        "Failed to extract an Ephemeris burst for {} @ {} - {}",
-                        key.sv, key.epoch, e
-                    );
-                });
-                g15_buf.encode_eph123_burst(burst);
+    for message in rinex.to_gps_qzss_messages(
+        arc,
+        |(satellite, t_tx)| {
+            GpsQzssCompositionOpts {
+                satellite,
+                epoch: t_tx,
+                alert: false,
+                anti_spoofing: false,
+                tlm_1: GpsQzssTelemetry {
+                    message: 1,
+                    integrity: false,
+                    reserved_bit: false,
+                },
+                tlm_2: GpsQzssTelemetry {
+                    message: 2,
+                    integrity: false,
+                    reserved_bit: false,
+                },
+                tlm_3: GpsQzssTelemetry {
+                    message: 3,
+                    integrity: false,
+                    reserved_bit: false,
+                },
+                tlm_4: GpsQzssTelemetry {
+                    message: 4,
+                    integrity: false,
+                    reserved_bit: false,
+                },
+                tlm_5: GpsQzssTelemetry {
+                    message: 5,
+                    integrity: false,
+                    reserved_bit: false,
+                },
+                alm_4: None,
+                alm_5: None,
+            }
+        }
+    ) {
+        match message {
+            Some(message) => {
+                info!("encoded {:?}", message);
+
+                match (message.satellite.constellation, message.satellite.prn) {
+                    (Constellation::GPS, 15) => g15_buf.write_message(message),
+                    (Constellation::GPS, 24) => g24_buf.write_message(message),
+                    (Constellation::GPS, 31) => g24_buf.write_message(message),
+                    (Constellation::QZSS, 1) => j01_buf.write_message(message),
+                    (Constellation::QZSS, 2) => j02_buf.write_message(message),
+                    (Constellation::QZSS, 3) => j03_buf.write_message(message),
+                    _ => {},
+                }
             },
-            (Constellation::GPS, 24) => {
-                // extract
-                let burst = eph.to_gps_qzss_eph_message(opts).unwrap_or_else(|e| {
-                    panic!(
-                        "Failed to extract an Ephemeris burst for {} @ {} - {}",
-                        key.sv, key.epoch, e,
-                    );
-                });
-                g24_buf.encode_eph123_burst(burst);
+            None => {
+                // method will fail when it is impossible to select
+                // a valid ephemeris frame (from that file) at specific point
+                // in temporal arc.
+                // You get a debug trace with "log" feature.
             },
-            (Constellation::GPS, 31) => {
-                // extract
-                let burst = eph.to_gps_qzss_eph_message(opts).unwrap_or_else(|e| {
-                    panic!(
-                        "Failed to extract an Ephemeris burst for {} @ {} - {}",
-                        key.sv, key.epoch, e
-                    );
-                });
-                g31_buf.encode_eph123_burst(burst);
-            },
-            (Constellation::QZSS, 1) => {
-                // extract
-                let burst = eph.to_gps_qzss_eph_message(opts).unwrap_or_else(|e| {
-                    panic!(
-                        "Failed to extract an Ephemeris burst for {} @ {} - {}",
-                        key.sv, key.epoch, e
-                    );
-                });
-                j01_buf.encode_eph123_burst(burst);
-            },
-            (Constellation::QZSS, 2) => {
-                // extract
-                let burst = eph.to_gps_qzss_eph_message(opts).unwrap_or_else(|e| {
-                    panic!(
-                        "Failed to extract an Ephemeris burst for {} @ {} - {}",
-                        key.sv, key.epoch, e
-                    );
-                });
-                j02_buf.encode_eph123_burst(burst);
-            },
-            (Constellation::QZSS, 3) => {
-                // extract
-                let burst = eph.to_gps_qzss_eph_message(opts).unwrap_or_else(|e| {
-                    panic!(
-                        "Failed to extract an Ephemeris burst for {} @ {} - {}",
-                        key.sv, key.epoch, e
-                    );
-                });
-                j03_buf.encode_eph123_burst(burst);
-            },
-            // (Constellation::Galileo, 7) => {
-            //     // extract
-            //     let burst = eph
-            //         .to_gps_qzss_eph_message(key.sv, key.epoch, false, false, tlm)
-            //         .unwrap_or_else(|e| {
-            //             panic!(
-            //                 "Failed to extract an Ephemeris burst for {} @ {}",
-            //                 key.sv, key.epoch
-            //             );
-            //         });
-            //     e07_buf.encode_eph123_burst(burst);
-            // },
-            // (Constellation::Galileo, 11) => {
-            //     // extract
-            //     let burst = eph
-            //         .to_gps_qzss_eph_message(key.sv, key.epoch, false, false, tlm)
-            //         .unwrap_or_else(|e| {
-            //             panic!(
-            //                 "Failed to extract an Ephemeris burst for {} @ {}",
-            //                 key.sv, key.epoch
-            //             );
-            //         });
-            //     e11_buf.encode_eph123_burst(burst);
-            // },
-            // (Constellation::Galileo, 15) => {
-            //     // extract
-            //     let burst = eph
-            //         .to_gps_qzss_eph_message(key.sv, key.epoch, false, false, tlm)
-            //         .unwrap_or_else(|e| {
-            //             panic!(
-            //                 "Failed to extract an Ephemeris burst for {} @ {}",
-            //                 key.sv, key.epoch
-            //             );
-            //         });
-            //     e15_buf.encode_eph123_burst(burst);
-            // },
-            _ => {},
         }
     }
-
-    // generate each files
-    g15_buf.save_file();
-    g24_buf.save_file();
-    g31_buf.save_file();
-    j01_buf.save_file();
-    j02_buf.save_file();
-    j03_buf.save_file();
-    // e07_buf.save_file();
-    // e11_buf.save_file();
-    // e15_buf.save_file();
+    g15_buf.flush();
+    g24_buf.flush();
+    g31_buf.flush();
+    j01_buf.flush();
+    j02_buf.flush();
+    j03_buf.flush();
 }

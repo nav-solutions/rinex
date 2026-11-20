@@ -1,8 +1,5 @@
 use crate::{
-    navigation::{
-        Ephemeris, GpsQzssEphCompositionOpts, GpsQzssEphemerisItem, GpsQzssEphemerisMessage,
-        OrbitItem,
-    },
+    navigation::{Ephemeris, GpsQzss30sMessage, GpsQzssCompositionOpts, OrbitItem},
     prelude::{Constellation, Epoch, Rinex, SV},
     tests::toolkit::nav::{assert_faithful_ephemeris, panic_eq_ephemeris},
 };
