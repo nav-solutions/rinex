@@ -1,9 +1,9 @@
-//! GPS/QZSS bitstream to RINEX serdes operations
+//! GPS/QZSS bitstream to RINEX serdes operation
 
 use crate::{
     navigation::{
-        ephemeris::protos::gps_qzss::Error, Ephemeris, GpsQzss30sMessage, GpsQzssCompositionOpts,
-        Record as NavRecord,
+        ephemeris::protos::gps_qzss::Error, Ephemeris, GpsQzssLnavCompositionOpts,
+        GpsQzssLnavProto, NavMessageType, Record as NavRecord,
     },
     prelude::{Constellation, Header, Record, Rinex, Version, SV},
     production::ProductionAttributes,
@@ -13,7 +13,7 @@ use itertools::Itertools;
 
 use hifitime::prelude::{Epoch, TimeSeries};
 
-use gnss_protos::gps::GpsQzssFrame;
+use gnss_protos::gps::lnav::GpsQzssLnavFrame;
 
 #[cfg(feature = "log")]
 use log::{debug, error};
@@ -138,7 +138,7 @@ impl Rinex {
     ///             // You can provide it yourself by doing this.
     ///             // In this simple example, we will insert zeros
     ///             // at ALM-4.
-    ///             alm_4: GpsQzssAlm4CompositionOpts::AsIs(Default::default()),
+    ///             alm_4: Some(Default::default()),
     ///
     ///             // TLM-5 attached to ALM-5
     ///             tlm_5: Default::default(),
@@ -150,49 +150,29 @@ impl Rinex {
     ///             // we are right now in the GPS period.
     ///             alm_5: None,
     ///         };
-    ///     },
-    /// ) {
-    ///     let opts = GpsQzssEphCompositionOpts {
-    ///         satellite, // simple pass through
-    ///         epoch: toc, // simple pass through
-    ///         anti_spoofing,
-    ///         alert,
-    ///         tlm_1: Default::default(), // zeros
-    ///         tlm_2: Default::default(), // zeros
-    ///         tlm_3: Default::default(), // zeros
-    ///     };
     ///
-    ///     alert = !alert; // toggle every other burst, regardless of SV
-    ///     anti_spoofing = !anti_spoofing; // toggles every other burst, regardless of SV
-    ///     
-    ///     // return composition choice for this very burst
-    ///     opts
-    /// }) {
+    ///         opts
+    ///     })
+    /// {
+    ///     match message_30s {
+    ///         Some(message) => {
     ///
-    ///     // your signal modulator will most likely need this information
-    ///     let (sat, epoch_toc) = (msg.satellite, msg.epoch);
-    ///
-    ///     // verify GPS/QZSS ToW correctness.
-    ///     // Remember, this method only forges 18s of the 30s cycle.
-    ///     assert_eq!(
-    ///         msg.eph123.eph_2.how.tow - msg.eph123.eph_1.how.tow,
-    ///         GPS_SUBFRAME_DURATION_S,
-    ///     );
-    ///     assert_eq!(
-    ///         msg.eph123.eph_3.how.tow - msg.eph123.eph_2.how.tow,
-    ///         GPS_SUBFRAME_DURATION_S,
-    ///     );
+    ///         },
+    ///         None => {
+    ///         
+    ///         },
+    ///     }
     /// }
     /// ```
     #[cfg(feature = "nav")]
     #[cfg_attr(docsrs, doc(cfg(feature = "nav")))]
-    pub fn to_gps_qzss_messages<'a, C>(
+    pub fn to_gps_qzss_lnav_proto<'a, C>(
         &'a self,
         temporal_arc: TimeSeries,
         mut composer: C,
-    ) -> Box<dyn Iterator<Item = Option<GpsQzss30sMessage>> + 'a>
+    ) -> Box<dyn Iterator<Item = GpsQzssLnavProto> + 'a>
     where
-        C: FnMut((SV, Epoch)) -> GpsQzssCompositionOpts + 'a,
+        C: FnMut((SV, Epoch)) -> GpsQzssLnavCompositionOpts + 'a,
     {
         let gps_satellites = self
             .sv_iter()
@@ -205,28 +185,36 @@ impl Rinex {
             temporal_arc
                 .into_iter()
                 .cartesian_product(gps_satellites.into_iter())
-                .map(move |(t, sv)| {
-                    let (toc, toe, eph) = self.nav_ephemeris_selection(sv, t)?;
+                .filter_map(move |(t, sv)| {
+                    let sel = self.nav_ephemeris_selection(sv, t)?;
 
-                    #[cfg(feature = "log")]
-                    {
-                        debug!("{} ({}) - selected ephemeris: {}", t, sv, toc);
-                    }
-
-                    let opts = composer((sv, t));
-
-                    match eph.to_gps_qzss_message(opts) {
-                        Ok(msg) => Some(msg),
-                        Err(_e) => {
+                    match sel.message {
+                        NavMessageType::LNAV => {
                             #[cfg(feature = "log")]
                             {
-                                error!(
-                                    "failed to reconstruct GPS/QZSS burst: {} ({}@{})",
-                                    _e, sv, t
-                                );
+                                debug!("{} ({}) - selected ephemeris: {}", t, sv, sel.toc);
                             }
-                            None
+
+                            let mut opts = composer((sv, t));
+
+                            // TODO:
+                            // si c'est page 18 il faut fournir l'info depuis le header
+
+                            match sel.eph.to_gps_qzss_lnav_proto(opts) {
+                                Ok(msg) => Some(msg),
+                                Err(_e) => {
+                                    #[cfg(feature = "log")]
+                                    {
+                                        error!(
+                                            "failed to reconstruct GPS/QZSS burst: {} ({}@{})",
+                                            _e, sv, t
+                                        );
+                                    }
+                                    None
+                                },
+                            }
                         },
+                        _ => None, // non applicable
                     }
                 }),
         )
@@ -256,7 +244,7 @@ impl Rinex {
         &self,
         mut header: Header,
         attributes: Option<ProductionAttributes>,
-        iterator: impl Iterator<Item = GpsQzss30sMessage>,
+        iterator: impl Iterator<Item = GpsQzssLnavProto>,
     ) -> Result<Self, Error> {
         let major = header.version.major;
 

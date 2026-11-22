@@ -22,24 +22,24 @@ use std::collections::HashMap;
 
 use gnss_protos::{
     constants::SECONDS_PER_WEEK,
-    gps::{
-        GpsQzssFrame, GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3, GpsQzssFrame4, GpsQzssFrame5,
-        GpsQzssFrameId, GpsQzssHow, GpsQzssMessage, GpsQzssSubframe, GpsQzssTelemetry,
-        GPS_FRAME_DURATION_S, GPS_QZSS_ROTATION_ITEMS, GPS_SUBFRAME_DURATION_S, GPS_TOC_TOE_LSB_S,
-        GPS_WEEK_ROLLOVER,
+    gps::lnav::{
+        week_10b_unwrapping, GpsQzssLnavAlmanach, GpsQzssLnavAlmanachHealth,
+        GpsQzssLnavConfigHealth, GpsQzssLnavFrame, GpsQzssLnavHow, GpsQzssLnavReservedSubframe,
+        GpsQzssLnavSatelliteHealth, GpsQzssLnavSubframe, GpsQzssLnavSubframe1,
+        GpsQzssLnavSubframe2, GpsQzssLnavSubframe3, GpsQzssLnavSubframe4, GpsQzssLnavSubframe5,
+        GpsQzssLnavSubframeEnum, GpsQzssLnavSubframeId, GpsQzssLnavTelemetry,
+        GPS_LNAV_FRAME_DURATION_S, GPS_LNAV_SUBFRAME_DURATION_S, GPS_LNAV_TOC_TOE_LSB_S,
+        GPS_LNAV_WEEK_ROLLOVER,
     },
 };
 
 use itertools::Itertools;
 
 #[cfg(doc)]
-use gnss_protos::gps::{GpsQzssAlmanach, GpsQzssAlmanachHealth, GpsQzssIonosphereUtc};
+use gnss_protos::gps::lnav::{GpsQzssAlmanach, GpsQzssAlmanachHealth, GpsQzssIonosphereUtc};
 
 #[cfg(feature = "log")]
 use log::{debug, error};
-
-/// Half of the GPS Week Rollover, for internal calculations.
-const GPS_HALF_WEEK_ROLLOVER: i64 = GPS_WEEK_ROLLOVER as i64 / 2;
 
 /// RINEX describes an unknown transmission time with 0.9999E9.
 /// Any |t_tm| greater than this threshold cannot be a valid transmission time.
@@ -56,30 +56,6 @@ const NOMINAL_URA_M: [f64; 16] = [
 /// Builds the GPST [Epoch] located at `seconds` within `week`.
 fn gpst_epoch(week: u32, seconds: u64) -> Epoch {
     Epoch::from_time_of_week(week, seconds * NANOSECONDS_PER_SECOND, TimeScale::GPST)
-}
-
-fn unwrapped_week_number(t_gpst: Epoch, wn: u16) -> u32 {
-    let reference_week = t_gpst.to_time_of_week().0 as i64;
-    let wn = (wn as i64) % GPS_WEEK_ROLLOVER as i64;
-
-    // candidate within the same 1024 week cycle as the reference
-    let mut week = reference_week - reference_week.rem_euclid(GPS_WEEK_ROLLOVER as i64) + wn;
-
-    // pick closest candidate
-    let delta = week - reference_week;
-
-    if delta > GPS_HALF_WEEK_ROLLOVER {
-        week -= GPS_WEEK_ROLLOVER as i64;
-    } else if delta < -GPS_HALF_WEEK_ROLLOVER {
-        week += GPS_WEEK_ROLLOVER as i64;
-    }
-
-    // weeks prior GPST origin do not exist
-    if week < 0 {
-        week += GPS_WEEK_ROLLOVER as i64;
-    }
-
-    week as u32
 }
 
 /// ToC and ToE are only broadcast as seconds within the week.
@@ -148,12 +124,6 @@ fn fit_interval_flag(constellation: Constellation, fit_interval_h: f64) -> bool 
 /// or extraction (deserialization).
 #[derive(Error, Debug)]
 pub enum Error {
-    /// EPH-1, EPH-2 and EPH-3 are not consecutive in time, that is,
-    /// most likely not part of the same message.
-    /// Each meessag should be evenly spaced in time with 6s interval.
-    #[error("non-consecutive eph-1,2,3 subframes")]
-    NonConsecutiveEph123,
-
     /// EPH-1 does not start a GPS frame (frames start every 30s since
     /// the beginning of the week).
     #[error("eph-1 is not aligned to a frame boundary")]
@@ -209,6 +179,10 @@ pub enum Error {
     /// ToE is not an integer number of seconds, multiple of 16s.
     #[error("ToE cannot be encoded (must be a multiple of 16s)")]
     InvalidToE,
+
+    /// Failed to form a valid 30s GPS/QZSS burst
+    #[error("failed to form a valid 30s burst")]
+    InvalidBurst,
 }
 
 /// 30s GPS/QZSS burst formed by [GPS_QZSS_ROTATION_ITEMS] consecutive
@@ -220,7 +194,7 @@ pub enum Error {
 /// We propose this wrapper to simplify the returned types that may
 /// be returned from RINEX files.
 #[derive(Debug, Copy, Clone, Default)]
-pub struct GpsQzss30sMessage {
+pub struct GpsQzssLnavProto {
     /// Satellite for which this 30s burst was reconstructed.
     /// This information will be required by your signal modulator.
     pub satellite: SV,
@@ -228,48 +202,25 @@ pub struct GpsQzss30sMessage {
     /// Placement in time, usually intended transmission time.
     pub epoch: Epoch,
 
-    /// Decoded or reconstructed [GpsQzssFrame]s burst. We provide
-    /// helper functions to deal with them.
-    pub frames: [GpsQzssFrame; GPS_QZSS_ROTATION_ITEMS],
+    /// Decoded or reconstructed [GpsQzssLnavFrame].
+    pub frame: GpsQzssLnavFrame,
 }
 
-impl GpsQzss30sMessage {
-    /// Access the underlying EPH-1 1/5 part of the 30s burst.
-    pub fn eph_1(&self) -> GpsQzssFrame {
-        self.frames[0]
-    }
-
-    /// Access the underlying EPH-2 2/5 part of the 30s burst.
-    pub fn eph_2(&self) -> GpsQzssFrame {
-        self.frames[1]
-    }
-
-    /// Access the underlying EPH-3 3/5 part of the 30s burst.
-    pub fn eph_3(&self) -> GpsQzssFrame {
-        self.frames[2]
-    }
-
-    /// Access the underlying ALM-4 4/5 part of the 30s burst.
-    pub fn alm_4(&self) -> GpsQzssFrame {
-        self.frames[3]
-    }
-
-    /// Access the underlying ALM-5 5/5 conclusion of the 30s burst.
-    pub fn alm_5(&self) -> GpsQzssFrame {
-        self.frames[4]
-    }
-}
-
-/// [GpsQzssCompositionOpts] allows you to control accuractly each bits
-/// of the bitstream we are about to forge. In particular,
-/// each alert and A/S bits HOW headers, each [GpsQzssTelemetry]
+/// [GpsQzssLnavCompositionOpts] allows you to reconstruct
+/// [GpsQzsLnavFrame]s accuractly from RINEX records.
+///
+/// Each bit of the bitstream is controlled, in particular:
+/// - alert bit,
+/// - A/S bit
+/// - telemetries
+/// each alert and A/S bits HOW headers, each [GpsQzssLnavTelemetry]
 /// to be associated to each subframe. And, when that applies,
 /// telemetries for ALM-4 and ALM-5 and design choices to possibly
 /// have the RINEX parser guess the ALM-4 and ALM-5 information,
 /// which is not feasible 100% of the time, depending where the
 /// attached Epoch lies in the 12'30" GPS period.
 #[derive(Debug, Copy, Clone, Default)]
-pub struct GpsQzssCompositionOpts {
+pub struct GpsQzssLnavCompositionOpts {
     /// Satellite signal source to be emulated or synthesized.
     /// Only GPS or QZSS satellites will be accepted here.
     pub satellite: SV,
@@ -285,54 +236,41 @@ pub struct GpsQzssCompositionOpts {
     /// Any timescale may apply here because we internally convert to GPST properly.
     pub epoch: Epoch,
 
-    /// [GpsQzssTelemetry] to be attached to the EPH-1 frame (1/5).
-    /// Accurate control over each telemetry is most interesting for advanced
-    /// users who can take advantage of that to encode the private bits of the bitstream.
-    pub tlm_1: GpsQzssTelemetry,
+    /// [GpsQzssLnavTelemetry] to be attached to EPH-1 subframe (1/5)
+    pub tlm_1: GpsQzssLnavTelemetry,
 
-    /// [GpsQzssTelemetry] to be attached to the EPH-2 frame (2/5).
-    /// Accurate control over each telemetry is most interesting for advanced
-    /// users who can take advantage of that to encode the private bits of the bitstream.
-    pub tlm_2: GpsQzssTelemetry,
+    /// [GpsQzssLnavTelemetry] to be attached to EPH-2 subframe (2/5)
+    pub tlm_2: GpsQzssLnavTelemetry,
 
-    /// [GpsQzssTelemetry] to be attached to the EPH-3 frame (3/5).
-    /// Accurate control over each telemetry is most interesting for advanced
-    /// users who can take advantage of that to encode the private bits of the bitstream.
-    pub tlm_3: GpsQzssTelemetry,
+    /// [GpsQzssLnavTelemetry] to be attached to EPH-3 subframe (3/5)
+    pub tlm_3: GpsQzssLnavTelemetry,
 
-    /// [GpsQzssTelemetry] to be attached to the ALM-3 frame (4/5).
-    /// Accurate control over each telemetry is most interesting for advanced
-    /// users who can take advantage of that to encode the private bits of the bitstream.
-    pub tlm_4: GpsQzssTelemetry,
+    /// [GpsQzssLnavTelemetry] to be attached to ALM-4 subframe (4/5).
+    pub tlm_4: GpsQzssLnavTelemetry,
 
     /// Possibly define ALM-4 yourself, otherwise,
-    /// let the burst synthesizer try to reconstruct this information.
-    /// Depending where we are in the GPS epoch, that may not be feasible.
-    pub alm_4: Option<GpsQzssFrame4>,
+    /// let our burst synthesizer try to reconstruct this information
+    /// the best it can. Depending where we are in the GPS epoch, that may not be feasible.
+    pub alm_4: Option<GpsQzssLnavSubframe4>,
 
-    /// [GpsQzssTelemetry] to be attached to the ALM-5 frame (5/5).
-    /// Accurate control over each telemetry is most interesting for advanced
-    /// users who can take advantage of that to encode the private bits of the bitstream.
-    pub tlm_5: GpsQzssTelemetry,
+    /// [GpsQzssLnavTelemetry] to be attached to ALM-5 subframe (5/5).
+    pub tlm_5: GpsQzssLnavTelemetry,
 
-    /// Possibly define ALM-4 yourself, otherwise,
-    /// let the burst synthesizer try to reconstruct this information.
-    /// Depending where we are in the GPS epoch, that may not be feasible.
-    pub alm_5: Option<GpsQzssFrame5>,
+    /// Possibly define ALM-5 yourself, otherwise,
+    /// let our burst synthesizer try to reconstruct this information
+    /// the best it can. Depending where we are in the GPS epoch, that may not be feasible.
+    pub alm_5: Option<GpsQzssLnavSubframe5>,
 }
 
 impl Ephemeris {
-    /// Builds a RINEX [Ephemeris] frame decoded [GpsQzss30sMessage].
+    /// Construct a RINEX [Ephemeris] frame from decoded [GpsQzssLnavProto].
     /// Applies to any GPS or QZSS satellites.
+    /// The resulting RIENX [Ephemeris] can then be formatted to a local file.
     ///
-    /// This method guards against invalid GPS/QZSS message associations,
-    /// it is illegal to group messages that do not belong to the same
-    /// satellite & valid rotation (consecutive HOW, matching IODC/IODE).
-    ///
-    /// Note that the ALM-4 and ALM-5 are disregarded by this method.
-    /// You can have a zero terminated 30s cycle and still be able to reconstruct
-    /// valid valid RINEX [Ephemeris]. In otherwords, only the first 18s
-    /// of the 30s GPS cycle are useful to reconstruct this object.
+    /// Note that the last 12s of the burst, composed of ALM-4 and ALM-5
+    /// have no effect here, only the first 18s composed of Ephemeris
+    /// information are stored, and RINEX allows bit true recovery
+    /// of the radio stream.
     ///
     /// ## Time management
     ///
@@ -357,25 +295,19 @@ impl Ephemeris {
     ///
     /// - (ToC) Time of Clock, expressed in [TimeScale::GPST]
     /// - and [Ephemeris] frame
-    pub fn from_gps_qzss_message(msg: GpsQzss30sMessage) -> Result<(Epoch, Self), Error> {
-        match msg.satellite.constellation {
+    pub fn from_gps_qzss_lnav_proto(proto: GpsQzssLnavProto) -> Result<(Epoch, Self), Error> {
+        match proto.satellite.constellation {
             Constellation::GPS | Constellation::QZSS => {},
             _ => return Err(Error::InvalidSatellite),
         }
 
         let mut orbits = HashMap::<String, OrbitItem>::new();
 
-        let (eph_1, eph_2, eph_3) = (msg.eph_1(), msg.eph_2(), msg.eph_3());
-
-        // HOW.tow is expressed in seconds:
-        // start of the following subframe.
-        if eph_2.how.tow != eph_1.how.tow + GPS_SUBFRAME_DURATION_S {
-            return Err(Error::NonConsecutiveEph123);
-        }
-
-        if eph_3.how.tow != eph_1.how.tow + 2 * GPS_SUBFRAME_DURATION_S {
-            return Err(Error::NonConsecutiveEph123);
-        }
+        let (eph_1, eph_2, eph_3) = (
+            proto.frame.eph_1(),
+            proto.frame.eph_2(),
+            proto.frame.eph_3(),
+        );
 
         let (subf1, subf2, subf3) = (
             eph_1.subframe.as_eph1().ok_or(Error::InvalidEph1)?,
@@ -395,18 +327,19 @@ impl Ephemeris {
 
         // Transmission time: EPH-1 starts 6s before the HOW(EPH-1) instant,
         // and EPH-1 always starts a 30s frame.
-        if eph_1.how.tow < GPS_SUBFRAME_DURATION_S {
+        if eph_1.how.tow < GPS_LNAV_SUBFRAME_DURATION_S {
             return Err(Error::MisalignedFrame);
         }
 
-        let t_sf1_s = (eph_1.how.tow - GPS_SUBFRAME_DURATION_S) as u64;
+        let t_sf1_s = (eph_1.how.tow - GPS_LNAV_SUBFRAME_DURATION_S) as u64;
 
-        if t_sf1_s % GPS_FRAME_DURATION_S as u64 != 0 {
+        if t_sf1_s % GPS_LNAV_SUBFRAME_DURATION_S as u64 != 0 {
             return Err(Error::MisalignedFrame);
         }
 
-        let t_rx_gpst = msg.epoch.to_time_scale(TimeScale::GPST);
-        let tx_week = unwrapped_week_number(t_rx_gpst, subf1.week);
+        let t_rx_gpst = proto.epoch.to_time_scale(TimeScale::GPST);
+
+        let tx_week = week_10b_unwrapping(t_rx_gpst, subf1.week);
         let t_tx = gpst_epoch(tx_week, t_sf1_s);
 
         // ToC & ToE (seconds of week) attached to the closest week
@@ -464,7 +397,7 @@ impl Ephemeris {
         orbits.insert(
             "fitInt".to_string(),
             OrbitItem::F64(fit_interval_hours(
-                msg.satellite.constellation,
+                proto.satellite.constellation,
                 subf2.fit_int_flag,
                 iodc,
             )),
@@ -509,21 +442,12 @@ impl Ephemeris {
         ))
     }
 
-    /// Converts this [Ephemeris] frame to [GpsQzss30sMessage] burst,
-    /// ready to encode.
+    /// Converts this [Ephemeris] frame to [GpsQzssLnavProto] ready
+    /// to be encoded.
     ///
-    /// NB: it is impossible to reconstruct ALM-4 and ALM-5 from this object,
-    /// only the first 18s composed of EPH-1, 2, 3 subframes can be fully reconstructed.
-    /// Therefore, you should compose ALM4 and ALM5 yourself, using the provided
-    /// options. if you don't know how to do that, simply use the default constructor
-    /// like in the following example.
-    ///
-    /// When composing, we define the ToW correctly to respect the GPS
-    /// protocol. If you intend to define ALM-4 and ALM-5 externally yourself,
-    /// we will disregard the provided ToW and encode it ourselves to garantee 100%
-    /// correctness.
-    ///
-    /// If you are able to CDMA modulate this burst, you can then transmit over the air.
+    /// The last 12s of this 30s burst cannot be fully reconstructed from
+    /// the RINEX [Ephemeris] frame, you can pass that part using the composition
+    /// options, otherwise we will insert zeros in the recovered bit stream.
     ///
     /// ## Time management
     ///
@@ -545,7 +469,7 @@ impl Ephemeris {
     ///
     /// ## Output
     ///
-    /// - EPH 1.2.3 ALM-4 and ALM-5 burst as [GpsQzss30sMessage]
+    /// - EPH 1.2.3 ALM-4 and ALM-5 burst as [GpsQzssLnavProto]
     ///
     /// ```
     /// use rinex::prelude::{Constellation, Rinex};
@@ -555,16 +479,16 @@ impl Ephemeris {
     ///     GpsQzssCompositionOpts,
     /// };
     ///
-    /// use gnss_protos::gps::{
-    ///     GpsQzssTelemetry,
-    ///     GPS_SUBFRAME_DURATION_S,
+    /// use gnss_protos::gps::lnav::{
+    ///     GpsQzssLnavTelemetry,
+    ///     GPS_LNAV_SUBFRAME_DURATION_S,
     /// };
     ///
     /// // load GPS (only, v2)
     /// let rinex = Rinex::from_gzip_file("data/NAV/V2/cbw10010.21n.gz")
     ///     .unwrap();
     ///
-    /// let tlm = GpsQzssTelemetry {
+    /// let tlm = GpsQzssLnavTelemetry {
     ///     message: 0,
     ///     integrity: false,
     ///     reserved_bit: false,
@@ -589,28 +513,28 @@ impl Ephemeris {
     ///         anti_spoofing: false,
     ///
     ///         // TLM to be associated to EPH-1
-    ///         tlm_1: GpsQzssTelemetry {
+    ///         tlm_1: GpsQzssLnavTelemetry {
     ///             message: 1,
     ///             integrity: false, // whatever you want
     ///             reserved_bit: false, // whatever you want
     ///         },
     ///
     ///         // TLM to be associated to EPH-2
-    ///         tlm_2: GpsQzssTelemetry {
+    ///         tlm_2: GpsQzssLnavTelemetry {
     ///             message: 2,
     ///             integrity: false, // whatever you want
     ///             reserved_bit: false, // whatever you want
     ///         },
     ///
     ///         // TLM to be associated to EPH-3
-    ///         tlm_3: GpsQzssTelemetry {
+    ///         tlm_3: GpsQzssLnavTelemetry {
     ///             message: 3,
     ///             integrity: false, // whatever you want
     ///             reserved_bit: false, // whatever you want
     ///         },
     ///
     ///         // TLM to be associated to ALM-4
-    ///         tlm_4: GpsQzssTelemetry {
+    ///         tlm_4: GpsQzssLnavTelemetry {
     ///             message: 4,
     ///             integrity: false, // whatever you want
     ///             reserved_bit: false, // whatever you want
@@ -622,7 +546,7 @@ impl Ephemeris {
     ///         alm_4: Default::default(),
     ///         
     ///         // TLM to be associated to ALM-5
-    ///         tlm_5: GpsQzssTelemetry {
+    ///         tlm_5: GpsQzssLnavTelemetry {
     ///             message: 5,
     ///             integrity: false, // whatever you want
     ///             reserved_bit: false, // whatever you want
@@ -642,19 +566,19 @@ impl Ephemeris {
     ///     // Verifies correctness in ToW progression (always true).
     ///     assert_eq!(
     ///         msg.eph_2().how.tow - msg.eph_1().how.tow,
-    ///         GPS_SUBFRAME_DURATION_S,
+    ///         GPS_LNAV_SUBFRAME_DURATION_S,
     ///     );
     ///     assert_eq!(
     ///         msg.eph_3().how.tow - msg.eph_2().how.tow,
-    ///         GPS_SUBFRAME_DURATION_S,
+    ///         GPS_LNAV_SUBFRAME_DURATION_S,
     ///     );
     ///     assert_eq!(
     ///         msg.alm_4().how.tow - msg.eph_3().how.tow,
-    ///         GPS_SUBFRAME_DURATION_S,
+    ///         GPS_LNAV_SUBFRAME_DURATION_S,
     ///     );
     ///     assert_eq!(
     ///         msg.alm_5().how.tow - msg.alm_4().how.tow,
-    ///         GPS_SUBFRAME_DURATION_S,
+    ///         GPS_LNAV_SUBFRAME_DURATION_S,
     ///     );
     ///
     ///     // reciprocal (RINEX [Ephemeris] frame, and its ToC)
@@ -669,10 +593,10 @@ impl Ephemeris {
     ///     // is not avaible here. assert_eq! would "fail" at 1e-7 range.
     /// }
     /// ```
-    pub fn to_gps_qzss_message(
+    pub fn to_gps_qzss_lnav_proto(
         &self,
-        opts: GpsQzssCompositionOpts,
-    ) -> Result<GpsQzss30sMessage, Error> {
+        opts: GpsQzssLnavCompositionOpts,
+    ) -> Result<GpsQzssLnavProto, Error> {
         match opts.satellite.constellation {
             Constellation::GPS | Constellation::QZSS => {},
             _ => return Err(Error::InvalidSatellite),
@@ -688,14 +612,15 @@ impl Ephemeris {
 
         let toc_s = quantized_seconds_of_week(
             (toc_nanos / NANOSECONDS_PER_SECOND) as f64,
-            GPS_TOC_TOE_LSB_S,
+            GPS_LNAV_TOC_TOE_LSB_S,
         )
         .ok_or(Error::InvalidToC)?;
 
         // ToE: seconds within the RINEX week
         let toe_week = self.get_week().ok_or(Error::MissingToE)?;
         let toe_s = self.get_orbit_f64("toe").ok_or(Error::MissingToE)?;
-        let toe_s = quantized_seconds_of_week(toe_s, GPS_TOC_TOE_LSB_S).ok_or(Error::InvalidToE)?;
+        let toe_s =
+            quantized_seconds_of_week(toe_s, GPS_LNAV_TOC_TOE_LSB_S).ok_or(Error::InvalidToE)?;
         let toe_gpst = gpst_epoch(toe_week, toe_s as u64);
 
         // Transmission time: t_tm is relative to the week of ToE,
@@ -710,7 +635,7 @@ impl Ephemeris {
 
         // align to the beginning of the frame (start of EPH-1)
         let tx_s = tx_nanos / NANOSECONDS_PER_SECOND;
-        let frame_start_s = tx_s - tx_s % GPS_FRAME_DURATION_S as u64;
+        let frame_start_s = tx_s - tx_s % GPS_LNAV_SUBFRAME_DURATION_S as u64;
         let frame_start = gpst_epoch(tx_week, frame_start_s);
 
         // ToC/ToE must be recoverable from the transmission time
@@ -720,7 +645,7 @@ impl Ephemeris {
 
         // HOW: beginning of the following subframe, in seconds.
         // Frame start + 18s < 604800 for EPH-1,2,3: no week rollover possible.
-        let how_tow = |n: u32| frame_start_s as u32 + n * GPS_SUBFRAME_DURATION_S;
+        let how_tow = |n: u32| frame_start_s as u32 + n * GPS_LNAV_SUBFRAME_DURATION_S;
 
         // Message identifiers
         let iodc = self.get_orbit_f64("iodc").unwrap_or_default() as u16;
@@ -736,8 +661,8 @@ impl Ephemeris {
         let tgd_s = self.get_orbit_f64("tgd").unwrap_or_default();
         let ura_m = self.get_orbit_f64("accuracy").unwrap_or_default();
 
-        let mut subframe1 = GpsQzssFrame1::default()
-            .with_week((tx_week % GPS_WEEK_ROLLOVER as u32) as u16)
+        let mut subframe1 = GpsQzssLnavSubframe1::default()
+            .with_week((tx_week % GPS_LNAV_WEEK_ROLLOVER as u32) as u16)
             .with_iodc(iodc)
             .with_ca_or_p_l2_mask(l2_codes as u8)
             .with_health((health as u8).into())
@@ -761,7 +686,7 @@ impl Ephemeris {
         let mean_motion_diff_rad_s = self.get_orbit_f64("deltaN").unwrap_or_default();
         let fit_interval_h = self.get_orbit_f64("fitInt").unwrap_or_default();
 
-        let mut subframe2 = GpsQzssFrame2::default()
+        let mut subframe2 = GpsQzssLnavSubframe2::default()
             .with_aodo(0) // TODO: AoDo is not described in RINEX
             .with_toe_seconds(toe_s)
             .with_mean_anomaly_radians(m0_rad)
@@ -788,7 +713,7 @@ impl Ephemeris {
         let omega_rad = self.get_orbit_f64("omega").unwrap_or_default();
         let omega_dot_rad_s = self.get_orbit_f64("omegaDot").unwrap_or_default();
 
-        let subframe3 = GpsQzssFrame3::default()
+        let subframe3 = GpsQzssLnavSubframe3::default()
             .with_cic_radians(cic_rad)
             .with_cis_radians(cis_rad)
             .with_crc_meters(crc_m)
@@ -799,67 +724,146 @@ impl Ephemeris {
             .with_omega_radians(omega_rad)
             .with_omega_dot_rad_s(omega_dot_rad_s);
 
-        let how = |n: u32, frame_id: GpsQzssFrameId| GpsQzssHow {
-            frame_id,
+        let how = |n: u32, sbf_id: GpsQzssLnavSubframeId| GpsQzssLnavHow {
+            sbf_id,
             tow: how_tow(n),
             alert: opts.alert,
             anti_spoofing: opts.anti_spoofing,
         };
 
-        let eph_1 = GpsQzssFrame {
-            how: how(1, GpsQzssFrameId::Ephemeris1),
+        let eph_1 = GpsQzssLnavSubframe {
+            how: how(1, GpsQzssLnavSubframeId::Ephemeris1),
             telemetry: opts.tlm_1,
-            subframe: GpsQzssSubframe::Ephemeris1(subframe1),
+            subframe: GpsQzssLnavSubframeEnum::Ephemeris1(subframe1),
         };
 
-        let eph_2 = GpsQzssFrame {
-            how: how(2, GpsQzssFrameId::Ephemeris2),
+        let eph_2 = GpsQzssLnavSubframe {
+            how: how(2, GpsQzssLnavSubframeId::Ephemeris2),
             telemetry: opts.tlm_2,
-            subframe: GpsQzssSubframe::Ephemeris2(subframe2),
+            subframe: GpsQzssLnavSubframeEnum::Ephemeris2(subframe2),
         };
 
-        let eph_3 = GpsQzssFrame {
-            how: how(3, GpsQzssFrameId::Ephemeris3),
+        let eph_3 = GpsQzssLnavSubframe {
+            how: how(3, GpsQzssLnavSubframeId::Ephemeris3),
             telemetry: opts.tlm_3,
-            subframe: GpsQzssSubframe::Ephemeris3(subframe3),
+            subframe: GpsQzssLnavSubframeEnum::Ephemeris3(subframe3),
         };
 
         let alm_4 = match opts.alm_4 {
-            Some(subf4) => GpsQzssFrame {
-                how: how(4, GpsQzssFrameId::Almanach4),
+            Some(subf4) => GpsQzssLnavSubframe {
                 telemetry: opts.tlm_4,
-                subframe: GpsQzssSubframe::Almanach4(subf4),
+                how: how(4, GpsQzssLnavSubframeId::Almanach4),
+                subframe: GpsQzssLnavSubframeEnum::Almanach4(subf4),
             },
             None => {
-                // not provided by user: insert zeros
-                GpsQzssFrame {
-                    how: how(4, GpsQzssFrameId::Almanach4),
+                // not provided by user
+                // -> attempt to reconstruct accurately
+                let mut sbf = GpsQzssLnavSubframe {
                     telemetry: opts.tlm_4,
-                    subframe: GpsQzssSubframe::Almanach4(Default::default()),
-                }
+                    how: how(4, GpsQzssLnavSubframeId::Almanach4),
+                    subframe: GpsQzssLnavSubframeEnum::Almanach4(Default::default()),
+                };
+
+                let sbf4 = match sbf.page_number() {
+                    2 | 3 | 4 | 5 | 7 | 8 | 9 | 10 => {
+                        // almanach
+                        let alm = GpsQzssLnavAlmanach::default().with_keplerian_parameters(
+                            sqrt_a,
+                            rad_to_semicircles(idot_rad_s),
+                            rad_to_semicircles(omega0_rad),
+                            rad_to_semicircles(omega_rad),
+                            rad_to_semicircles(m0_rad),
+                        );
+                        GpsQzssLnavSubframe4::Almanach(alm)
+                    },
+                    13 => {
+                        // NMCT
+                        GpsQzssLnavSubframe4::Nmct(Default::default())
+                    },
+                    17 => {
+                        // Special military message
+                        GpsQzssLnavSubframe4::SpecialMessage(Default::default())
+                    },
+                    18 => {
+                        // Ionosphere/UTC
+                        GpsQzssLnavSubframe4::IonosphereUtc(Default::default())
+                    },
+                    25 => {
+                        // config health
+                        let config_health = GpsQzssLnavConfigHealth::default()
+                            // .with_anti_spoofing(prn, true/false, configuration_flag)
+                            .with_satellite_health(
+                                opts.satellite.prn,
+                                GpsQzssLnavSatelliteHealth::healthy(),
+                            );
+                        GpsQzssLnavSubframe4::ConfigHealth(config_health)
+                    },
+                    _ => {
+                        // reserved subf
+                        GpsQzssLnavSubframe4::Reserved(Default::default())
+                    },
+                };
+                sbf = sbf.with_subframe_enum(GpsQzssLnavSubframeEnum::Almanach4(sbf4));
+                sbf
             },
         };
 
         let alm_5 = match opts.alm_5 {
-            Some(subf5) => GpsQzssFrame {
-                how: how(5, GpsQzssFrameId::Almanach5),
+            Some(subf5) => GpsQzssLnavSubframe {
+                how: how(5, GpsQzssLnavSubframeId::Almanach5),
                 telemetry: opts.tlm_5,
-                subframe: GpsQzssSubframe::Almanach5(subf5),
+                subframe: GpsQzssLnavSubframeEnum::Almanach5(subf5),
             },
             None => {
-                // not provided by user: insert zeros
-                GpsQzssFrame {
-                    how: how(5, GpsQzssFrameId::Almanach5),
+                // not provided by user
+                // -> attempt to reconstruct accurately
+                let mut sbf = GpsQzssLnavSubframe {
                     telemetry: opts.tlm_5,
-                    subframe: GpsQzssSubframe::Almanach5(Default::default()),
-                }
+                    how: how(5, GpsQzssLnavSubframeId::Almanach5),
+                    subframe: GpsQzssLnavSubframeEnum::Almanach4(Default::default()),
+                };
+
+                let sbf5 = match sbf.page_number() {
+                    1..=24 => {
+                        // almanach
+                        let alm = GpsQzssLnavAlmanach::default().with_keplerian_parameters(
+                            sqrt_a,
+                            rad_to_semicircles(idot_rad_s),
+                            rad_to_semicircles(omega0_rad),
+                            rad_to_semicircles(omega_rad),
+                            rad_to_semicircles(m0_rad),
+                        );
+                        GpsQzssLnavSubframe5::Almanach(alm)
+                    },
+                    25 => {
+                        // almanach health
+                        let toa_seconds = 0;
+                        let alm_week = 0;
+
+                        let alm_health = GpsQzssLnavAlmanachHealth::default()
+                            .with_satellite_health(0, GpsQzssLnavSatelliteHealth::healthy())
+                            .with_reference(toa_seconds, alm_week);
+
+                        GpsQzssLnavSubframe5::Health(alm_health)
+                    },
+                    _ => GpsQzssLnavSubframe5::Reserved(GpsQzssLnavReservedSubframe::default()),
+                };
+                sbf = sbf.with_subframe_enum(GpsQzssLnavSubframeEnum::Almanach5(sbf5));
+                sbf
             },
         };
 
-        Ok(GpsQzss30sMessage {
+        let lnav_frame = GpsQzssLnavFrame::from_slice([eph_1, eph_2, eph_3, alm_4, alm_5])
+            .map_err(|_e| {
+                #[cfg(feature = "log")]
+                error!("failed to construct a valid GPS/QZSS burst: {}", _e);
+                Error::InvalidBurst
+            })?;
+
+        Ok(GpsQzssLnavProto {
             satellite: opts.satellite,
             epoch: opts.epoch,
-            frames: [eph_1, eph_2, eph_3, alm_4, alm_5],
+            frame: lnav_frame,
         })
     }
 }

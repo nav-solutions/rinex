@@ -1,10 +1,28 @@
 use crate::{
-    navigation::{BdModel, Ephemeris, IonosphereModel, KbModel, NavKey, NgModel},
+    navigation::{BdModel, Ephemeris, IonosphereModel, KbModel, NavKey, NavMessageType, NgModel},
     prelude::{
         nav::{Almanac, AzElRange, Orbit},
         Epoch, Rinex, SV,
     },
 };
+
+pub struct SelectedEphemerisRef<'a> {
+    /// Satellite
+    pub satellite: SV,
+
+    /// Time of clock
+    pub toc: Epoch,
+
+    /// Time of Issue of Ephemeris
+    pub toe: Epoch,
+
+    /// Navigation message (= signal modulation)
+    /// which broadcasted the selected ephemeris frame
+    pub message: NavMessageType,
+
+    /// Ephemeris
+    pub eph: &'a Ephemeris,
+}
 
 impl Rinex {
     /// [SV] orbital state vector determination attempt, that only applies
@@ -15,8 +33,8 @@ impl Rinex {
     /// ## Returns
     /// - orbital state: expressed as ECEF [Orbit]
     pub fn sv_orbit(&self, sv: SV, t: Epoch) -> Option<Orbit> {
-        let (_, _, eph) = self.nav_ephemeris_selection(sv, t)?;
-        eph.kepler2position(sv, t)
+        let sel = self.nav_ephemeris_selection(sv, t)?;
+        sel.eph.kepler2position(sv, t)
     }
 
     /// [SV] (azimuth, elevation, slant range) triplet determination,
@@ -51,24 +69,40 @@ impl Rinex {
     /// was decoded in the correct time frame.
     /// Note that `ToE` does not exist for GEO/SBAS [SV], so `ToC` is simply
     /// copied in this case, to maintain the API.
-    pub fn nav_ephemeris_selection(&self, sv: SV, t: Epoch) -> Option<(Epoch, Epoch, &Ephemeris)> {
+    pub fn nav_ephemeris_selection<'a>(
+        &'a self,
+        sv: SV,
+        t: Epoch,
+    ) -> Option<SelectedEphemerisRef<'a>> {
         if sv.constellation.is_sbas() {
             self.nav_ephemeris_frames_iter()
                 .filter_map(|(k, eph)| {
                     if k.sv == sv {
-                        Some((k.epoch, k.epoch, eph))
+                        Some(SelectedEphemerisRef {
+                            eph,
+                            toc: k.epoch,
+                            toe: k.epoch,
+                            satellite: k.sv,
+                            message: k.msgtype,
+                        })
                     } else {
                         None
                     }
                 })
-                .min_by_key(|(toc, _, _)| t - *toc)
+                .min_by_key(|sel| t - sel.toc)
         } else {
             self.nav_ephemeris_frames_iter()
                 .filter_map(|(k, eph)| {
                     if k.sv == sv {
                         if eph.is_valid(sv, t) {
                             if let Some(toe) = eph.toe(k.sv) {
-                                Some((k.epoch, toe, eph))
+                                Some(SelectedEphemerisRef {
+                                    eph,
+                                    toc: k.epoch,
+                                    toe: toe,
+                                    satellite: k.sv,
+                                    message: k.msgtype,
+                                })
                             } else {
                                 None
                             }
@@ -79,7 +113,7 @@ impl Rinex {
                         None
                     }
                 })
-                .min_by_key(|(_, toe, _)| (t - *toe).abs())
+                .min_by_key(|sel| (t - sel.toe).abs())
         }
     }
 

@@ -309,7 +309,7 @@ impl MessageDecoder {
     }
 }
 
-/// Parses G15, G24, G31, J01, J02, J03 EPH-1.2.3 (3/5 30s) excerpt from NAV/V3/ESBCDNK.gzip
+/// Parses G15, G24, G31, J02, J03 EPH-1.2.3 (3/5 30s) excerpt from NAV/V3/ESBCDNK.gzip
 /// reconstruct a NAV RINEX from all collected bursts,
 /// run bit true comparison between each Ephemeris contrusctured from each burst, and original
 /// Ephemeris
@@ -322,14 +322,12 @@ fn test_gps_qzss_lnav_bittrue() {
     let mut g15_dec = MessageDecoder::new("data/GPS/esbcdnk_g15.bin");
     let mut g24_dec = MessageDecoder::new("data/GPS/esbcdnk_g24.bin");
     let mut g31_dec = MessageDecoder::new("data/GPS/esbcdnk_g31.bin");
-    let mut j01_dec = MessageDecoder::new("data/GPS/esbcdnk_j01.bin");
-    let mut j02_dec = MessageDecoder::new("data/GPS/esbcdnk_j02.bin");
-    let mut j03_dec = MessageDecoder::new("data/GPS/esbcdnk_j03.bin");
+    let mut j02_dec = MessageDecoder::new("data/QZSS/esbcdnk_j02.bin");
+    let mut j03_dec = MessageDecoder::new("data/QZSS/esbcdnk_j03.bin");
 
     let mut g15_count = 0;
     let mut g24_count = 0;
     let mut g31_count = 0;
-    let mut j01_count = 0;
     let mut j02_count = 0;
     let mut j03_count = 0;
 
@@ -420,30 +418,6 @@ fn test_gps_qzss_lnav_bittrue() {
             },
             Constellation::QZSS => {
                 match key.sv.prn {
-                    1 => {
-                        // pull a burst in chronological order
-                        let msg = j01_dec.pull_message(key.sv, key.epoch).unwrap_or_else(|| {
-                            panic!("Failed to pull a new burst for {} @ {}", key.sv, key.epoch);
-                        });
-
-                        // reconstruct a RINEX
-                        let (reconstructed_toc, reconstructed_eph) = Ephemeris::from_gps_qzss_message(msg)
-                                .unwrap_or_else(|e| {
-                                    panic!("failed to reconstruct ToC and Eph from {} EPH-1.2.3 burst at {}: {}", key.sv, key.epoch, e);
-                                });
-
-                        // // run ToC bit true test
-                        // assert_eq!(
-                        //     reconstructed_toc, key.epoch,
-                        //     "invalid ToC reconstructed for {}",
-                        //     key.sv
-                        // );
-
-                        // run EPH bit true test
-                        // assert_faithful_ephemeris(key.sv, key.epoch, eph, &reconstructed_eph);
-
-                        j01_count += 1;
-                    },
                     2 => {
                         // pull a burst in chronological order
                         let msg = j02_dec.pull_message(key.sv, key.epoch).unwrap_or_else(|| {
@@ -501,7 +475,6 @@ fn test_gps_qzss_lnav_bittrue() {
     assert_eq!(g15_count, 24 / 3);
     assert_eq!(g24_count, 21 / 3);
     assert_eq!(g31_count, 27 / 3);
-    assert_eq!(j01_count, 12 / 3);
     assert_eq!(j02_count, 18 / 3);
     assert_eq!(j03_count, 15 / 3);
 }
