@@ -55,6 +55,20 @@ use crate::{
     prelude::{Constellation, Duration, Epoch, ParsingError, TimeScale, Version, SV},
 };
 
+/// Convenient helper to convert radians to semicircles,
+/// usually arriving from RINEX to our internal structure which
+/// is ready for maths.
+pub(crate) fn rad_to_semicircles(rad: f64) -> f64 {
+    rad / core::f64::consts::PI
+}
+
+/// Convenient helper to convert semicircles to radians,
+/// usually when formatting or serializing
+/// our internal struct (which is maths compliant).
+pub(crate) fn semicircles_to_rad(semic: f64) -> f64 {
+    semic * core::f64::consts::PI
+}
+
 /// [Ephemeris] Message [TransmossionPolicy]
 pub(crate) struct TransmissionPolicy {
     pub field: &'static str,

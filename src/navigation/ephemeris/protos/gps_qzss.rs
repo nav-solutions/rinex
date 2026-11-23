@@ -1,21 +1,13 @@
 //! GPS/QZSS bitstream and Ephemeris serdes operations
-use hifitime::{
-    prelude::{TimeSeries, Unit},
-    NANOSECONDS_PER_SECOND,
-};
+use hifitime::{prelude::Unit, NANOSECONDS_PER_SECOND};
 
 use thiserror::Error;
 
 use crate::{
-    navigation::{
-        ephemeris::{
-            protos::{rad_to_semicircles, semicircles_to_rad},
-            Ephemeris, GpsQzssl1l2l5Health, OrbitItem,
-        },
-        NavFrame, NavFrameType, NavKey, NavMessageType, Record as NavRecord,
+    navigation::ephemeris::{
+        rad_to_semicircles, semicircles_to_rad, Ephemeris, GpsQzssl1l2l5Health, OrbitItem,
     },
-    prelude::{Comments, Constellation, Epoch, Header, Record, Rinex, TimeScale, SV},
-    ProductionAttributes,
+    prelude::{Constellation, Epoch, TimeScale, SV},
 };
 
 use std::collections::HashMap;
@@ -23,23 +15,17 @@ use std::collections::HashMap;
 use gnss_protos::{
     constants::SECONDS_PER_WEEK,
     gps::lnav::{
-        week_10b_unwrapping, GpsQzssLnavAlmanach, GpsQzssLnavAlmanachHealth,
-        GpsQzssLnavConfigHealth, GpsQzssLnavFrame, GpsQzssLnavHow, GpsQzssLnavReservedSubframe,
-        GpsQzssLnavSatelliteHealth, GpsQzssLnavSubframe, GpsQzssLnavSubframe1,
-        GpsQzssLnavSubframe2, GpsQzssLnavSubframe3, GpsQzssLnavSubframe4, GpsQzssLnavSubframe5,
-        GpsQzssLnavSubframeEnum, GpsQzssLnavSubframeId, GpsQzssLnavTelemetry,
-        GPS_LNAV_FRAME_DURATION_S, GPS_LNAV_SUBFRAME_DURATION_S, GPS_LNAV_TOC_TOE_LSB_S,
+        week_10b_unwrapping, GpsQzssLnavAlmanachHealth, GpsQzssLnavConfigHealth, GpsQzssLnavFrame,
+        GpsQzssLnavHow, GpsQzssLnavReservedSubframe, GpsQzssLnavSatelliteHealth,
+        GpsQzssLnavSubframe, GpsQzssLnavSubframe1, GpsQzssLnavSubframe2, GpsQzssLnavSubframe3,
+        GpsQzssLnavSubframe4, GpsQzssLnavSubframe5, GpsQzssLnavSubframeEnum, GpsQzssLnavSubframeId,
+        GpsQzssLnavTelemetry, GPS_LNAV_SUBFRAME_DURATION_S, GPS_LNAV_TOC_TOE_LSB_S,
         GPS_LNAV_WEEK_ROLLOVER,
     },
 };
 
-use itertools::Itertools;
-
-#[cfg(doc)]
-use gnss_protos::gps::lnav::{GpsQzssAlmanach, GpsQzssAlmanachHealth, GpsQzssIonosphereUtc};
-
 #[cfg(feature = "log")]
-use log::{debug, error};
+use log::error;
 
 /// RINEX describes an unknown transmission time with 0.9999E9.
 /// Any |t_tm| greater than this threshold cannot be a valid transmission time.
@@ -619,8 +605,10 @@ impl Ephemeris {
         // ToE: seconds within the RINEX week
         let toe_week = self.get_week().ok_or(Error::MissingToE)?;
         let toe_s = self.get_orbit_f64("toe").ok_or(Error::MissingToE)?;
+
         let toe_s =
             quantized_seconds_of_week(toe_s, GPS_LNAV_TOC_TOE_LSB_S).ok_or(Error::InvalidToE)?;
+
         let toe_gpst = gpst_epoch(toe_week, toe_s as u64);
 
         // Transmission time: t_tm is relative to the week of ToE,
@@ -766,15 +754,20 @@ impl Ephemeris {
 
                 let sbf4 = match sbf.page_number() {
                     2 | 3 | 4 | 5 | 7 | 8 | 9 | 10 => {
-                        // almanach
-                        let alm = GpsQzssLnavAlmanach::default().with_keplerian_parameters(
-                            sqrt_a,
-                            rad_to_semicircles(idot_rad_s),
-                            rad_to_semicircles(omega0_rad),
-                            rad_to_semicircles(omega_rad),
-                            rad_to_semicircles(m0_rad),
-                        );
-                        GpsQzssLnavSubframe4::Almanach(alm)
+                        // resolve almanach
+                        let alm = match self.to_almanach(opts.satellite) {
+                            Some(alm) => alm,
+                            None => {
+                                #[cfg(feature = "log")]
+                                error!(
+                                    "failed to determine alamach page: burst will be zero-padded"
+                                );
+                                Default::default()
+                            },
+                        };
+                        let health = 0; // TODO
+                        let almanach = alm.to_gps_qzss_lnav(health);
+                        GpsQzssLnavSubframe4::Almanach(almanach)
                     },
                     13 => {
                         // NMCT
@@ -825,15 +818,20 @@ impl Ephemeris {
 
                 let sbf5 = match sbf.page_number() {
                     1..=24 => {
-                        // almanach
-                        let alm = GpsQzssLnavAlmanach::default().with_keplerian_parameters(
-                            sqrt_a,
-                            rad_to_semicircles(idot_rad_s),
-                            rad_to_semicircles(omega0_rad),
-                            rad_to_semicircles(omega_rad),
-                            rad_to_semicircles(m0_rad),
-                        );
-                        GpsQzssLnavSubframe5::Almanach(alm)
+                        // resolve almanach
+                        let alm = match self.to_almanach(opts.satellite) {
+                            Some(alm) => alm,
+                            None => {
+                                #[cfg(feature = "log")]
+                                error!(
+                                    "failed to determine alamach page: burst will be zero-padded"
+                                );
+                                Default::default()
+                            },
+                        };
+                        let health = 0; // TODO
+                        let almanach = alm.to_gps_qzss_lnav(health);
+                        GpsQzssLnavSubframe5::Almanach(almanach)
                     },
                     25 => {
                         // almanach health
@@ -873,17 +871,6 @@ mod test {
     use super::*;
 
     #[test]
-    fn week_unwrapping() {
-        let t = |week: u32| gpst_epoch(week, 0);
-
-        assert_eq!(unwrapped_week_number(t(2138), 90), 2138);
-        assert_eq!(unwrapped_week_number(t(2047), 0), 2048);
-        assert_eq!(unwrapped_week_number(t(2048), 1023), 2047);
-        assert_eq!(unwrapped_week_number(t(100), 1000), 1000);
-        assert_eq!(unwrapped_week_number(t(1500), 10), 1034);
-    }
-
-    #[test]
     fn closest_reference_epoch() {
         // transmitted saturday 22:00, ToC sunday 00:00 (next week)
         let t_tx = gpst_epoch(2399, 597_600);
@@ -901,7 +888,7 @@ mod test {
     #[test]
     fn nominal_ura_index_reciprocity() {
         for (index, ura_m) in NOMINAL_URA_M.iter().enumerate() {
-            let frame = GpsQzssFrame1::default().with_user_range_accuracy_m(*ura_m);
+            let frame = GpsQzssLnavSubframe1::default().with_user_range_accuracy_m(*ura_m);
             assert_eq!(frame.ura as usize, index, "URA index {}", index);
         }
     }

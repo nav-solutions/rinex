@@ -1,13 +1,18 @@
-use crate::prelude::{nav::Orbit, Constellation, Epoch, SV};
-
-use crate::navigation::Ephemeris;
+use crate::{
+    constants::Constants,
+    navigation::Ephemeris,
+    prelude::{nav::Orbit, Constellation, Epoch, SV},
+};
 
 use anise::{
     constants::frames::IAU_EARTH_FRAME,
     math::{Vector3, Vector6},
 };
 
+mod almanach;
 mod helper;
+
+pub use almanach::Almanach;
 pub use helper::Helper;
 
 #[cfg(doc)]
@@ -26,14 +31,23 @@ pub struct Kepler {
     /// Inclination angle at reference time (in radians)
     pub i_0: f64,
 
+    /// Inclination rate of change (in radians.s⁻¹)
+    pub i_dot: f64,
+
     /// Longitude of ascending node at reference time (in radians)
     pub omega_0: f64,
+
+    /// Mean motion difference from computed value (in radians)
+    pub dn: f64,
 
     /// Mean anomaly at reference time (in radians)
     pub m_0: f64,
 
     /// Argument of perigee (in radians)
     pub omega: f64,
+
+    /// Right ascension rate of change (in radians.s⁻¹)
+    pub omega_dot: f64,
 
     /// Time of issue of ephemeris.
     /// NB GEO and GLO ephemerides do not have the notion of ToE, we set 0 here.
@@ -45,15 +59,6 @@ pub struct Kepler {
 #[derive(Default, Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Perturbations {
-    /// Mean motion difference from computed value (in radians)
-    pub dn: f64,
-
-    /// Inclination rate of change (in radians.s⁻¹)
-    pub i_dot: f64,
-
-    /// Right ascension rate of change (in radians.s⁻¹)
-    pub omega_dot: f64,
-
     /// Amplitude of sine harmonic correction term of the argument
     /// of latitude (in radians)
     pub cus: f64,
@@ -75,6 +80,37 @@ pub struct Perturbations {
     pub crc: f64,
 }
 
+impl Kepler {
+    /// Reconstructs satellite [Almanach] from satellite [Kepler]ian ephemeris
+    pub fn to_almanach(&self, sv: SV, toe_seconds: u32, af0: f64, af1: f64) -> Almanach {
+        let mu = Constants::gm(sv);
+
+        let n0 = (mu / self.a.powi(3)).sqrt();
+        let a = mu / (n0 + self.dn).powi(2);
+        let a = a.powf(0.3);
+
+        // let di = self.i_0 + self.i_dot * dt;
+        let di = Default::default(); // TODO
+
+        // TODO: is this correct ?
+        let toa_seconds = toe_seconds;
+
+        Almanach {
+            af0,
+            af1,
+            di,
+            e: self.e,
+            a: self.a,
+            toa_seconds,
+            sv_id: sv.prn,
+            m_0: self.m_0,
+            omega: self.omega,
+            omega_0: self.omega_0,
+            omega_dot: self.omega_dot,
+        }
+    }
+}
+
 impl Ephemeris {
     /// Retrieves Orbit Keplerian parameters.
     /// This only applies to MEO Ephemerides, not GEO and Glonass.
@@ -87,7 +123,24 @@ impl Ephemeris {
             omega_0: self.get_orbit_f64("omega0")?,
             m_0: self.get_orbit_f64("m0")?,
             toe: self.get_orbit_f64("toe")?,
+            dn: self.get_orbit_f64("deltaN")?,
+            i_dot: self.get_orbit_f64("idot")?,
+            omega_dot: self.get_orbit_f64("omegaDot")?,
         })
+    }
+
+    /// Retrieves [Almanach] keplerian parameters
+    /// from internal keplerian parameters.
+    pub fn to_almanach(&self, satellite: SV) -> Option<Almanach> {
+        let kepler = self.kepler()?;
+        let toe = self.toe(satellite)?;
+        let (_, toe_seconds) = toe.to_time_of_week();
+        Some(kepler.to_almanach(
+            satellite,
+            toe_seconds as u32,
+            self.clock_bias,
+            self.clock_drift,
+        ))
     }
 
     /// Creates new [Ephemeris] frame from [Kepler]ian parameters
@@ -100,6 +153,9 @@ impl Ephemeris {
         s.set_orbit_f64("omega0", kepler.omega_0);
         s.set_orbit_f64("m0", kepler.m_0);
         s.set_orbit_f64("toe", kepler.toe);
+        s.set_orbit_f64("deltaN", kepler.dn);
+        s.set_orbit_f64("idot", kepler.i_dot);
+        s.set_orbit_f64("omegaDot", kepler.omega_dot);
         s
     }
 
@@ -112,9 +168,6 @@ impl Ephemeris {
             cis: self.get_orbit_f64("cis")?,
             crc: self.get_orbit_f64("crc")?,
             crs: self.get_orbit_f64("crs")?,
-            dn: self.get_orbit_f64("deltaN")?,
-            i_dot: self.get_orbit_f64("idot")?,
-            omega_dot: self.get_orbit_f64("omegaDot")?,
         })
     }
 
@@ -127,9 +180,6 @@ impl Ephemeris {
         s.set_orbit_f64("cis", perturbations.cis);
         s.set_orbit_f64("crc", perturbations.crc);
         s.set_orbit_f64("crs", perturbations.crs);
-        s.set_orbit_f64("deltaN", perturbations.dn);
-        s.set_orbit_f64("idot", perturbations.i_dot);
-        s.set_orbit_f64("omegaDot", perturbations.omega_dot);
         s
     }
 

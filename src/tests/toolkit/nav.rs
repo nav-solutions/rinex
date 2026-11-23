@@ -6,6 +6,8 @@ use crate::{
 
 use std::f64::consts::PI;
 
+use gnss_protos::gps::lnav::GpsQzssLnavSubframe1;
+
 /// Panics on strict inequality between two [Ephemeris] objects
 pub fn panic_eq_ephemeris(dut: &Ephemeris, model: &Ephemeris) {
     assert_eq!(dut.clock_bias, model.clock_bias, "clock bias mismatch");
@@ -88,7 +90,7 @@ pub fn assert_faithful_ephemeris(sv: SV, toc: Epoch, original: &Ephemeris, decod
             "accuracy" => {
                 // only the URA index is broadcast
                 let index = |ura_m: f64| {
-                    gnss_protos::GpsQzssFrame1::default()
+                    GpsQzssLnavSubframe1::default()
                         .with_user_range_accuracy_m(ura_m)
                         .ura
                 };

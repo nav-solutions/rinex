@@ -1,17 +1,18 @@
 use std::{fs::File, io::Write};
 
 use rinex::{
-    navigation::{GpsQzss30sMessage, GpsQzssCompositionOpts},
+    navigation::{GpsQzssLnavCompositionOpts, GpsQzssLnavProto},
     prelude::{Constellation, Rinex},
 };
-
-use env_logger::init;
 
 use log::info;
 
 use hifitime::prelude::{TimeScale, TimeSeries, Unit};
 
-use gnss_protos::{GpsQzssFrame, GpsQzssTelemetry, Message};
+use gnss_protos::{
+    gps::lnav::{GpsQzssLnavFrame, GpsQzssLnavSubframe, GpsQzssLnavTelemetry},
+    Message,
+};
 
 struct FileBuffer<const N: usize> {
     fd: File,
@@ -33,16 +34,16 @@ impl<const N: usize> FileBuffer<N> {
     }
 
     /// Writes [GpsQzss30sMessage] to file
-    pub fn write_message(&mut self, msg: GpsQzss30sMessage) {
-        self.write_frame(msg.eph_1());
-        self.write_frame(msg.eph_2());
-        self.write_frame(msg.eph_3());
-        self.write_frame(msg.alm_4());
-        self.write_frame(msg.alm_5());
+    pub fn write_frame(&mut self, frame: GpsQzssLnavFrame) {
+        self.write_subframe(*frame.eph_1());
+        self.write_subframe(*frame.eph_2());
+        self.write_subframe(*frame.eph_3());
+        self.write_subframe(*frame.alm_4());
+        self.write_subframe(*frame.alm_5());
     }
 
     /// Writes [GpsQzssFrame] to file
-    pub fn write_frame(&mut self, frame: GpsQzssFrame) {
+    pub fn write_subframe(&mut self, frame: GpsQzssLnavSubframe) {
         let size = frame.encode(&mut self.buffer).unwrap_or_else(|e| {
             panic!("failed to encode GPS frame: {}", e);
         });
@@ -113,93 +114,85 @@ pub fn main() {
 
     let arc = TimeSeries::inclusive(t0, t0 + 6.0 * Unit::Hour, 6.0 * Unit::Second);
 
-    for message in rinex.to_gps_qzss_messages(arc, |(satellite, t_tx)| GpsQzssCompositionOpts {
-        satellite,
-        epoch: t_tx,
-        alert: false,
-        anti_spoofing: false,
-        tlm_1: GpsQzssTelemetry {
-            message: 1,
-            integrity: false,
-            reserved_bit: false,
-        },
-        tlm_2: GpsQzssTelemetry {
-            message: 2,
-            integrity: false,
-            reserved_bit: false,
-        },
-        tlm_3: GpsQzssTelemetry {
-            message: 3,
-            integrity: false,
-            reserved_bit: false,
-        },
-        tlm_4: GpsQzssTelemetry {
-            message: 4,
-            integrity: false,
-            reserved_bit: false,
-        },
-        tlm_5: GpsQzssTelemetry {
-            message: 5,
-            integrity: false,
-            reserved_bit: false,
-        },
-        alm_4: None,
-        alm_5: None,
-    }) {
-        match message {
-            Some(message) => {
-                info!("encoded {:?}", message);
+    for message in
+        rinex.to_gps_qzss_lnav_proto(arc, |(satellite, t_tx)| GpsQzssLnavCompositionOpts {
+            satellite,
+            epoch: t_tx,
+            alert: false,
+            anti_spoofing: false,
+            tlm_1: GpsQzssLnavTelemetry {
+                message: 1,
+                integrity: false,
+                reserved_bit: false,
+            },
+            tlm_2: GpsQzssLnavTelemetry {
+                message: 2,
+                integrity: false,
+                reserved_bit: false,
+            },
+            tlm_3: GpsQzssLnavTelemetry {
+                message: 3,
+                integrity: false,
+                reserved_bit: false,
+            },
+            tlm_4: GpsQzssLnavTelemetry {
+                message: 4,
+                integrity: false,
+                reserved_bit: false,
+            },
+            tlm_5: GpsQzssLnavTelemetry {
+                message: 5,
+                integrity: false,
+                reserved_bit: false,
+            },
+            alm_4: None,
+            alm_5: None,
+        })
+    {
+        info!("encoded {:?}", message);
 
-                match (message.satellite.constellation, message.satellite.prn) {
-                    (Constellation::GPS, 15) => {
-                        g15_buf.write_message(message);
-                        g15_eph1_buf.write_frame(message.eph_1());
-                        g15_eph2_buf.write_frame(message.eph_2());
-                        g15_eph3_buf.write_frame(message.eph_3());
-                        g15_alm4_buf.write_frame(message.alm_4());
-                        g15_alm5_buf.write_frame(message.alm_5());
-                    },
-                    (Constellation::GPS, 24) => {
-                        g24_buf.write_message(message);
-                        g24_eph1_buf.write_frame(message.eph_1());
-                        g24_eph2_buf.write_frame(message.eph_2());
-                        g24_eph3_buf.write_frame(message.eph_3());
-                        g24_alm4_buf.write_frame(message.alm_4());
-                        g24_alm5_buf.write_frame(message.alm_5());
-                    },
-                    (Constellation::GPS, 31) => {
-                        g31_buf.write_message(message);
-                        g31_eph1_buf.write_frame(message.eph_1());
-                        g31_eph2_buf.write_frame(message.eph_2());
-                        g31_eph3_buf.write_frame(message.eph_3());
-                        g31_alm4_buf.write_frame(message.alm_4());
-                        g31_alm5_buf.write_frame(message.alm_5());
-                    },
-                    (Constellation::QZSS, 2) => {
-                        j02_buf.write_message(message);
-                        j02_eph1_buf.write_frame(message.eph_1());
-                        j02_eph2_buf.write_frame(message.eph_2());
-                        j02_eph3_buf.write_frame(message.eph_3());
-                        j02_alm4_buf.write_frame(message.alm_4());
-                        j02_alm5_buf.write_frame(message.alm_5());
-                    },
-                    (Constellation::QZSS, 3) => {
-                        j03_buf.write_message(message);
-                        j03_eph1_buf.write_frame(message.eph_1());
-                        j03_eph2_buf.write_frame(message.eph_2());
-                        j03_eph3_buf.write_frame(message.eph_3());
-                        j03_alm4_buf.write_frame(message.alm_4());
-                        j03_alm5_buf.write_frame(message.alm_5());
-                    },
-                    _ => {},
-                }
+        match (message.satellite.constellation, message.satellite.prn) {
+            (Constellation::GPS, 15) => {
+                g15_buf.write_frame(message.frame);
+                g15_eph1_buf.write_subframe(*message.frame.eph_1());
+                g15_eph2_buf.write_subframe(*message.frame.eph_2());
+                g15_eph3_buf.write_subframe(*message.frame.eph_3());
+                g15_alm4_buf.write_subframe(*message.frame.alm_4());
+                g15_alm5_buf.write_subframe(*message.frame.alm_5());
             },
-            None => {
-                // method will fail when it is impossible to select
-                // a valid ephemeris frame (from that file) at specific point
-                // in temporal arc.
-                // You get a debug trace with "log" feature.
+            (Constellation::GPS, 24) => {
+                g24_buf.write_frame(message.frame);
+                g24_eph1_buf.write_subframe(*message.frame.eph_1());
+                g24_eph2_buf.write_subframe(*message.frame.eph_2());
+                g24_eph3_buf.write_subframe(*message.frame.eph_3());
+                g24_alm4_buf.write_subframe(*message.frame.alm_4());
+                g24_alm5_buf.write_subframe(*message.frame.alm_5());
             },
+            (Constellation::GPS, 31) => {
+                g31_buf.write_frame(message.frame);
+                g31_eph1_buf.write_subframe(*message.frame.eph_1());
+                g31_eph2_buf.write_subframe(*message.frame.eph_2());
+                g31_eph3_buf.write_subframe(*message.frame.eph_3());
+                g31_alm4_buf.write_subframe(*message.frame.alm_4());
+                g31_alm5_buf.write_subframe(*message.frame.alm_5());
+            },
+            (Constellation::QZSS, 2) => {
+                j02_buf.write_frame(message.frame);
+                j02_eph1_buf.write_subframe(*message.frame.eph_1());
+                j02_eph2_buf.write_subframe(*message.frame.eph_2());
+                j02_eph3_buf.write_subframe(*message.frame.eph_3());
+                j02_alm4_buf.write_subframe(*message.frame.alm_4());
+                j02_alm5_buf.write_subframe(*message.frame.alm_5());
+            },
+            (Constellation::QZSS, 3) => {
+                j03_buf.write_frame(message.frame);
+                j03_eph1_buf.write_subframe(*message.frame.eph_1());
+                j03_eph2_buf.write_subframe(*message.frame.eph_2());
+                j03_eph3_buf.write_subframe(*message.frame.eph_3());
+                j03_alm4_buf.write_subframe(*message.frame.alm_4());
+                j03_alm5_buf.write_subframe(*message.frame.alm_5());
+            },
+            _ => {},
         }
     }
     g15_buf.flush();

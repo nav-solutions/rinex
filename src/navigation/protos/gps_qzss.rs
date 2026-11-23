@@ -2,10 +2,10 @@
 
 use crate::{
     navigation::{
-        ephemeris::protos::gps_qzss::Error, Ephemeris, GpsQzssLnavCompositionOpts,
-        GpsQzssLnavProto, NavMessageType, Record as NavRecord,
+        ephemeris::protos::gps_qzss::Error, GpsQzssLnavCompositionOpts, GpsQzssLnavProto,
+        NavMessageType, Record as NavRecord,
     },
-    prelude::{Constellation, Header, Record, Rinex, Version, SV},
+    prelude::{Constellation, Header, Record, Rinex, SV},
     production::ProductionAttributes,
 };
 
@@ -13,7 +13,7 @@ use itertools::Itertools;
 
 use hifitime::prelude::{Epoch, TimeSeries};
 
-use gnss_protos::gps::lnav::GpsQzssLnavFrame;
+use gnss_protos::gps::lnav::GpsQzssLnavSubframe4;
 
 #[cfg(feature = "log")]
 use log::{debug, error};
@@ -197,11 +197,44 @@ impl Rinex {
 
                             let mut opts = composer((sv, t));
 
-                            // TODO:
-                            // si c'est page 18 il faut fournir l'info depuis le header
-
                             match sel.eph.to_gps_qzss_lnav_proto(opts) {
-                                Ok(msg) => Some(msg),
+                                Ok(mut msg) => {
+                                    // Handles P18 special case
+                                    // if user did not provide alm_4
+                                    // we compose the burst of information from
+                                    // other frames or file header, depending on file revision.
+                                    if opts.alm_4.is_none() {
+                                        match msg.frame.alm_4().subframe.as_alm4() {
+                                            Some(GpsQzssLnavSubframe4::IonosphereUtc(
+                                                mut iono_utc,
+                                            )) => {
+                                                // iono_utc.alpha = f64 x4
+                                                // iono_utc.beta = f64 x4
+                                                // iono_utc.a0 = utc_bias
+                                                // iono_utc.a1 = utc_drift
+                                                //
+                                                // iono.tot UTC data reference time
+                                                // in seconds of week; multiple of 4096
+                                                //
+                                                // iono.wnt UTC data reference week
+                                                // 8 LSB of the week number
+                                                //
+                                                // iono_utc.delta_t_ls current LS in seconds
+                                                //
+                                                // iono_utc.wn_ls: week of the next (or last) leap
+                                                // second event (8 LSB of the week number)
+                                                //
+                                                // iono_utc.dn: day of week of the leap second
+                                                // event 1: sunday,
+                                                //
+                                                // delta_t_lsf: number of leap seconds after
+                                                // the leap second event (in seconds)
+                                            },
+                                            _ => {}, // untouched
+                                        }
+                                    }
+                                    Some(msg)
+                                },
                                 Err(_e) => {
                                     #[cfg(feature = "log")]
                                     {
