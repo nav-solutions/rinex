@@ -253,7 +253,7 @@ impl Ephemeris {
         }
 
         let n0 = (gm_m3_s2 / kepler.a.powi(3)).sqrt(); // average angular velocity
-        let n = n0 + perturbations.dn; // corrected mean angular velocity
+        let n = n0 + kepler.dn; // corrected mean angular velocity
         let m_k = kepler.m_0 + n * t_k; // average anomaly
 
         // Iterative calculation of e_k
@@ -294,7 +294,7 @@ impl Ephemeris {
         let di_k = perturbations.cis * x2_sin_phi_k + perturbations.cic * x2_cos_phi_k;
 
         // first derivatives
-        let fd_omega_k = perturbations.omega_dot - omega;
+        let fd_omega_k = kepler.omega_dot - omega;
 
         let fd_e_k = n / (1.0 - kepler.e * e_k.cos());
         let fd_phi_k = ((1.0 + kepler.e) / (1.0 - kepler.e)).sqrt()
@@ -310,7 +310,7 @@ impl Ephemeris {
                 * (perturbations.crs * x2_cos_phi_k - perturbations.crc * x2_sin_phi_k)
                 * fd_phi_k;
 
-        let fd_i_k = perturbations.i_dot
+        let fd_i_k = kepler.i_dot
             + 2.0
                 * (perturbations.cis * x2_cos_phi_k - perturbations.cic * x2_sin_phi_k)
                 * fd_phi_k;
@@ -322,14 +322,14 @@ impl Ephemeris {
         // ascending node longitude correction (RAAN ?)
         let omega_k = if sv.is_beidou_geo() {
             // BeiDou [IGSO]
-            kepler.omega_0 + perturbations.omega_dot * t_k - omega * kepler.toe
+            kepler.omega_0 + kepler.omega_dot * t_k - omega * kepler.toe
         } else {
             // GPS, Galileo, BeiDou [MEO]
-            kepler.omega_0 + (perturbations.omega_dot - omega) * t_k - omega * kepler.toe
+            kepler.omega_0 + (kepler.omega_dot - omega) * t_k - omega * kepler.toe
         };
 
         // corrected inclination angle
-        let i_k = kepler.i_0 + di_k + perturbations.i_dot * t_k;
+        let i_k = kepler.i_0 + di_k + kepler.i_dot * t_k;
 
         // position in orbital plane
         let (x, y) = (r_k * u_k.cos(), r_k * u_k.sin());

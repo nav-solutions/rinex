@@ -892,8 +892,10 @@ impl Rinex {
     /// ```
     /// // Read a RINEX and dump it without any modifications
     /// use rinex::prelude::*;
+    ///
     /// let rnx = Rinex::from_file("data/OBS/V3/DUTH0630.22O")
     ///   .unwrap();
+    ///
     /// assert!(rnx.to_file("test.rnx").is_ok());
     /// ```
     ///

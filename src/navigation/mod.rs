@@ -9,6 +9,9 @@ mod message;
 mod parsing;
 mod time;
 
+#[cfg(feature = "protos")]
+mod protos;
+
 pub mod rinex;
 
 pub(crate) mod formatting;
@@ -31,7 +34,7 @@ pub use crate::navigation::{
 
 #[cfg(feature = "protos")]
 pub use crate::navigation::ephemeris::protos::gps_qzss::{
-    Error, GpsQzssEphCompositionOpts, GpsQzssEphemerisItem, GpsQzssEphemerisMessage,
+    Error, GpsQzssLnavCompositionOpts, GpsQzssLnavProto,
 };
 
 #[cfg(feature = "nav")]

@@ -1,229 +1,203 @@
-use std::fs::File;
-use std::io::Write;
+use std::{fs::File, io::Write};
 
 use rinex::{
-    navigation::{GpsQzssEphCompositionOpts, GpsQzssEphemerisMessage},
+    navigation::{GpsQzssLnavCompositionOpts, GpsQzssLnavProto},
     prelude::{Constellation, Rinex},
 };
 
-use gnss_protos::{GpsQzssFrame, GpsQzssTelemetry, Message};
+use log::info;
 
-struct Buffer<'a, const N: usize> {
-    /// destination
-    pub path: &'a str,
+use hifitime::prelude::{TimeScale, TimeSeries, Unit};
 
-    /// internal buffer
-    pub buffer: [u8; N],
+use gnss_protos::{
+    gps::lnav::{GpsQzssLnavFrame, GpsQzssLnavSubframe, GpsQzssLnavTelemetry},
+    Message,
+};
 
-    /// current pointer in buffer
-    pub ptr: usize,
+struct FileBuffer<const N: usize> {
+    fd: File,
+    buffer: [u8; N],
 }
 
-impl<'a, const N: usize> Buffer<'a, N> {
-    /// Buffer allocation + init
-    pub fn new(path: &'a str) -> Self {
+impl<const N: usize> FileBuffer<N> {
+    pub fn new(path: &str) -> Self {
         Self {
-            path,
-            ptr: 0,
-            buffer: [0; N],
+            buffer: [0u8; N],
+            fd: File::create(path).unwrap_or_else(|e| {
+                panic!("failed to create file {}: {}", path, e);
+            }),
         }
     }
 
-    /// Encodes EPH-1,2,3 burst
-    pub fn encode_eph123_burst(&mut self, burst: GpsQzssEphemerisMessage) {
-        self.encode_frame(burst.eph_1);
-        self.encode_frame(burst.eph_2);
-        self.encode_frame(burst.eph_3);
+    pub fn flush(&mut self) {
+        self.fd.flush().unwrap();
     }
 
-    /// Encodes one GPS frame
-    pub fn encode_frame(&mut self, frame: GpsQzssFrame) {
-        let size = frame.encode(&mut self.buffer[self.ptr..]).unwrap();
-        self.ptr += size;
+    /// Writes [GpsQzss30sMessage] to file
+    pub fn write_frame(&mut self, frame: GpsQzssLnavFrame) {
+        self.write_subframe(*frame.eph_1());
+        self.write_subframe(*frame.eph_2());
+        self.write_subframe(*frame.eph_3());
+        self.write_subframe(*frame.alm_4());
+        self.write_subframe(*frame.alm_5());
     }
 
-    /// Dump buffer to static file
-    pub fn save_file(&self) {
-        let mut fd = File::create(self.path).unwrap_or_else(|e| {
-            panic!("Failed to open (WR) file: {} - {}", self.path, e);
+    /// Writes [GpsQzssFrame] to file
+    pub fn write_subframe(&mut self, frame: GpsQzssLnavSubframe) {
+        let size = frame.encode(&mut self.buffer).unwrap_or_else(|e| {
+            panic!("failed to encode GPS frame: {}", e);
         });
 
-        fd.write_all(&self.buffer[..self.ptr]).unwrap_or_else(|e| {
-            panic!("Failed to dump buffer to file: {} - {}", self.path, e);
+        self.fd.write_all(&self.buffer[..size]).unwrap_or_else(|e| {
+            panic!("failed to write GPS frame into file: {}", e);
         });
     }
 }
 
-impl<'a, const N: usize> Write for Buffer<'a, N> {
-    fn write(&mut self, src: &[u8]) -> Result<usize, std::io::Error> {
-        let size = src.len();
-        self.buffer[self.ptr..].copy_from_slice(&src);
-        self.ptr += size;
-        Ok(size)
-    }
-
-    fn flush(&mut self) -> Result<(), std::io::Error> {
-        self.ptr = 0;
-        Ok(())
-    }
-}
-
-/// Extracts (approx 10 messages, slow RINEX rate)
-/// from G15, G24, G31, J01, J02, J03, E07, E11 and E15
-/// from ESBC00DNK_R_20201770000_01D_MN.rnx.gz (profesionnal file)
-/// and dumps them to their respective bit stream protocol, into individual files
-/// (isolated bit streams). Each resulting files serves as further testing purposes
-/// and demos.
+/// Reconstructs 6 hours of
+/// - GPS bursts for G15, G24 and G31
+/// - isolates EPH-1, EPH-2, EPH-3, ALM-4 and ALM-5 as well
+/// - QZSS bursts for J02 and J03
+/// - isolates EPH-1, EPH-2, EPH-3, ALM-4 and ALM-5 as well
+/// using ESBC00DNK_R_20201770000_01D_MN.rnx.gz (profesionnal file)
+/// and dumps them to individual binary files.
 pub fn main() {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug")).init();
+
     // full RINEX path
     let fullpath = "data/NAV/V3/ESBC00DNK_R_20201770000_01D_MN.rnx.gz";
 
-    // Dumps
-    let mut g15_buf = Buffer::<8192>::new("data/GPS/esbcdnk_g15_eph123.bin");
-    let mut g24_buf = Buffer::<8192>::new("data/GPS/esbcdnk_g24_eph123.bin");
-    let mut g31_buf = Buffer::<8192>::new("data/GPS/esbcdnk_g31_eph123.bin");
-    let mut j01_buf = Buffer::<8192>::new("data/GPS/esbcdnk_j01_eph123.bin");
-    let mut j02_buf = Buffer::<8192>::new("data/GPS/esbcdnk_j02_eph123.bin");
-    let mut j03_buf = Buffer::<8192>::new("data/GPS/esbcdnk_j03_eph123.bin");
-    let mut e07_buf = Buffer::<8192>::new("data/GAL/esbcdnk_e07_eph123.bin");
-    let mut e11_buf = Buffer::<8192>::new("data/GAL/esbcdnk_e11_eph123.bin");
-    let mut e15_buf = Buffer::<8192>::new("data/GAL/esbcdnk_e15_eph123.bin");
+    // isolated buffers
+    let mut g15_buf = FileBuffer::<1024>::new("data/GPS/esbcdnk_g15.bin");
+    let mut g15_eph1_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g15_eph1.bin");
+    let mut g15_eph2_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g15_eph2.bin");
+    let mut g15_eph3_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g15_eph3.bin");
+    let mut g15_alm4_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g15_alm4.bin");
+    let mut g15_alm5_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g15_alm5.bin");
+
+    let mut g24_buf = FileBuffer::<1024>::new("data/GPS/esbcdnk_g24.bin");
+    let mut g24_eph1_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g24_eph1.bin");
+    let mut g24_eph2_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g24_eph2.bin");
+    let mut g24_eph3_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g24_eph3.bin");
+    let mut g24_alm4_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g24_alm4.bin");
+    let mut g24_alm5_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g24_alm5.bin");
+
+    let mut g31_buf = FileBuffer::<1024>::new("data/GPS/esbcdnk_g31.bin");
+    let mut g31_eph1_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g31_eph1.bin");
+    let mut g31_eph2_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g31_eph2.bin");
+    let mut g31_eph3_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g31_eph3.bin");
+    let mut g31_alm4_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g31_alm4.bin");
+    let mut g31_alm5_buf = FileBuffer::<128>::new("data/GPS/esbcdnk_g31_alm5.bin");
+
+    let mut j02_buf = FileBuffer::<1024>::new("data/QZSS/esbcdnk_j02.bin");
+    let mut j02_eph1_buf = FileBuffer::<128>::new("data/QZSS/esbcdnk_j02_eph1.bin");
+    let mut j02_eph2_buf = FileBuffer::<128>::new("data/QZSS/esbcdnk_j02_eph2.bin");
+    let mut j02_eph3_buf = FileBuffer::<128>::new("data/QZSS/esbcdnk_j02_eph3.bin");
+    let mut j02_alm4_buf = FileBuffer::<128>::new("data/QZSS/esbcdnk_j02_alm4.bin");
+    let mut j02_alm5_buf = FileBuffer::<128>::new("data/QZSS/esbcdnk_j02_alm5.bin");
+
+    let mut j03_buf = FileBuffer::<1024>::new("data/QZSS/esbcdnk_j03.bin");
+    let mut j03_eph1_buf = FileBuffer::<128>::new("data/QZSS/esbcdnk_j03_eph1.bin");
+    let mut j03_eph2_buf = FileBuffer::<128>::new("data/QZSS/esbcdnk_j03_eph2.bin");
+    let mut j03_eph3_buf = FileBuffer::<128>::new("data/QZSS/esbcdnk_j03_eph3.bin");
+    let mut j03_alm4_buf = FileBuffer::<128>::new("data/QZSS/esbcdnk_j03_alm4.bin");
+    let mut j03_alm5_buf = FileBuffer::<128>::new("data/QZSS/esbcdnk_j03_alm5.bin");
+
+    // let mut e07_buf = FileBuffer::new("data/GAL/esbcdnk_e07.bin");
+    // let mut e11_buf = FileBuffer::new("data/GAL/esbcdnk_e11.bin");
+    // let mut e15_buf = FileBuffer::new("data/GAL/esbcdnk_e15.bin");
 
     let rinex = Rinex::from_gzip_file(fullpath).unwrap();
 
-    // limited to ephemeris frames
-    for (key, eph) in rinex.nav_ephemeris_frames_iter() {
-        let opts = GpsQzssEphCompositionOpts {
-            satellite: key.sv,
-            epoch: key.epoch,
+    // design temporal arc
+    let t0 = rinex.first_epoch().unwrap().to_time_scale(TimeScale::GPST) + 1.0 * Unit::Hour; // random, not aligned to GPS
+
+    let arc = TimeSeries::inclusive(t0, t0 + 6.0 * Unit::Hour, 6.0 * Unit::Second);
+
+    for message in
+        rinex.to_gps_qzss_lnav_proto(arc, |(satellite, t_tx)| GpsQzssLnavCompositionOpts {
+            satellite,
+            epoch: t_tx,
             alert: false,
             anti_spoofing: false,
-            tlm_1: GpsQzssTelemetry {
+            tlm_1: GpsQzssLnavTelemetry {
                 message: 1,
                 integrity: false,
                 reserved_bit: false,
             },
-            tlm_2: GpsQzssTelemetry {
+            tlm_2: GpsQzssLnavTelemetry {
                 message: 2,
                 integrity: false,
                 reserved_bit: false,
             },
-            tlm_3: GpsQzssTelemetry {
+            tlm_3: GpsQzssLnavTelemetry {
                 message: 3,
                 integrity: false,
                 reserved_bit: false,
             },
-        };
+            tlm_4: GpsQzssLnavTelemetry {
+                message: 4,
+                integrity: false,
+                reserved_bit: false,
+            },
+            tlm_5: GpsQzssLnavTelemetry {
+                message: 5,
+                integrity: false,
+                reserved_bit: false,
+            },
+            alm_4: None,
+            alm_5: None,
+        })
+    {
+        info!("encoded {:?}", message);
 
-        match (key.sv.constellation, key.sv.prn) {
+        match (message.satellite.constellation, message.satellite.prn) {
             (Constellation::GPS, 15) => {
-                // extract
-                let burst = eph.to_gps_qzss_eph_message(opts).unwrap_or_else(|e| {
-                    panic!(
-                        "Failed to extract an Ephemeris burst for {} @ {} - {}",
-                        key.sv, key.epoch, e
-                    );
-                });
-                g15_buf.encode_eph123_burst(burst);
+                g15_buf.write_frame(message.frame);
+                g15_eph1_buf.write_subframe(*message.frame.eph_1());
+                g15_eph2_buf.write_subframe(*message.frame.eph_2());
+                g15_eph3_buf.write_subframe(*message.frame.eph_3());
+                g15_alm4_buf.write_subframe(*message.frame.alm_4());
+                g15_alm5_buf.write_subframe(*message.frame.alm_5());
             },
             (Constellation::GPS, 24) => {
-                // extract
-                let burst = eph.to_gps_qzss_eph_message(opts).unwrap_or_else(|e| {
-                    panic!(
-                        "Failed to extract an Ephemeris burst for {} @ {} - {}",
-                        key.sv, key.epoch, e,
-                    );
-                });
-                g24_buf.encode_eph123_burst(burst);
+                g24_buf.write_frame(message.frame);
+                g24_eph1_buf.write_subframe(*message.frame.eph_1());
+                g24_eph2_buf.write_subframe(*message.frame.eph_2());
+                g24_eph3_buf.write_subframe(*message.frame.eph_3());
+                g24_alm4_buf.write_subframe(*message.frame.alm_4());
+                g24_alm5_buf.write_subframe(*message.frame.alm_5());
             },
             (Constellation::GPS, 31) => {
-                // extract
-                let burst = eph.to_gps_qzss_eph_message(opts).unwrap_or_else(|e| {
-                    panic!(
-                        "Failed to extract an Ephemeris burst for {} @ {} - {}",
-                        key.sv, key.epoch, e
-                    );
-                });
-                g31_buf.encode_eph123_burst(burst);
-            },
-            (Constellation::QZSS, 1) => {
-                // extract
-                let burst = eph.to_gps_qzss_eph_message(opts).unwrap_or_else(|e| {
-                    panic!(
-                        "Failed to extract an Ephemeris burst for {} @ {} - {}",
-                        key.sv, key.epoch, e
-                    );
-                });
-                j01_buf.encode_eph123_burst(burst);
+                g31_buf.write_frame(message.frame);
+                g31_eph1_buf.write_subframe(*message.frame.eph_1());
+                g31_eph2_buf.write_subframe(*message.frame.eph_2());
+                g31_eph3_buf.write_subframe(*message.frame.eph_3());
+                g31_alm4_buf.write_subframe(*message.frame.alm_4());
+                g31_alm5_buf.write_subframe(*message.frame.alm_5());
             },
             (Constellation::QZSS, 2) => {
-                // extract
-                let burst = eph.to_gps_qzss_eph_message(opts).unwrap_or_else(|e| {
-                    panic!(
-                        "Failed to extract an Ephemeris burst for {} @ {} - {}",
-                        key.sv, key.epoch, e
-                    );
-                });
-                j02_buf.encode_eph123_burst(burst);
+                j02_buf.write_frame(message.frame);
+                j02_eph1_buf.write_subframe(*message.frame.eph_1());
+                j02_eph2_buf.write_subframe(*message.frame.eph_2());
+                j02_eph3_buf.write_subframe(*message.frame.eph_3());
+                j02_alm4_buf.write_subframe(*message.frame.alm_4());
+                j02_alm5_buf.write_subframe(*message.frame.alm_5());
             },
             (Constellation::QZSS, 3) => {
-                // extract
-                let burst = eph.to_gps_qzss_eph_message(opts).unwrap_or_else(|e| {
-                    panic!(
-                        "Failed to extract an Ephemeris burst for {} @ {} - {}",
-                        key.sv, key.epoch, e
-                    );
-                });
-                j03_buf.encode_eph123_burst(burst);
+                j03_buf.write_frame(message.frame);
+                j03_eph1_buf.write_subframe(*message.frame.eph_1());
+                j03_eph2_buf.write_subframe(*message.frame.eph_2());
+                j03_eph3_buf.write_subframe(*message.frame.eph_3());
+                j03_alm4_buf.write_subframe(*message.frame.alm_4());
+                j03_alm5_buf.write_subframe(*message.frame.alm_5());
             },
-            // (Constellation::Galileo, 7) => {
-            //     // extract
-            //     let burst = eph
-            //         .to_gps_qzss_eph_message(key.sv, key.epoch, false, false, tlm)
-            //         .unwrap_or_else(|e| {
-            //             panic!(
-            //                 "Failed to extract an Ephemeris burst for {} @ {}",
-            //                 key.sv, key.epoch
-            //             );
-            //         });
-            //     e07_buf.encode_eph123_burst(burst);
-            // },
-            // (Constellation::Galileo, 11) => {
-            //     // extract
-            //     let burst = eph
-            //         .to_gps_qzss_eph_message(key.sv, key.epoch, false, false, tlm)
-            //         .unwrap_or_else(|e| {
-            //             panic!(
-            //                 "Failed to extract an Ephemeris burst for {} @ {}",
-            //                 key.sv, key.epoch
-            //             );
-            //         });
-            //     e11_buf.encode_eph123_burst(burst);
-            // },
-            // (Constellation::Galileo, 15) => {
-            //     // extract
-            //     let burst = eph
-            //         .to_gps_qzss_eph_message(key.sv, key.epoch, false, false, tlm)
-            //         .unwrap_or_else(|e| {
-            //             panic!(
-            //                 "Failed to extract an Ephemeris burst for {} @ {}",
-            //                 key.sv, key.epoch
-            //             );
-            //         });
-            //     e15_buf.encode_eph123_burst(burst);
-            // },
             _ => {},
         }
     }
-
-    // generate each files
-    g15_buf.save_file();
-    g24_buf.save_file();
-    g31_buf.save_file();
-    j01_buf.save_file();
-    j02_buf.save_file();
-    j03_buf.save_file();
-    // e07_buf.save_file();
-    // e11_buf.save_file();
-    // e15_buf.save_file();
+    g15_buf.flush();
+    g24_buf.flush();
+    g31_buf.flush();
+    j02_buf.flush();
+    j03_buf.flush();
 }
