@@ -12,7 +12,7 @@ mod parsing;
 mod sbas;
 
 #[cfg(feature = "flate2")]
-mod production;
+mod prod;
 
 #[cfg(feature = "protos")]
 mod protos;
